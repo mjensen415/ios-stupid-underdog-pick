@@ -1,0 +1,16 @@
+.DS_Store
+
+# XcodeGen regenerates this from project.yml -- not source of truth
+*.xcodeproj/
+
+# Xcode
+xcuserdata/
+DerivedData/
+*.xcworkspace/xcuserdata/
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Secrets
+Config/*.local.xcconfig

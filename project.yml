@@ -1,0 +1,57 @@
+name: Stupid Underdog Pick
+options:
+  bundleIdPrefix: com.stupidunderdogpick
+configs:
+  Debug: Config/AppConfig.xcconfig
+  Release: Config/AppConfig.xcconfig
+packages:
+  Supabase:
+    url: https://github.com/supabase-community/supabase-swift
+    from: 2.0.0
+targets:
+  Stupid Underdog Pick:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    bundleId: com.stupidunderdogpick.app
+    sources:
+      - path: Sources
+    dependencies:
+      - package: Supabase
+    settings:
+      base:
+        PRODUCT_NAME: Stupid Underdog Pick
+        SWIFT_VERSION: 5.9
+        ALWAYS_SEARCH_USER_PATHS: NO
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: Stupid Underdog Pick
+        CFBundleShortVersionString: 1.0
+        CFBundleVersion: 1
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UILaunchScreen:
+          UIColorName: LaunchColor
+        SUPABASE_URL: $(SUPABASE_URL)
+        SUPABASE_ANON_KEY: $(SUPABASE_ANON_KEY)
+        URL_SCHEME: $(URL_SCHEME)
+        URL_HOST: $(URL_HOST)
+        CFBundleURLTypes:
+          - CFBundleURLName: com.stupidunderdogpick.auth
+            CFBundleURLSchemes:
+              - $(URL_SCHEME)
+  Stupid Underdog PickTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: Stupid Underdog Pick
+schemes:
+  - name: Stupid Underdog Pick
+    build:
+      targets:
+        Stupid Underdog Pick: [run]
+        Stupid Underdog PickTests: [test]
+
