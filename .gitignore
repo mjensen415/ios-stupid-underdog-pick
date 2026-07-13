@@ -14,3 +14,6 @@ DerivedData/
 
 # Secrets
 Config/*.local.xcconfig
+
+# Local build output
+.build-sim/

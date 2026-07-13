@@ -1,4 +1,7 @@
-SUPABASE_URL = https://fftsbjbeaxzdhtyieluk.supabase.co
+// xcconfig treats // as a comment start, so the scheme separator has to be
+// broken up with an empty $() between the slashes or everything after
+// "https:" gets silently dropped.
+SUPABASE_URL = https:/$()/fftsbjbeaxzdhtyieluk.supabase.co
 SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZmdHNiamJlYXh6ZGh0eWllbHVrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTU2NjU1ODgsImV4cCI6MjA3MTI0MTU4OH0.LhdVfOqD-NMyreP2k5sB9kzFUQs1TkIp8eoEk3YfSlI
 URL_SCHEME = sup
 URL_HOST = underdog

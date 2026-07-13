@@ -2,6 +2,9 @@ name: Stupid Underdog Pick
 options:
   bundleIdPrefix: com.stupidunderdogpick
 configs:
+  Debug: debug
+  Release: release
+configFiles:
   Debug: Config/AppConfig.xcconfig
   Release: Config/AppConfig.xcconfig
 packages:
@@ -27,8 +30,8 @@ targets:
       path: Sources/Info.plist
       properties:
         CFBundleDisplayName: Stupid Underdog Pick
-        CFBundleShortVersionString: 1.0
-        CFBundleVersion: 1
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false
         UILaunchScreen:
