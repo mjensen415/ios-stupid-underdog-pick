@@ -8,6 +8,8 @@
 	<string>Stupid Underdog Pick</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
@@ -45,6 +47,10 @@
 		<key>UIColorName</key>
 		<string>LaunchColor</string>
 	</dict>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
 	<key>URL_HOST</key>
 	<string>$(URL_HOST)</string>
 	<key>URL_SCHEME</key>
