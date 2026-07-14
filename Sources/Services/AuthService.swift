@@ -81,5 +81,37 @@ struct AuthService {
     #endif
     throw AuthError.noSessionReturned
   }
+
+  /// Apple OAuth (requires Supabase redirect URL: sup://underdog). Same
+  /// ASWebAuthenticationSession flow as Google -- Supabase's Apple provider
+  /// is already configured with the Services ID, so no native
+  /// AuthenticationServices/SIWA button is needed here.
+  @MainActor
+  @discardableResult
+  func signInWithApple(redirect: URL) async throws -> Session {
+    #if DEBUG
+    print("[Auth][Apple] starting OAuth with redirect:", redirect.absoluteString)
+    #endif
+
+    try await client.auth.signInWithOAuth(
+      provider: .apple,
+      redirectTo: redirect
+    )
+
+    for attempt in 0..<20 {
+      if let s = try? await client.auth.session {
+        #if DEBUG
+        print("[Auth][Apple] session ok after callback. attempts:", attempt)
+        #endif
+        return s
+      }
+      try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
+    }
+
+    #if DEBUG
+    print("[Auth][Apple][ERR] no session after OAuth callback.")
+    #endif
+    throw AuthError.noSessionReturned
+  }
 }
 

@@ -34,6 +34,14 @@ struct AuthView: View {
         .buttonStyle(.bordered)
         .disabled(isLoading)
 
+        Button {
+          Task { await signInWithApple() }
+        } label: {
+          Label("Continue with Apple", systemImage: "apple.logo")
+        }
+        .buttonStyle(.bordered)
+        .disabled(isLoading)
+
         if isLoading {
           ProgressView().padding(.top, AppTheme.Spacing.sm)
         }
@@ -55,6 +63,19 @@ struct AuthView: View {
       let auth = AuthService(client: client)
       guard let redirect = URL(string: "sup://underdog") else { throw URLError(.badURL) }
       _ = try await auth.signInWithGoogle(redirect: redirect)
+    } catch {
+      errorMessage = "Sign-in didn’t complete. Try again."
+    }
+  }
+
+  private func signInWithApple() async {
+    isLoading = true
+    defer { isLoading = false }
+    do {
+      guard let client else { throw URLError(.notConnectedToInternet) }
+      let auth = AuthService(client: client)
+      guard let redirect = URL(string: "sup://underdog") else { throw URLError(.badURL) }
+      _ = try await auth.signInWithApple(redirect: redirect)
     } catch {
       errorMessage = "Sign-in didn’t complete. Try again."
     }
