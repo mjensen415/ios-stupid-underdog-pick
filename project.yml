@@ -16,7 +16,6 @@ targets:
     type: application
     platform: iOS
     deploymentTarget: "17.0"
-    bundleId: com.stupidunderdogpick.app
     sources:
       - path: Sources
     dependencies:
@@ -24,6 +23,7 @@ targets:
     settings:
       base:
         PRODUCT_NAME: Stupid Underdog Pick
+        PRODUCT_BUNDLE_IDENTIFIER: com.stupidunderdogpick.app
         SWIFT_VERSION: 5.9
         ALWAYS_SEARCH_USER_PATHS: NO
     info:
