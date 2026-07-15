@@ -10,11 +10,17 @@ struct GameRowView: View {
     return fav == game.homeTeamId
   }
 
+  // Favorite/underdog decides left-vs-right; home/away is a separate axis
+  // (the home team can land on either side depending on who's favored) --
+  // whichever slot is showing the home team gets the "@" prefix, standard
+  // sports notation for "Away @ Home".
   private var leftTeamName: String {
-    isHomeFavorite ? (game.homeTeam ?? "Home") : (game.awayTeam ?? "Away")
+    let name = isHomeFavorite ? (game.homeTeam ?? "Home") : (game.awayTeam ?? "Away")
+    return isHomeFavorite ? "@ \(name)" : name
   }
   private var rightTeamName: String {
-    isHomeFavorite ? (game.awayTeam ?? "Away") : (game.homeTeam ?? "Home")
+    let name = isHomeFavorite ? (game.awayTeam ?? "Away") : (game.homeTeam ?? "Home")
+    return isHomeFavorite ? name : "@ \(name)"
   }
   private var leftTeamId: UUID? {
     isHomeFavorite ? game.homeTeamId : game.awayTeamId
@@ -38,8 +44,8 @@ struct GameRowView: View {
         Text(kickoffText).font(.subheadline).foregroundStyle(.secondary)
         if let bl = game.bettingLine, !bl.isEmpty {
           Text(bl).font(.footnote.monospaced())
-        } else if let sp = game.latestSpread {
-          Text(String(format: "Spread: %.1f", sp)).font(.footnote.monospaced())
+        } else if let sp = game.underdogSpread {
+          Text(String(format: "%.1f", sp)).font(.footnote.monospaced())
         } else {
           Text("—").font(.footnote).foregroundStyle(.secondary)
         }

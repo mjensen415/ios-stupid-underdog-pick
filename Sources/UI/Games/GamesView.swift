@@ -81,6 +81,8 @@ final class GamesViewModel: ObservableObject {
       let homeText: String = g.homeTeamId?.uuidString ?? "nil"
       let awayText: String = g.awayTeamId?.uuidString ?? "nil"
       print("[canPick] BLOCKED (no favorite) \(g.awayTeam ?? "?") @ \(g.homeTeam ?? "?") spread=\(spreadText) home=\(homeText) away=\(awayText)")
+    } else {
+      print("[canPick] OK \(g.awayTeam ?? "?") @ \(g.homeTeam ?? "?")")
     }
     #endif
     return fav != nil
@@ -88,7 +90,7 @@ final class GamesViewModel: ObservableObject {
 
   func pickUnderdog(for g: Game) async {
     #if DEBUG
-    print("[pickUnderdog] tapped for \(g.awayTeam ?? "?") @ \(g.homeTeam ?? "?"), canPick=\(canPick(g))")
+    print("[pickUnderdog] BUTTON FIRED for \(g.awayTeam ?? "?") @ \(g.homeTeam ?? "?"), canPick=\(canPick(g))")
     #endif
     guard canPick(g) else { return }
     guard let pickedId = g.derivedUnderdogTeamId else {
@@ -104,9 +106,15 @@ final class GamesViewModel: ObservableObject {
       _ = try await PicksService(client: client)
         .upsertPick(gameId: g.id, pickedTeamId: pickedId, season: season, week: selectedWeek)
       toastMessage = "Picked \(g.awayTeam ?? "") @ \(g.homeTeam ?? "")"
+      #if DEBUG
+      print("[pickUnderdog] SUCCESS, toast=\(toastMessage ?? "")")
+      #endif
     } catch {
       selectedGameId = previous
       toastMessage = "Couldn’t save pick: \(error.localizedDescription)"
+      #if DEBUG
+      print("[pickUnderdog] SAVE FAILED: \(error)")
+      #endif
     }
   }
 
