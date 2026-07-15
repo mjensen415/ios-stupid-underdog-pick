@@ -22,14 +22,23 @@ private enum ContextServiceError: Error {
 
 extension ContextService {
   private func fetchCurrentContextViaRPC() async throws -> CurrentContext {
+    // get_current_context_ios() RETURNS jsonb -- a single {"season":...,
+    // "week":...} object, not an array of {"function_name": value} rows.
+    // The old [[String: CurrentContext]] decode never matched what
+    // PostgREST actually sends for a scalar-jsonb RPC, so this always
+    // threw and silently fell through to fallbackFromAppState() below --
+    // which reads a table nothing has written to since Oct 2025, so the
+    // app was permanently stuck on last season regardless of what this
+    // RPC (already fixed server-side to read site_settings) returned.
     let res = try await client.rpc("get_current_context_ios").execute()
-    let rows = try JSONDecoder().decode(
-      [[String: CurrentContext]].self,
-      from: res.data
-    )
-    guard let ctx = rows.first?["get_current_context_ios"]
-    else { throw ContextServiceError.noContextReturned }
-    return ctx
+    do {
+      return try JSONDecoder().decode(CurrentContext.self, from: res.data)
+    } catch {
+      #if DEBUG
+      print("[ContextService] RPC decode failed:", error, "raw:", String(data: res.data, encoding: .utf8) ?? "<non-utf8>")
+      #endif
+      throw ContextServiceError.noContextReturned
+    }
   }
 
   private func fallbackFromAppState() async throws -> CurrentContext {
