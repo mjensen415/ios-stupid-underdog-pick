@@ -6,6 +6,7 @@ final class WeeklyLeaderboardViewModel: ObservableObject {
   @Published var isLoading = false
   @Published var errorText: String?
   @Published var rows: [WeeklyLeaderboardRow] = []
+  @Published var names: [UUID: String] = [:]
 
   private var client: SupabaseClient?
 
@@ -24,6 +25,7 @@ final class WeeklyLeaderboardViewModel: ObservableObject {
       let ctx = try await ContextService(client: client).getCurrentContext()
       let list = try await LeaderboardService(client: client).fetchWeek(season: ctx.season, week: ctx.week)
       rows = list
+      names = await fetchDisplayNames(client: client, userIds: list.map { $0.userId })
       #if DEBUG
       print("[WeeklyLeaderboard] count =", list.count, "season =", ctx.season, "week =", ctx.week)
       #endif
@@ -58,7 +60,7 @@ struct WeeklyLeaderboardView: View {
         List(viewModel.rows) { row in
           HStack {
             VStack(alignment: .leading) {
-              Text("User \(row.userId.uuidString.prefix(8))…").font(.headline)
+              Text(viewModel.names[row.userId] ?? "Player").font(.headline)
               Text("W \(row.win ?? 0) • L \(row.loss ?? 0)").font(.subheadline).foregroundStyle(.secondary)
             }
             Spacer()

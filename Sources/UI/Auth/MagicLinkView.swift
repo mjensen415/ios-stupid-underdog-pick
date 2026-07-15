@@ -42,7 +42,12 @@ struct MagicLinkView: View {
     defer { isLoading = false }
     do {
       guard let client else { throw URLError(.notConnectedToInternet) }
-      try await AuthService(client: client).sendMagicLink(to: email, redirectTo: nil)
+      // Without an explicit redirectTo, Supabase falls back to the
+      // project's Site URL (the website), so the link opens Safari
+      // logged in instead of coming back into the app. Same custom
+      // scheme already used for Google/Apple sign-in.
+      guard let redirect = URL(string: "sup://underdog") else { throw URLError(.badURL) }
+      try await AuthService(client: client).sendMagicLink(to: email, redirectTo: redirect)
       isSent = true
     } catch {
       errorMessage = "Couldn’t send the link. Try again."

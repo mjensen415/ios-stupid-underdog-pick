@@ -84,6 +84,30 @@ struct TotalsLeaderboardRow: Decodable, Identifiable {
   }
 }
 
+/// Leaderboard rows only carry user_id -- looks up display names separately
+/// (profiles.display_name is public-read by RLS) rather than showing the
+/// raw UUID, matching the same inline-join pattern GamesViewModel already
+/// uses for team logos.
+func fetchDisplayNames(client: SupabaseClient, userIds: [UUID]) async -> [UUID: String] {
+  let distinct = Array(Set(userIds))
+  guard !distinct.isEmpty else { return [:] }
+  do {
+    struct P: Decodable { let user_id: UUID; let display_name: String? }
+    let res = try await client
+      .from("profiles")
+      .select("user_id, display_name")
+      .in("user_id", values: distinct)
+      .execute()
+    let profiles = try JSONDecoder().decode([P].self, from: res.data)
+    return Dictionary(uniqueKeysWithValues: profiles.compactMap { p -> (UUID, String)? in
+      guard let name = p.display_name, !name.isEmpty else { return nil }
+      return (p.user_id, name)
+    })
+  } catch {
+    return [:]
+  }
+}
+
 struct LeaderboardService {
   let client: SupabaseClient
 

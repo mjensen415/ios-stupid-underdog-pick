@@ -4,6 +4,7 @@ import Supabase
 struct SeasonLeaderboardView: View {
   @EnvironmentObject var appState: AppState
   @State private var rows: [TotalsLeaderboardRow] = []
+  @State private var names: [UUID: String] = [:]
   @State private var isLoading = false
   @State private var errorMessage: String?
 
@@ -11,7 +12,7 @@ struct SeasonLeaderboardView: View {
       List(rows, id: \.id) { row in
       HStack {
         Text("\(rows.firstIndex(where: { $0.id == row.id }).map { $0 + 1 } ?? 0)").monospacedDigit()
-        Text("\(row.userId.uuidString.prefix(6))…")
+        Text(names[row.userId] ?? "Player")
         Spacer()
         Text("\(row.wins ?? 0)-\(row.losses ?? 0)-\(row.pending ?? 0)")
         Text("\(row.totalPoints ?? 0, specifier: "%.1f") pts").frame(minWidth: 72, alignment: .trailing)
@@ -37,7 +38,9 @@ struct SeasonLeaderboardView: View {
     do {
       // If you want current season only, pass context.season; else nil
       let ctx = try await ContextService(client: client).getCurrentContext()
-      rows = try await LeaderboardService(client: client).fetchTotals(season: ctx.season)
+      let list = try await LeaderboardService(client: client).fetchTotals(season: ctx.season)
+      rows = list
+      names = await fetchDisplayNames(client: client, userIds: list.map { $0.userId })
       errorMessage = nil
     } catch {
       errorMessage = "Can’t reach the server. Pull to retry."

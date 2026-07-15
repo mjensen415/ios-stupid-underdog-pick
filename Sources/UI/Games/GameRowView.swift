@@ -6,7 +6,7 @@ struct GameRowView: View {
   let isSelected: Bool
 
   private var isHomeFavorite: Bool {
-    guard let fav = game.favoriteTeamId else { return false }
+    guard let fav = game.derivedFavoriteTeamId else { return false }
     return fav == game.homeTeamId
   }
 

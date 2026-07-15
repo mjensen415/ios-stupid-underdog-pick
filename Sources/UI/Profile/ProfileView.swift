@@ -8,6 +8,7 @@ struct ProfileView: View {
   @State private var displayName: String = ""
   @State private var isSaving = false
   @State private var errorMessage: String?
+  @State private var loadError: String?
 
   var body: some View {
     NavigationStack {
@@ -21,6 +22,11 @@ struct ProfileView: View {
             }
             Button(isSaving ? "Saving…" : "Save") { Task { await save() } }
               .disabled(isSaving)
+          }
+        } else if let loadError {
+          Section {
+            Text(loadError).foregroundColor(.red)
+            Button("Retry") { Task { await load() } }
           }
         } else {
           ProgressView()
@@ -46,17 +52,22 @@ struct ProfileView: View {
   }
 
   private func load() async {
+    loadError = nil
     do {
-      guard let client else { return }
+      guard let client else { loadError = "Not signed in."; return }
       let p = try await ProfilesService(client: client).fetchMyProfile()
       await MainActor.run {
         if let p {
           profile = Profile(id: p.id, email: p.email ?? "", display_name: p.display_name)
           displayName = p.display_name ?? ""
+        } else {
+          loadError = "Couldn’t find your profile."
         }
       }
     } catch {
-      // ignore
+      await MainActor.run {
+        loadError = "Couldn’t load your profile. Try again."
+      }
     }
   }
 
@@ -66,13 +77,15 @@ struct ProfileView: View {
     defer { isSaving = false }
     do {
       guard let client else { return }
-      // Minimal update via direct table update to match earlier repo behavior
+      // profiles is keyed by user_id, not id (id is an unrelated
+      // auto-generated PK) -- filtering on "id" here matched zero rows and
+      // silently no-op'd every save.
       struct Update: Encodable { let display_name: String }
       if let uid = try? await client.auth.session.user.id {
         _ = try await client
           .from("profiles")
           .update(Update(display_name: displayName))
-          .eq("id", value: uid)
+          .eq("user_id", value: uid)
           .execute()
       }
       await MainActor.run {

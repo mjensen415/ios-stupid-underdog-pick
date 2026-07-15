@@ -64,14 +64,12 @@ final class GamesViewModel: ObservableObject {
   func canPick(_ g: Game) -> Bool {
     if g.picksLocked == true { return false }
     if g.startTime < Date() { return false }
-    return g.favoriteTeamId != nil
+    return g.derivedFavoriteTeamId != nil
   }
 
   func pickUnderdog(for g: Game) async {
     guard canPick(g) else { return }
-    guard let fav = g.favoriteTeamId else { return }
-    let underdogId = (fav == g.homeTeamId) ? g.awayTeamId : g.homeTeamId
-    guard let pickedId = underdogId else { return }
+    guard let pickedId = g.derivedUnderdogTeamId else { return }
     let previous = selectedGameId
     selectedGameId = g.id
     savingPick = true; defer { savingPick = false }
@@ -141,28 +139,51 @@ struct GamesView: View {
       Text("No games for this week yet.").foregroundStyle(.secondary)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     } else {
-      List(viewModel.games) { g in
-        GameRowView(
-          game: g,
-          logoFor: { id in viewModel.logoURL(for: id) },
-          isSelected: viewModel.selectedGameId == g.id
-        )
-        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-          if viewModel.selectedGameId == g.id {
-            Button("Clear pick") {
-              Task { await viewModel.clearPickForWeek() }
-            }.tint(.gray)
-          } else {
-            Button("Pick this upset") {
-              Task { await viewModel.pickUnderdog(for: g) }
+      List {
+        Section {
+          ForEach(viewModel.games) { g in
+            GameRowView(
+              game: g,
+              logoFor: { id in viewModel.logoURL(for: id) },
+              isSelected: viewModel.selectedGameId == g.id
+            )
+            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+              if viewModel.selectedGameId == g.id {
+                Button("Clear pick") {
+                  Task { await viewModel.clearPickForWeek() }
+                }.tint(.gray)
+              } else {
+                Button("Pick this upset") {
+                  Task { await viewModel.pickUnderdog(for: g) }
+                }
+                .tint(viewModel.canPick(g) ? .blue : .gray)
+                .disabled(!viewModel.canPick(g))
+              }
             }
-            .tint(viewModel.canPick(g) ? .blue : .gray)
-            .disabled(!viewModel.canPick(g))
           }
+        } header: {
+          columnHeader
         }
       }
       .listStyle(.plain)
     }
+  }
+
+  // Pinned column labels -- List's .plain style floats section headers at
+  // the top on scroll (native UITableView.Style.plain behavior), so this
+  // stays visible above the rows instead of scrolling away with them.
+  private var columnHeader: some View {
+    HStack {
+      Text("FAVORITE")
+      Spacer()
+      Text("UNDERDOG")
+    }
+    .font(.caption.bold())
+    .foregroundStyle(.secondary)
+    .padding(.horizontal, 16)
+    .padding(.vertical, 6)
+    .background(.ultraThinMaterial)
+    .textCase(nil)
   }
 
   var body: some View {
