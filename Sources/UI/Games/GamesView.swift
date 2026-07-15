@@ -62,14 +62,41 @@ final class GamesViewModel: ObservableObject {
   }
 
   func canPick(_ g: Game) -> Bool {
-    if g.picksLocked == true { return false }
-    if g.startTime < Date() { return false }
-    return g.derivedFavoriteTeamId != nil
+    if g.picksLocked == true {
+      #if DEBUG
+      print("[canPick] BLOCKED (picksLocked) \(g.awayTeam ?? "?") @ \(g.homeTeam ?? "?")")
+      #endif
+      return false
+    }
+    if g.startTime < Date() {
+      #if DEBUG
+      print("[canPick] BLOCKED (startTime \(g.startTime) < now \(Date())) \(g.awayTeam ?? "?") @ \(g.homeTeam ?? "?")")
+      #endif
+      return false
+    }
+    let fav = g.derivedFavoriteTeamId
+    #if DEBUG
+    if fav == nil {
+      let spreadText: String = g.latestSpread == nil ? "nil" : "\(g.latestSpread!)"
+      let homeText: String = g.homeTeamId?.uuidString ?? "nil"
+      let awayText: String = g.awayTeamId?.uuidString ?? "nil"
+      print("[canPick] BLOCKED (no favorite) \(g.awayTeam ?? "?") @ \(g.homeTeam ?? "?") spread=\(spreadText) home=\(homeText) away=\(awayText)")
+    }
+    #endif
+    return fav != nil
   }
 
   func pickUnderdog(for g: Game) async {
+    #if DEBUG
+    print("[pickUnderdog] tapped for \(g.awayTeam ?? "?") @ \(g.homeTeam ?? "?"), canPick=\(canPick(g))")
+    #endif
     guard canPick(g) else { return }
-    guard let pickedId = g.derivedUnderdogTeamId else { return }
+    guard let pickedId = g.derivedUnderdogTeamId else {
+      #if DEBUG
+      print("[pickUnderdog] BLOCKED: derivedUnderdogTeamId is nil")
+      #endif
+      return
+    }
     let previous = selectedGameId
     selectedGameId = g.id
     savingPick = true; defer { savingPick = false }
@@ -107,11 +134,11 @@ struct GamesView: View {
       Menu {
         ForEach(viewModel.availableWeeks, id: \.self) { wk in
           Button { viewModel.selectedWeek = wk } label: {
-            Label("Week \\ (wk)", systemImage: wk == viewModel.selectedWeek ? "checkmark" : "circle")
+            Label("Week \(wk)", systemImage: wk == viewModel.selectedWeek ? "checkmark" : "circle")
           }
         }
       } label: {
-        Label("Week \\ (viewModel.selectedWeek)", systemImage: "calendar")
+        Label("Week \(viewModel.selectedWeek)", systemImage: "calendar")
           .font(.subheadline.bold())
       }
         .onChange(of: viewModel.selectedWeek) { _ in

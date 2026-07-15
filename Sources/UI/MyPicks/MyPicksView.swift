@@ -21,11 +21,11 @@ struct MyPicksView: View {
             Button {
               selectedWeek = wk
             } label: {
-              Label("Week \\ (wk)", systemImage: wk == selectedWeek ? "checkmark" : "circle")
+              Label("Week \(wk)", systemImage: wk == selectedWeek ? "checkmark" : "circle")
             }
           }
         } label: {
-          Label("Week \\ (selectedWeek)", systemImage: "calendar")
+          Label("Week \(selectedWeek)", systemImage: "calendar")
             .font(.subheadline.bold())
         }
         .onChange(of: selectedWeek) { _ in Task { await reload() } }
