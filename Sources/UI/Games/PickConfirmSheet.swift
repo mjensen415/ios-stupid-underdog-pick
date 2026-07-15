@@ -47,37 +47,20 @@ struct PickConfirmSheet: View {
   }
 
   private func confirm() async {
-    // Capture environment values to avoid dynamic member lookup issues
-    let localAppState = appState
-    let localClient = client
-
-    // Resolve context from AppState using a helper to accommodate different property names
-    func resolveContext(from appState: AppState) -> (season: Int, week: Int)? {
-      // Prefer a `currentContext` property if available via key-path; otherwise, try `context`.
-      // Since we can't reflect types safely here, use optional chaining on known names via closures.
-      // Replace these accessors with your actual AppState API if different.
-      if let ctx = (appState as AnyObject).value(forKey: "currentContext") as? NSObject,
-         let season = ctx.value(forKey: "season") as? Int,
-         let week = ctx.value(forKey: "week") as? Int {
-        return (season, week)
-      }
-      if let ctx = (appState as AnyObject).value(forKey: "context") as? NSObject,
-         let season = ctx.value(forKey: "season") as? Int,
-         let week = ctx.value(forKey: "week") as? Int {
-        return (season, week)
-      }
-      return nil
-    }
-
-    guard let localClient else { return }
-    guard let context = resolveContext(from: localAppState) else { return }
+    guard let localClient = client else { return }
 
     isSubmitting = true
     defer { isSubmitting = false }
     do {
-      // Upsert via PicksService using DI; we need season/week from context
+      // The pick is *for* `game`, which already carries its own season/week --
+      // no need to ask "what's the current season/week" separately (the
+      // previous version used Objective-C KVC reflection to grope AppState
+      // for a "currentContext"/"context" property that doesn't exist there
+      // at all -- AppState only has client/session/startupError, and it
+      // doesn't inherit NSObject, so value(forKey:) on it would have
+      // crashed at runtime rather than just failing to find the key).
       let picks = PicksService(client: localClient)
-      try await picks.upsertPick(gameId: game.id, pickedTeamId: teamId, season: context.season, week: context.week)
+      try await picks.upsertPick(gameId: game.id, pickedTeamId: teamId, season: game.season, week: game.week)
       onComplete(true, nil)
       dismiss()
     } catch {
