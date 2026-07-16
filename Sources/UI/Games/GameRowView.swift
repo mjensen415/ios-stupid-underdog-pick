@@ -41,13 +41,13 @@ struct GameRowView: View {
       teamBlock(name: leftTeamName, logo: logoFor(leftTeamId))
 
       VStack(spacing: 4) {
-        Text(kickoffText).font(.subheadline).foregroundStyle(.secondary)
+        Text(kickoffText).font(BoldTheme.Fonts.mono(12)).foregroundColor(BoldTheme.Colors.textFaint)
         if let bl = game.bettingLine, !bl.isEmpty {
-          Text(bl).font(.footnote.monospaced())
+          Text(bl).font(BoldTheme.Fonts.mono(13)).foregroundColor(BoldTheme.Colors.gold)
         } else if let sp = game.underdogSpread {
-          Text(String(format: "%.1f", sp)).font(.footnote.monospaced())
+          Text(String(format: "%.1f", sp)).font(BoldTheme.Fonts.mono(13)).foregroundColor(BoldTheme.Colors.gold)
         } else {
-          Text("—").font(.footnote).foregroundStyle(.secondary)
+          Text("—").font(BoldTheme.Fonts.mono(13)).foregroundColor(BoldTheme.Colors.textFaint)
         }
       }
       .frame(maxWidth: .infinity)
@@ -57,18 +57,21 @@ struct GameRowView: View {
         if isSelected {
           Image(systemName: "checkmark.circle.fill")
             .imageScale(.medium)
+            .foregroundColor(BoldTheme.Colors.gold)
             .padding(2)
         }
       }
     }
     .padding(.vertical, 8)
+    .listRowBackground(BoldTheme.Colors.bgPage)
     .overlay(alignment: .bottom) {
       if isSelected {
-        Text("Picked")
-          .font(.caption2.bold())
+        Text("PICKED")
+          .font(BoldTheme.Fonts.mono(10))
+          .tracking(0.6)
           .padding(.horizontal, 8).padding(.vertical, 3)
-          .background(Capsule().fill(.blue.opacity(0.15)))
-          .foregroundStyle(.blue)
+          .background(Capsule().fill(BoldTheme.Colors.gold.opacity(0.15)))
+          .foregroundColor(BoldTheme.Colors.gold)
           .padding(.bottom, 4)
       }
     }
@@ -80,11 +83,15 @@ struct GameRowView: View {
       AsyncImage(url: logo) { phase in
         switch phase {
         case .success(let img): img.resizable().scaledToFit()
-        default: Image(systemName: "football").resizable().scaledToFit().opacity(0.3)
+        default: Image(systemName: "football").resizable().scaledToFit().opacity(0.3).foregroundColor(BoldTheme.Colors.textFaint)
         }
       }
       .frame(width: 28, height: 28)
-      Text(name).font(.footnote).lineLimit(2).multilineTextAlignment(.center)
+      Text(name)
+        .font(BoldTheme.Fonts.body(12))
+        .foregroundColor(BoldTheme.Colors.text)
+        .lineLimit(2)
+        .multilineTextAlignment(.center)
     }
     .frame(width: 96)
   }

@@ -137,7 +137,9 @@ struct GamesView: View {
 
   private var header: some View {
     HStack {
-      Text("SUP").font(.title3.bold())
+      SupIcon(variant: .monogram)
+        .frame(width: 28, height: 28)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
       Spacer()
       Menu {
         ForEach(viewModel.availableWeeks, id: \.self) { wk in
@@ -147,7 +149,8 @@ struct GamesView: View {
         }
       } label: {
         Label("Week \(viewModel.selectedWeek)", systemImage: "calendar")
-          .font(.subheadline.bold())
+          .font(BoldTheme.Fonts.body(14, weight: .semibold))
+          .foregroundColor(BoldTheme.Colors.gold)
       }
         .onChange(of: viewModel.selectedWeek) { _ in
           Task {
@@ -158,21 +161,31 @@ struct GamesView: View {
     }
     .padding(.horizontal)
     .padding(.vertical, 8)
-    .background(.ultraThinMaterial)
+    .background(BoldTheme.Colors.bgPage)
   }
 
   @ViewBuilder private var content: some View {
     if let e = viewModel.errorText {
       VStack(spacing: 8) {
-        Text("Error loading games").font(.title3.bold())
-        Text(e).foregroundStyle(.secondary).multilineTextAlignment(.center)
+        Text("Error loading games").font(BoldTheme.Fonts.display(24)).foregroundColor(BoldTheme.Colors.text)
+        Text(e).foregroundColor(BoldTheme.Colors.textDim).multilineTextAlignment(.center)
         Button("Retry") { Task { await viewModel.loadInitial() } }
-      }.padding()
+          .foregroundColor(BoldTheme.Colors.gold)
+      }
+      .padding()
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .background(BoldTheme.Colors.bgPage)
     } else if viewModel.isLoading && viewModel.games.isEmpty {
-      ProgressView("Loading games…").frame(maxWidth: .infinity, maxHeight: .infinity)
-    } else if viewModel.games.isEmpty {
-      Text("No games for this week yet.").foregroundStyle(.secondary)
+      ProgressView("Loading games…")
+        .tint(BoldTheme.Colors.gold)
+        .foregroundColor(BoldTheme.Colors.textDim)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(BoldTheme.Colors.bgPage)
+    } else if viewModel.games.isEmpty {
+      Text("No games for this week yet.")
+        .foregroundColor(BoldTheme.Colors.textDim)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(BoldTheme.Colors.bgPage)
     } else {
       List {
         Section {
@@ -191,7 +204,7 @@ struct GamesView: View {
                 Button("Pick this upset") {
                   Task { await viewModel.pickUnderdog(for: g) }
                 }
-                .tint(viewModel.canPick(g) ? .blue : .gray)
+                .tint(viewModel.canPick(g) ? BoldTheme.Colors.gold : .gray)
                 .disabled(!viewModel.canPick(g))
               }
             }
@@ -201,6 +214,8 @@ struct GamesView: View {
         }
       }
       .listStyle(.plain)
+      .scrollContentBackground(.hidden)
+      .background(BoldTheme.Colors.bgPage)
     }
   }
 
@@ -213,11 +228,12 @@ struct GamesView: View {
       Spacer()
       Text("UNDERDOG")
     }
-    .font(.caption.bold())
-    .foregroundStyle(.secondary)
+    .font(BoldTheme.Fonts.mono(11))
+    .tracking(0.9)
+    .foregroundColor(BoldTheme.Colors.textFaint)
     .padding(.horizontal, 16)
     .padding(.vertical, 6)
-    .background(.ultraThinMaterial)
+    .background(BoldTheme.Colors.bgPage)
     .textCase(nil)
   }
 
@@ -228,14 +244,16 @@ struct GamesView: View {
       if let msg = viewModel.toastMessage {
         Spacer()
         Text(msg)
-          .font(.footnote)
+          .font(BoldTheme.Fonts.body(13))
+          .foregroundColor(BoldTheme.Colors.text)
           .padding(.horizontal, 12).padding(.vertical, 8)
-          .background(.ultraThinMaterial)
+          .background(BoldTheme.Colors.green)
           .clipShape(Capsule())
           .shadow(radius: 2)
           .padding(.bottom, 12)
       }
     }
+    .background(BoldTheme.Colors.bgPage.ignoresSafeArea())
     .task {
       await viewModel.loadInitial()
     }

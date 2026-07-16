@@ -5,7 +5,7 @@ struct LeaderboardView: View {
 
   var body: some View {
     NavigationStack {
-      VStack {
+      VStack(spacing: 0) {
         Picker("Mode", selection: $selection) {
           Text("Weekly").tag(0)
           Text("Season").tag(1)
@@ -19,8 +19,13 @@ struct LeaderboardView: View {
           SeasonLeaderboardView()
         }
       }
+      .background(BoldTheme.Colors.bgPage.ignoresSafeArea())
       .navigationTitle("Leaderboard")
+      .toolbarBackground(BoldTheme.Colors.bgPage, for: .navigationBar)
+      .toolbarBackground(.visible, for: .navigationBar)
+      .toolbarColorScheme(.dark, for: .navigationBar)
     }
+    .tint(BoldTheme.Colors.gold)
   }
 }
 

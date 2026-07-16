@@ -41,6 +41,14 @@ targets:
           UIApplicationSupportsMultipleScenes: false
         UILaunchScreen:
           UIColorName: LaunchColor
+        UIAppFonts:
+          - BebasNeue-Regular.ttf
+          - DMSans-Regular.ttf
+          - DMSans-Medium.ttf
+          - DMSans-SemiBold.ttf
+          - DMSans-Bold.ttf
+          - DMMono-Regular.ttf
+          - DMMono-Medium.ttf
         SUPABASE_URL: $(SUPABASE_URL)
         SUPABASE_ANON_KEY: $(SUPABASE_ANON_KEY)
         URL_SCHEME: $(URL_SCHEME)

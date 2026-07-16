@@ -9,16 +9,22 @@ struct StupidUnderdogApp: App {
       Group {
         if let e = appState.startupError {
           VStack(spacing: 12) {
-            Text("Startup Error").font(.title.bold())
-            Text(e.localizedDescription).multilineTextAlignment(.center).foregroundStyle(.secondary)
-            Text("Check SUPABASE_URL / SUPABASE_ANON_KEY in Info.plist.").font(.footnote).foregroundStyle(.secondary)
-          }.padding()
+            Text("STARTUP ERROR").font(BoldTheme.Fonts.display(28)).foregroundColor(BoldTheme.Colors.text)
+            Text(e.localizedDescription).multilineTextAlignment(.center).foregroundColor(BoldTheme.Colors.textDim)
+            Text("Check SUPABASE_URL / SUPABASE_ANON_KEY in Info.plist.").font(BoldTheme.Fonts.mono(11)).foregroundColor(BoldTheme.Colors.textFaint)
+          }
+          .padding()
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .background(BoldTheme.Colors.bgPage.ignoresSafeArea())
         } else if let client = appState.client {
           RootView()
             .environmentObject(appState)
             .environment(\.supabaseClient, client)
         } else {
-          ProgressView("Starting…")
+          ZStack {
+            BoldTheme.Colors.bgPage.ignoresSafeArea()
+            ProgressView("Starting…").tint(BoldTheme.Colors.gold).foregroundColor(BoldTheme.Colors.textDim)
+          }
         }
       }
       .task {

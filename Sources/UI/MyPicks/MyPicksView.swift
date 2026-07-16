@@ -14,7 +14,7 @@ struct MyPicksView: View {
   var body: some View {
     VStack(spacing: 0) {
       HStack {
-        Text("My Picks").font(.title3.bold())
+        Text("MY PICKS").font(BoldTheme.Fonts.display(20)).tracking(0.6).foregroundColor(BoldTheme.Colors.text)
         Spacer()
         Menu {
           ForEach(availableWeeks, id: \.self) { wk in
@@ -26,22 +26,37 @@ struct MyPicksView: View {
           }
         } label: {
           Label("Week \(selectedWeek)", systemImage: "calendar")
-            .font(.subheadline.bold())
+            .font(BoldTheme.Fonts.body(14, weight: .semibold))
+            .foregroundColor(BoldTheme.Colors.gold)
         }
         .onChange(of: selectedWeek) { _ in Task { await reload() } }
       }
-      .padding(.horizontal).padding(.vertical, 8).background(.ultraThinMaterial)
+      .padding(.horizontal).padding(.vertical, 8)
+      .background(BoldTheme.Colors.bgPage)
 
       content
     }
+    .background(BoldTheme.Colors.bgPage.ignoresSafeArea())
     .task { await bootstrap() }
     .refreshable { await reload() }
   }
 
   @ViewBuilder private var content: some View {
-    if let e = errorText { Text(e).foregroundStyle(.secondary).padding() }
-    else if isLoading && games.isEmpty { ProgressView("Loading…").frame(maxWidth: .infinity, maxHeight: .infinity) }
-    else if games.isEmpty { Text("No picks yet.").foregroundStyle(.secondary).frame(maxWidth: .infinity, maxHeight: .infinity) }
+    if let e = errorText {
+      Text(e).foregroundColor(BoldTheme.Colors.textDim).padding()
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(BoldTheme.Colors.bgPage)
+    }
+    else if isLoading && games.isEmpty {
+      ProgressView("Loading…").tint(BoldTheme.Colors.gold).foregroundColor(BoldTheme.Colors.textDim)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(BoldTheme.Colors.bgPage)
+    }
+    else if games.isEmpty {
+      Text("No picks yet.").foregroundColor(BoldTheme.Colors.textDim)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(BoldTheme.Colors.bgPage)
+    }
     else {
       List(games) { g in
         GameRowView(
@@ -51,6 +66,8 @@ struct MyPicksView: View {
         )
       }
       .listStyle(.plain)
+      .scrollContentBackground(.hidden)
+      .background(BoldTheme.Colors.bgPage)
     }
   }
 

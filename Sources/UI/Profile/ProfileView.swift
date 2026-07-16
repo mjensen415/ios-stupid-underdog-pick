@@ -16,20 +16,27 @@ struct ProfileView: View {
         if let profile {
           Section("Account") {
             Text("Email: \(profile.email)")
+              .foregroundColor(BoldTheme.Colors.textDim)
             TextField("Display Name", text: $displayName)
+              .foregroundColor(BoldTheme.Colors.text)
             if let errorMessage {
               Text(errorMessage).foregroundColor(.red)
             }
             Button(isSaving ? "Saving…" : "Save") { Task { await save() } }
               .disabled(isSaving)
+              .foregroundColor(BoldTheme.Colors.gold)
           }
+          .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
         } else if let loadError {
           Section {
             Text(loadError).foregroundColor(.red)
             Button("Retry") { Task { await load() } }
+              .foregroundColor(BoldTheme.Colors.gold)
           }
+          .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
         } else {
-          ProgressView()
+          ProgressView().tint(BoldTheme.Colors.gold)
+            .listRowBackground(BoldTheme.Colors.bgPage)
         }
 
         Section {
@@ -40,15 +47,22 @@ struct ProfileView: View {
             }
           }
         }
+        .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
 
         if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
            let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String {
-          Section(footer: Text("v\(version) (\(build))")) { EmptyView() }
+          Section(footer: Text("v\(version) (\(build))").foregroundColor(BoldTheme.Colors.textFaint)) { EmptyView() }
         }
       }
+      .scrollContentBackground(.hidden)
+      .background(BoldTheme.Colors.bgPage.ignoresSafeArea())
       .navigationTitle("Profile")
+      .toolbarBackground(BoldTheme.Colors.bgPage, for: .navigationBar)
+      .toolbarBackground(.visible, for: .navigationBar)
+      .toolbarColorScheme(.dark, for: .navigationBar)
       .task { await load() }
     }
+    .tint(BoldTheme.Colors.gold)
   }
 
   private func load() async {
