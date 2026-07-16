@@ -124,17 +124,45 @@ struct CareerTotals: Decodable {
   }
 }
 
+/// Row shape returned by the get_season_leaderboard RPC -- live-computed
+/// from picks/games via pick_points_v -> leaderboard_season_v, unaffected
+/// by the leaderboard_totals season-grouping bug. Used for the Season
+/// Leaderboard screen instead of reading leaderboard_totals directly.
+struct SeasonLeaderboardRow: Decodable, Identifiable {
+  var id: UUID { userId }
+  let season: Int
+  let userId: UUID
+  let displayName: String?
+  let seasonPoints: Double?
+  let totalWins: Int?
+  let totalLosses: Int?
+  let lastWeekPlayed: Int?
+
+  enum CodingKeys: String, CodingKey {
+    case season
+    case userId = "user_id"
+    case displayName = "display_name"
+    case seasonPoints = "season_points"
+    case totalWins = "total_wins"
+    case totalLosses = "total_losses"
+    case lastWeekPlayed = "last_week_played"
+  }
+}
+
 struct LeaderboardService {
   let client: SupabaseClient
 
+  /// All-time career record -- summed client-side across every season row,
+  /// since leaderboard_totals has one row per (user_id, season), not a
+  /// single combined-across-seasons row per user.
   func fetchMyCareerTotals(userId: UUID) async throws -> CareerTotals? {
-    let res = try await client
-      .from("v_leaderboard_totals_named")
-      .select("wins, losses, total_points")
-      .eq("user_id", value: userId)
-      .limit(1)
-      .execute()
-    return try JSONDecoder().decode([CareerTotals].self, from: res.data).first
+    let seasons = try await fetchMySeasonTotals(userId: userId)
+    guard !seasons.isEmpty else { return nil }
+    return CareerTotals(
+      wins: seasons.reduce(0) { $0 + ($1.wins ?? 0) },
+      losses: seasons.reduce(0) { $0 + ($1.losses ?? 0) },
+      totalPoints: seasons.reduce(0) { $0 + ($1.totalPoints ?? 0) }
+    )
   }
 
   /// Season-by-season career record for one user (one row per season played).
@@ -146,6 +174,19 @@ struct LeaderboardService {
       .order("season", ascending: false)
       .execute()
     return try JSONDecoder().decode([TotalsLeaderboardRow].self, from: res.data)
+  }
+
+  /// Season leaderboard standings via the same live-computed RPC web's
+  /// Leaderboard.tsx already uses -- not leaderboard_totals, which has no
+  /// season-scoped correctness guarantee for cross-user standings.
+  func fetchSeasonLeaderboard(season: Int) async throws -> [SeasonLeaderboardRow] {
+    struct Params: Encodable {
+      let p_season: Int
+    }
+    let res = try await client
+      .rpc("get_season_leaderboard", params: Params(p_season: season))
+      .execute()
+    return try JSONDecoder().decode([SeasonLeaderboardRow].self, from: res.data)
   }
 
   func fetchWeek(season: Int, week: Int) async throws -> [WeeklyLeaderboardRow] {
