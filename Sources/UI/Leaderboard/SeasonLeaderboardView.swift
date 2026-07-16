@@ -9,25 +9,18 @@ struct SeasonLeaderboardView: View {
   @State private var errorMessage: String?
 
   var body: some View {
-      List(rows, id: \.id) { row in
-      HStack {
-        Text("\(rows.firstIndex(where: { $0.id == row.id }).map { $0 + 1 } ?? 0)")
-          .font(BoldTheme.Fonts.mono(13))
-          .foregroundColor(BoldTheme.Colors.textFaint)
-          .frame(width: 24, alignment: .leading)
-        Text(names[row.userId] ?? "Player")
-          .font(BoldTheme.Fonts.body(15, weight: .semibold))
-          .foregroundColor(BoldTheme.Colors.text)
-        Spacer()
-        Text("\(row.wins ?? 0)-\(row.losses ?? 0)-\(row.pending ?? 0)")
-          .font(BoldTheme.Fonts.mono(12))
-          .foregroundColor(BoldTheme.Colors.textFaint)
-        Text("\(row.totalPoints ?? 0, specifier: "%.1f") pts")
-          .font(BoldTheme.Fonts.display(18))
-          .foregroundColor(BoldTheme.Colors.gold)
-          .frame(minWidth: 72, alignment: .trailing)
+      List {
+      if !rows.isEmpty {
+        LeaderboardHeaderRow()
       }
-      .listRowBackground(BoldTheme.Colors.bgPage)
+      ForEach(rows, id: \.id) { row in
+        LeaderboardRow(
+          rank: rows.firstIndex(where: { $0.id == row.id }).map { $0 + 1 } ?? 0,
+          name: names[row.userId] ?? "Player",
+          record: "\(row.wins ?? 0)W-\(row.losses ?? 0)L",
+          points: String(format: "%.1f", row.totalPoints ?? 0)
+        )
+      }
     }
     .listStyle(.plain)
     .scrollContentBackground(.hidden)

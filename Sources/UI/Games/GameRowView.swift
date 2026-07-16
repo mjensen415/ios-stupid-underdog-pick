@@ -63,18 +63,14 @@ struct GameRowView: View {
       }
     }
     .padding(.vertical, 8)
-    .listRowBackground(BoldTheme.Colors.bgPage)
-    .overlay(alignment: .bottom) {
-      if isSelected {
-        Text("PICKED")
-          .font(BoldTheme.Fonts.mono(10))
-          .tracking(0.6)
-          .padding(.horizontal, 8).padding(.vertical, 3)
-          .background(Capsule().fill(BoldTheme.Colors.gold.opacity(0.15)))
-          .foregroundColor(BoldTheme.Colors.gold)
-          .padding(.bottom, 4)
-      }
-    }
+    // A fixed-position bottom overlay here previously caused a "Picked" pill
+    // to land at different relative heights depending on whether team names
+    // wrapped to one or two lines, sometimes overlapping the spread/kickoff
+    // column -- a full-row tint can't overlap anything since it isn't
+    // positioned relative to variable content height. The checkmark badge on
+    // the picked team's logo (below) is the primary "you picked this"
+    // signal; the tint just reinforces it at a glance while scrolling.
+    .listRowBackground(isSelected ? BoldTheme.Colors.gold.opacity(0.08) : BoldTheme.Colors.bgPage)
   }
 
   @ViewBuilder
