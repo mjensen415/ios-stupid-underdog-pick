@@ -108,8 +108,45 @@ func fetchDisplayNames(client: SupabaseClient, userIds: [UUID]) async -> [UUID: 
   }
 }
 
+/// All-time career totals for one user, aggregated across every season --
+/// backed by v_leaderboard_totals_named, the same pre-aggregated view the
+/// web app already uses for its own "your stats" widget. Distinct from
+/// leaderboard_totals, which has one row per (user_id, season) and has no
+/// single combined-across-seasons row of its own.
+struct CareerTotals: Decodable {
+  let wins: Int?
+  let losses: Int?
+  let totalPoints: Double?
+
+  enum CodingKeys: String, CodingKey {
+    case wins, losses
+    case totalPoints = "total_points"
+  }
+}
+
 struct LeaderboardService {
   let client: SupabaseClient
+
+  func fetchMyCareerTotals(userId: UUID) async throws -> CareerTotals? {
+    let res = try await client
+      .from("v_leaderboard_totals_named")
+      .select("wins, losses, total_points")
+      .eq("user_id", value: userId)
+      .limit(1)
+      .execute()
+    return try JSONDecoder().decode([CareerTotals].self, from: res.data).first
+  }
+
+  /// Season-by-season career record for one user (one row per season played).
+  func fetchMySeasonTotals(userId: UUID) async throws -> [TotalsLeaderboardRow] {
+    let res = try await client
+      .from("leaderboard_totals")
+      .select("id, user_id, season, wins, losses, pending, total_points")
+      .eq("user_id", value: userId)
+      .order("season", ascending: false)
+      .execute()
+    return try JSONDecoder().decode([TotalsLeaderboardRow].self, from: res.data)
+  }
 
   func fetchWeek(season: Int, week: Int) async throws -> [WeeklyLeaderboardRow] {
     let res = try await client

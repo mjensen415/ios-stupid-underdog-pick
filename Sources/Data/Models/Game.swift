@@ -13,9 +13,12 @@ public struct Game: Decodable, Identifiable {
   public let bettingLine: String?
   public let latestSpread: Double?
   public let picksLocked: Bool?
+  public let status: String?
+  public let homePoints: Int?
+  public let awayPoints: Int?
 
   public enum CodingKeys: String, CodingKey {
-    case id, season, week
+    case id, season, week, status
     case homeTeam = "home_team"
     case awayTeam = "away_team"
     case homeTeamId = "home_team_id"
@@ -25,6 +28,8 @@ public struct Game: Decodable, Identifiable {
     case bettingLine = "betting_line"
     case latestSpread = "latest_spread"
     case picksLocked = "picks_locked"
+    case homePoints = "home_points"
+    case awayPoints = "away_points"
   }
 
   /// Nothing in the sync pipeline actually populates favorite_team_id --
@@ -50,5 +55,18 @@ public struct Game: Decodable, Identifiable {
   public var underdogSpread: Double? {
     guard let spread = latestSpread else { return nil }
     return abs(spread)
+  }
+
+  public enum PickOutcome { case win, loss, pending }
+
+  /// Same win/loss/pending resolution as web's PickHistoryTab.tsx
+  /// pickResult() -- status must be final and both scores present, then
+  /// compare against which side the picked team was on.
+  public func outcome(forPickedTeamId pickedTeamId: UUID) -> PickOutcome {
+    guard status == "final", let hp = homePoints, let ap = awayPoints else { return .pending }
+    let pickedHome = pickedTeamId == homeTeamId
+    let homeWon = hp > ap
+    let won = (pickedHome && homeWon) || (!pickedHome && ap > hp)
+    return won ? .win : .loss
   }
 }

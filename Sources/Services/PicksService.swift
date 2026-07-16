@@ -17,6 +17,25 @@ struct PicksService {
     return try JSONDecoder().decode([Pick].self, from: res.data).first
   }
 
+  /// All of the caller's picks, optionally scoped to one season (pass nil
+  /// for full cross-season history). Mirrors myPick's query shape, just
+  /// without the season/week filters.
+  func myPicks(season: Int? = nil) async throws -> [Pick] {
+    let userId = try await client.auth.session.user.id
+    var query = client
+      .from("picks")
+      .select("id, user_id, game_id, picked_team_id, season, week, created_at")
+      .eq("user_id", value: userId)
+    if let season {
+      query = query.eq("season", value: season)
+    }
+    let res = try await query
+      .order("season", ascending: false)
+      .order("week", ascending: false)
+      .execute()
+    return try JSONDecoder().decode([Pick].self, from: res.data)
+  }
+
   // picks only grants authenticated SELECT -- no INSERT/UPDATE/DELETE.
   // Every write goes through a SECURITY DEFINER RPC instead (same one the
   // web app uses), so business rules like pick-lock enforcement live in
