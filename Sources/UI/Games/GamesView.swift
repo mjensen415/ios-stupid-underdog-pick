@@ -159,8 +159,8 @@ struct GamesView: View {
           }
         }
     }
-    .padding(.horizontal)
-    .padding(.vertical, 8)
+    .padding(.horizontal, 20)
+    .padding(.vertical, 14)
     .background(BoldTheme.Colors.bgPage)
   }
 
@@ -231,8 +231,8 @@ struct GamesView: View {
     .font(BoldTheme.Fonts.mono(11))
     .tracking(0.9)
     .foregroundColor(BoldTheme.Colors.textFaint)
-    .padding(.horizontal, 16)
-    .padding(.vertical, 6)
+    .padding(.horizontal, 20)
+    .padding(.vertical, 10)
     .background(BoldTheme.Colors.bgPage)
     .textCase(nil)
   }

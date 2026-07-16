@@ -62,7 +62,9 @@ struct GameRowView: View {
         }
       }
     }
-    .padding(.vertical, 8)
+    .padding(.vertical, 14)
+    .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
+    .listRowSeparatorTint(BoldTheme.Colors.border)
     // A fixed-position bottom overlay here previously caused a "Picked" pill
     // to land at different relative heights depending on whether team names
     // wrapped to one or two lines, sometimes overlapping the spread/kickoff

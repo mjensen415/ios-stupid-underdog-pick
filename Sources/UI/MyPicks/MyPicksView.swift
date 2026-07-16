@@ -31,7 +31,7 @@ struct MyPicksView: View {
         }
         .onChange(of: selectedWeek) { _ in Task { await reload() } }
       }
-      .padding(.horizontal).padding(.vertical, 8)
+      .padding(.horizontal, 20).padding(.vertical, 14)
       .background(BoldTheme.Colors.bgPage)
 
       content
