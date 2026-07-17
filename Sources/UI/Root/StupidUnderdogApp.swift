@@ -73,28 +73,14 @@ struct StupidUnderdogApp: App {
         }
       }
       .onOpenURL { url in
-        #if DEBUG
-        print("[DeepLink] received URL:", url.absoluteString)
-        #endif
         Task { [weak appState] in
-          guard let client = appState?.client else {
+          guard let appState, let client = appState.client else {
             #if DEBUG
             print("[DeepLink][ERR] no client when handling URL")
             #endif
             return
           }
-          do {
-            try await client.auth.session(from: url)
-            let s = try await client.auth.session
-            appState?.session = s
-            #if DEBUG
-            print("[DeepLink] session restored. user:", s.user.id.uuidString)
-            #endif
-          } catch {
-            #if DEBUG
-            print("[DeepLink][ERR] session(from:) failed:", error.localizedDescription)
-            #endif
-          }
+          await DeepLinkHandler(client: client, appState: appState).handle(url: url)
         }
       }
     }

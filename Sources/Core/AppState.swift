@@ -7,6 +7,10 @@ final class AppState: ObservableObject {
   @Published var client: SupabaseClient?
   @Published var session: Session?
   @Published var startupError: Error?
+  /// Set by DeepLinkHandler when a /groups/join/:token link (universal or
+  /// custom-scheme) is opened. Consumed by RootView's full-screen cover,
+  /// which works regardless of whether the user is signed in yet.
+  @Published var pendingGroupJoinToken: String?
 }
 
 private struct SupabaseClientKey: EnvironmentKey {

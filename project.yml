@@ -18,6 +18,8 @@ targets:
     deploymentTarget: "17.0"
     sources:
       - path: Sources
+        excludes:
+          - "StupidUnderdogPick.entitlements"
     dependencies:
       - package: Supabase
     settings:
@@ -25,6 +27,7 @@ targets:
         PRODUCT_NAME: Stupid Underdog Pick
         PRODUCT_BUNDLE_IDENTIFIER: com.stupidunderdogpick.app
         SWIFT_VERSION: 5.9
+        CODE_SIGN_ENTITLEMENTS: Sources/StupidUnderdogPick.entitlements
         ALWAYS_SEARCH_USER_PATHS: NO
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

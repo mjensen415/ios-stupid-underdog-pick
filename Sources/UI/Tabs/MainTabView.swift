@@ -27,6 +27,9 @@ struct MainTabView: View {
       MyPicksView()
         .tabItem { Label("My Pick", systemImage: "checkmark.seal") }
 
+      GroupsListView()
+        .tabItem { Label("Groups", systemImage: "person.3.fill") }
+
       ProfileView()
         .tabItem { Label("Profile", systemImage: "person.crop.circle") }
     }

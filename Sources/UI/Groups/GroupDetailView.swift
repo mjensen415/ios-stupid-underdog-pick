@@ -1,0 +1,495 @@
+import SwiftUI
+import Supabase
+
+fileprivate struct GroupRow: Decodable {
+  let id: UUID
+  let name: String
+  let slug: String
+  let avatar_url: String?
+  let is_private: Bool
+  let description: String?
+}
+
+fileprivate enum DetailTab: Hashable { case leaderboard, members, settings }
+fileprivate enum LeaderboardScope: Hashable { case week, season }
+
+@MainActor
+final class GroupDetailViewModel: ObservableObject {
+  @Published var isLoading = false
+  @Published var errorText: String?
+  @Published fileprivate var group: GroupRow?
+  @Published var myRole: GroupRole?
+  @Published var memberCount = 0
+  @Published var members: [GroupMember] = []
+  @Published var leaderboard: [GroupLeaderboardEntry] = []
+  @Published var invites: [GroupInvite] = []
+  @Published var season = 2025
+  @Published var week = 1
+  @Published var toastMessage: String?
+
+  private var client: SupabaseClient?
+  let slug: String
+
+  init(slug: String) { self.slug = slug }
+
+  func configure(client: SupabaseClient) {
+    if self.client == nil { self.client = client }
+  }
+
+  var isAdmin: Bool { myRole == .owner || myRole == .admin }
+  var isOwner: Bool { myRole == .owner }
+
+  func loadInitial() async {
+    guard let client else { return }
+    isLoading = true; errorText = nil
+    defer { isLoading = false }
+    do {
+      if let ctx = try? await ContextService(client: client).getCurrentContext() {
+        season = ctx.season
+        week = ctx.week
+      }
+
+      // Mirror web's GroupDetail.tsx: try to find in my memberships first
+      // (gives role); fall back to a direct public-group lookup otherwise.
+      let mine = try await GroupsService(client: client).fetchMyGroups()
+      if let match = mine.first(where: { $0.slug == slug }) {
+        group = GroupRow(id: match.group_id, name: match.name, slug: match.slug, avatar_url: match.avatar_url, is_private: match.is_private, description: match.description)
+        myRole = match.my_role
+        memberCount = match.member_count
+      } else {
+        let res = try await client.from("groups").select("id, name, slug, avatar_url, is_private, description").eq("slug", value: slug).single().execute()
+        let row = try JSONDecoder().decode(GroupRow.self, from: res.data)
+        if row.is_private {
+          group = nil
+        } else {
+          group = row
+          myRole = nil
+          let countRes = try await client.from("group_members").select("user_id", head: false, count: .exact).eq("group_id", value: row.id).neq("role", value: "pending").execute()
+          memberCount = countRes.count ?? 0
+        }
+      }
+
+      if group != nil {
+        await loadMembers()
+        await loadLeaderboard(scope: .week)
+      }
+    } catch {
+      errorText = error.localizedDescription
+    }
+  }
+
+  func loadMembers() async {
+    guard let client, let group else { return }
+    do {
+      let result = try await GroupsService(client: client).fetchGroupMembers(slug: group.slug)
+      members = result.members
+    } catch {
+      errorText = error.localizedDescription
+    }
+  }
+
+  fileprivate func loadLeaderboard(scope: LeaderboardScope) async {
+    guard let client, let group else { return }
+    do {
+      let result = try await GroupsService(client: client).fetchGroupLeaderboard(
+        slug: group.slug, scope: scope == .week ? "week" : "season", season: season, week: scope == .week ? week : nil
+      )
+      leaderboard = result.leaderboard
+    } catch {
+      errorText = error.localizedDescription
+    }
+  }
+
+  func loadInvites() async {
+    guard let client, let group else { return }
+    do {
+      let result = try await GroupsService(client: client).fetchGroupInvites(groupId: group.id)
+      invites = result.invites
+    } catch {
+      errorText = error.localizedDescription
+    }
+  }
+
+  func join() async {
+    guard let client, let group else { return }
+    do {
+      let result = try await GroupsService(client: client).joinGroup(groupId: group.id)
+      toastMessage = result.message
+      await loadInitial()
+    } catch {
+      errorText = error.localizedDescription
+    }
+  }
+
+  func approve(userId: UUID) async {
+    guard let client, let group else { return }
+    do {
+      _ = try await GroupsService(client: client).approveMember(groupId: group.id, userId: userId)
+      await loadMembers()
+    } catch { errorText = error.localizedDescription }
+  }
+
+  func kick(userId: UUID) async {
+    guard let client, let group else { return }
+    do {
+      _ = try await GroupsService(client: client).kickMember(groupId: group.id, userId: userId)
+      await loadMembers()
+    } catch { errorText = error.localizedDescription }
+  }
+
+  func promote(userId: UUID) async {
+    guard let client, let group else { return }
+    do {
+      _ = try await GroupsService(client: client).promoteToAdmin(groupId: group.id, userId: userId)
+      await loadMembers()
+    } catch { errorText = error.localizedDescription }
+  }
+}
+
+struct GroupDetailView: View {
+  @Environment(\.supabaseClient) private var client
+  @StateObject private var viewModel: GroupDetailViewModel
+  @State private var tab: DetailTab = .leaderboard
+  @State private var leaderboardScope: LeaderboardScope = .week
+  @State private var showLeaveConfirm = false
+  @State private var showDeleteConfirm = false
+  @Environment(\.dismiss) private var dismiss
+
+  init(slug: String) {
+    _viewModel = StateObject(wrappedValue: GroupDetailViewModel(slug: slug))
+  }
+
+  private var tabOptions: [(label: String, value: DetailTab)] {
+    var opts: [(label: String, value: DetailTab)] = [("Leaderboard", .leaderboard), ("Members", .members)]
+    if viewModel.isAdmin { opts.append(("Settings", .settings)) }
+    return opts
+  }
+
+  var body: some View {
+    Group {
+      if let e = viewModel.errorText, viewModel.group == nil {
+        VStack(spacing: 8) {
+          Text("Error loading group").font(BoldTheme.Fonts.display(24)).foregroundColor(BoldTheme.Colors.text)
+          Text(e).foregroundColor(BoldTheme.Colors.textDim)
+          Button("Retry") { Task { await viewModel.loadInitial() } }.foregroundColor(BoldTheme.Colors.gold)
+        }.padding()
+      } else if viewModel.isLoading && viewModel.group == nil {
+        ProgressView("Loading…").tint(BoldTheme.Colors.gold)
+      } else if viewModel.group == nil {
+        VStack(spacing: 10) {
+          Image(systemName: "lock.fill").font(.system(size: 28)).foregroundColor(BoldTheme.Colors.textFaint)
+          Text("This group is private.").font(BoldTheme.Fonts.body(15, weight: .semibold)).foregroundColor(BoldTheme.Colors.text)
+          Text("Request to join to view it.").font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
+        }.padding()
+      } else {
+        content
+      }
+    }
+    .background(BoldTheme.Colors.bgPage.ignoresSafeArea())
+    .navigationTitle(viewModel.group?.name ?? "Group")
+    .navigationBarTitleDisplayMode(.inline)
+    .task {
+      if let client {
+        viewModel.configure(client: client)
+        await viewModel.loadInitial()
+      }
+    }
+  }
+
+  @ViewBuilder
+  private var content: some View {
+    let group = viewModel.group!
+    ScrollView {
+      VStack(alignment: .leading, spacing: 20) {
+        HStack(spacing: 14) {
+          AvatarInitials(name: group.name, size: 56)
+          VStack(alignment: .leading, spacing: 6) {
+            Text(group.name).font(BoldTheme.Fonts.display(24)).foregroundColor(BoldTheme.Colors.text)
+            HStack(spacing: 6) {
+              if let role = viewModel.myRole { RoleBadge(role: role) }
+              PrivacyChip(isPrivate: group.is_private)
+              Text("\(viewModel.memberCount) member\(viewModel.memberCount == 1 ? "" : "s")")
+                .font(BoldTheme.Fonts.body(12)).foregroundColor(BoldTheme.Colors.textDim)
+            }
+          }
+          Spacer()
+        }
+        if let description = group.description, !description.isEmpty {
+          Text(description).font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
+        }
+
+        if viewModel.myRole == .pending {
+          bannerCard(icon: "clock.fill", title: "Pending Approval", subtitle: "An admin needs to approve your request.")
+        } else if viewModel.myRole == nil {
+          VStack(alignment: .leading, spacing: 10) {
+            Text("Join this group").font(BoldTheme.Fonts.body(15, weight: .semibold)).foregroundColor(BoldTheme.Colors.text)
+            Button("Request to Join") { Task { await viewModel.join() } }
+              .font(BoldTheme.Fonts.body(14, weight: .semibold))
+              .padding(.horizontal, 16).padding(.vertical, 10)
+              .background(BoldTheme.Colors.gold).foregroundColor(BoldTheme.Colors.bgPage).cornerRadius(10)
+          }
+          .padding(14).background(BoldTheme.Colors.surface).cornerRadius(14)
+        }
+
+        PillToggle(options: tabOptions, selection: $tab, scrollable: true)
+
+        switch tab {
+        case .leaderboard: leaderboardTab
+        case .members: membersTab
+        case .settings: settingsTab
+        }
+
+        if viewModel.myRole != nil && viewModel.myRole != .pending {
+          Button("Leave Group") { showLeaveConfirm = true }
+            .font(BoldTheme.Fonts.body(14, weight: .semibold))
+            .foregroundColor(.red)
+            .padding(.top, 8)
+        }
+      }
+      .padding(20)
+    }
+    .confirmationDialog("Leave this group?", isPresented: $showLeaveConfirm, titleVisibility: .visible) {
+      Button("Leave Group", role: .destructive) {
+        Task {
+          guard let client else { return }
+          do {
+            _ = try await GroupsService(client: client).leaveGroup(groupId: group.id)
+            dismiss()
+          } catch { viewModel.errorText = error.localizedDescription }
+        }
+      }
+    }
+  }
+
+  private func bannerCard(icon: String, title: String, subtitle: String) -> some View {
+    HStack(spacing: 12) {
+      Image(systemName: icon).foregroundColor(BoldTheme.Colors.gold)
+      VStack(alignment: .leading, spacing: 2) {
+        Text(title).font(BoldTheme.Fonts.body(14, weight: .semibold)).foregroundColor(BoldTheme.Colors.text)
+        Text(subtitle).font(BoldTheme.Fonts.body(12)).foregroundColor(BoldTheme.Colors.textDim)
+      }
+      Spacer()
+    }
+    .padding(14).background(BoldTheme.Colors.surface).cornerRadius(14)
+  }
+
+  // MARK: - Leaderboard tab
+
+  private var leaderboardTab: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      HStack {
+        PillToggle(options: [(label: "This Week", value: LeaderboardScope.week), (label: "Season", value: .season)], selection: $leaderboardScope)
+          .onChange(of: leaderboardScope) { newValue in
+            Task { await viewModel.loadLeaderboard(scope: newValue) }
+          }
+        Spacer()
+        if leaderboardScope == .week {
+          Stepper("Wk \(viewModel.week)", value: $viewModel.week, in: 1...20)
+            .fixedSize()
+            .onChange(of: viewModel.week) { _ in Task { await viewModel.loadLeaderboard(scope: leaderboardScope) } }
+        }
+      }
+
+      if viewModel.leaderboard.isEmpty {
+        Text("No data available for this period").font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textFaint).padding(.vertical, 16)
+      } else {
+        HStack {
+          Text("RK").frame(width: 28, alignment: .leading)
+          Text("ENTRY")
+          Spacer()
+          Text("PTS")
+        }
+        .font(BoldTheme.Fonts.mono(11)).foregroundColor(BoldTheme.Colors.textFaint)
+        .padding(.bottom, 6)
+
+        ForEach(viewModel.leaderboard) { entry in
+          HStack(spacing: 12) {
+            Text(entry.rank == 1 ? "🏆" : "#\(entry.rank)").frame(width: 28, alignment: .leading)
+            AvatarInitials(name: entry.display_name ?? "?", size: 32)
+            VStack(alignment: .leading, spacing: 2) {
+              Text(entry.display_name ?? "Unknown").font(BoldTheme.Fonts.body(14, weight: .medium)).foregroundColor(BoldTheme.Colors.text)
+              if entry.role == .owner || entry.role == .admin { RoleBadge(role: entry.role) }
+            }
+            Spacer()
+            VStack(alignment: .trailing, spacing: 2) {
+              Text(String(format: "%.1f", entry.points)).font(BoldTheme.Fonts.display(18)).foregroundColor(BoldTheme.Colors.gold)
+              Text("\(entry.wins)-\(entry.losses)").font(BoldTheme.Fonts.mono(11)).foregroundColor(BoldTheme.Colors.textFaint)
+            }
+          }
+          .padding(.vertical, 8)
+          Divider().background(BoldTheme.Colors.border)
+        }
+      }
+    }
+  }
+
+  // MARK: - Members tab
+
+  private var membersTab: some View {
+    let pending = viewModel.members.filter { $0.role == .pending }
+    let active = viewModel.members.filter { $0.role != .pending }
+
+    return VStack(alignment: .leading, spacing: 16) {
+      if viewModel.isAdmin && !pending.isEmpty {
+        VStack(alignment: .leading, spacing: 8) {
+          Text("PENDING").font(BoldTheme.Fonts.mono(11)).foregroundColor(BoldTheme.Colors.textFaint)
+          ForEach(pending) { member in
+            HStack {
+              AvatarInitials(name: member.display_name ?? "?", size: 32)
+              Text(member.display_name ?? "Unknown").font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Colors.text)
+              Spacer()
+              Button { Task { await viewModel.approve(userId: member.user_id) } } label: {
+                Image(systemName: "checkmark.circle.fill").foregroundColor(BoldTheme.Colors.gold)
+              }
+              Button { Task { await viewModel.kick(userId: member.user_id) } } label: {
+                Image(systemName: "xmark.circle.fill").foregroundColor(.red)
+              }
+            }
+          }
+        }
+      }
+
+      VStack(alignment: .leading, spacing: 8) {
+        Text("MEMBERS").font(BoldTheme.Fonts.mono(11)).foregroundColor(BoldTheme.Colors.textFaint)
+        ForEach(active) { member in
+          HStack {
+            AvatarInitials(name: member.display_name ?? "?", size: 32)
+            Text(member.display_name ?? "Unknown").font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Colors.text)
+            Spacer()
+            RoleBadge(role: member.role)
+            if canManage(member) {
+              Menu {
+                if viewModel.isOwner && member.role == .member {
+                  Button("Promote to Admin") { Task { await viewModel.promote(userId: member.user_id) } }
+                }
+                Button("Remove from Group", role: .destructive) { Task { await viewModel.kick(userId: member.user_id) } }
+              } label: {
+                Image(systemName: "ellipsis.circle").foregroundColor(BoldTheme.Colors.textDim)
+              }
+            }
+          }
+          .padding(.vertical, 4)
+        }
+      }
+    }
+  }
+
+  private func canManage(_ member: GroupMember) -> Bool {
+    guard viewModel.isAdmin else { return false }
+    if member.role == .owner { return false }
+    if member.role == .admin && !viewModel.isOwner { return false }
+    return true
+  }
+
+  // MARK: - Settings tab
+
+  private var settingsTab: some View {
+    VStack(alignment: .leading, spacing: 20) {
+      InviteManagementSection(viewModel: viewModel)
+
+      if viewModel.isOwner {
+        VStack(alignment: .leading, spacing: 8) {
+          Text("DANGER ZONE").font(BoldTheme.Fonts.mono(11)).foregroundColor(.red)
+          Button("Delete Group") { showDeleteConfirm = true }
+            .font(BoldTheme.Fonts.body(14, weight: .semibold))
+            .foregroundColor(.red)
+        }
+        .padding(14)
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.red.opacity(0.4)))
+        .confirmationDialog("Delete this group? This can't be undone.", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
+          Button("Delete Group", role: .destructive) {
+            Task {
+              guard let client, let group = viewModel.group else { return }
+              do {
+                _ = try await GroupsService(client: client).deleteGroup(groupId: group.id)
+                dismiss()
+              } catch { viewModel.errorText = error.localizedDescription }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+private struct InviteManagementSection: View {
+  @Environment(\.supabaseClient) private var client
+  @ObservedObject var viewModel: GroupDetailViewModel
+  @State private var isCreating = false
+  @State private var justCreatedLink: String?
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      HStack {
+        Text("INVITES").font(BoldTheme.Fonts.mono(11)).foregroundColor(BoldTheme.Colors.textFaint)
+        Spacer()
+        Button("Generate Link") { Task { await createInvite() } }
+          .font(BoldTheme.Fonts.body(13, weight: .semibold))
+          .foregroundColor(BoldTheme.Colors.gold)
+          .disabled(isCreating)
+      }
+
+      if let link = justCreatedLink {
+        HStack {
+          Text(link).font(BoldTheme.Fonts.mono(12)).foregroundColor(BoldTheme.Colors.text).lineLimit(1)
+          Spacer()
+          Button {
+            UIPasteboard.general.string = link
+          } label: {
+            Image(systemName: "doc.on.doc").foregroundColor(BoldTheme.Colors.gold)
+          }
+        }
+        .padding(10).background(BoldTheme.Colors.surface).cornerRadius(10)
+      }
+
+      if viewModel.invites.isEmpty {
+        Text("No invites created yet").font(BoldTheme.Fonts.body(12)).foregroundColor(BoldTheme.Colors.textFaint)
+      } else {
+        ForEach(viewModel.invites) { invite in
+          HStack {
+            Text(invite.invite_token).font(BoldTheme.Fonts.mono(12)).foregroundColor(BoldTheme.Colors.text)
+            Spacer()
+            Text(status(for: invite)).font(BoldTheme.Fonts.body(11)).foregroundColor(BoldTheme.Colors.textDim)
+            Button {
+              Task { await revoke(invite) }
+            } label: {
+              Image(systemName: "xmark").foregroundColor(.red)
+            }
+          }
+          .padding(.vertical, 4)
+        }
+      }
+    }
+    .task { await viewModel.loadInvites() }
+  }
+
+  private func status(for invite: GroupInvite) -> String {
+    if invite.revoked { return "revoked" }
+    if let expiresAt = invite.expires_at, let date = ISO8601DateFormatter().date(from: expiresAt), date < Date() { return "expired" }
+    if let maxUses = invite.max_uses, invite.uses >= maxUses { return "maxed" }
+    return "active"
+  }
+
+  private func createInvite() async {
+    guard let client, let group = viewModel.group else { return }
+    isCreating = true
+    defer { isCreating = false }
+    do {
+      let result = try await GroupsService(client: client).createInvite(groupId: group.id, maxUses: nil, expiresAt: nil)
+      justCreatedLink = "https://sup.football\(result.joinUrl)"
+      await viewModel.loadInvites()
+    } catch {
+      viewModel.errorText = error.localizedDescription
+    }
+  }
+
+  private func revoke(_ invite: GroupInvite) async {
+    guard let client else { return }
+    do {
+      _ = try await GroupsService(client: client).revokeInvite(inviteToken: invite.invite_token)
+      await viewModel.loadInvites()
+    } catch {
+      viewModel.errorText = error.localizedDescription
+    }
+  }
+}

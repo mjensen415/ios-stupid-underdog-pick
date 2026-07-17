@@ -11,6 +11,14 @@ struct RootView: View {
         MainTabView()
       }
     }
+    .fullScreenCover(isPresented: Binding(
+      get: { appState.pendingGroupJoinToken != nil },
+      set: { isPresented in if !isPresented { appState.pendingGroupJoinToken = nil } }
+    )) {
+      if let token = appState.pendingGroupJoinToken {
+        GroupJoinByTokenView(token: token)
+      }
+    }
   }
 }
 
