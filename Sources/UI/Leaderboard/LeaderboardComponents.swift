@@ -30,7 +30,7 @@ struct LeaderboardRow: View {
 
   var body: some View {
     HStack(alignment: .center, spacing: 16) {
-      Text("\(rank)")
+      Text(verbatim: "\(rank)")
         .font(BoldTheme.Fonts.body(14))
         .foregroundColor(BoldTheme.Colors.textFaint)
         .frame(width: 28, alignment: .leading)

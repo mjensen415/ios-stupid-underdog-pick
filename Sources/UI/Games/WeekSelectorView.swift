@@ -6,9 +6,9 @@ struct WeekSelectorView: View {
   
   var body: some View {
     HStack {
-      Text("Season \(season)")
+      Text(verbatim: "Season \(season)")
       Spacer()
-      Text("Week \(week)")
+      Text(verbatim: "Week \(week)")
     }
     .font(.subheadline)
     .foregroundStyle(.secondary)

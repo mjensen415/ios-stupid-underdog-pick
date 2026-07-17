@@ -57,7 +57,7 @@ struct PickHistoryView: View {
                     Button {
                       selectedSeason = season
                     } label: {
-                      Text("\(season)")
+                      Text(verbatim: "\(season)")
                         .font(BoldTheme.Fonts.body(13, weight: .semibold))
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
@@ -76,15 +76,15 @@ struct PickHistoryView: View {
 
           Section {
             HStack {
-              Text("\(selectedSeason ?? 0) Summary")
+              Text(verbatim: "\(selectedSeason ?? 0) Summary")
                 .font(BoldTheme.Fonts.mono(11))
                 .foregroundColor(BoldTheme.Colors.textFaint)
               Spacer()
-              Text("\(seasonSummary.wins)W-\(seasonSummary.losses)L")
+              Text(verbatim: "\(seasonSummary.wins)W-\(seasonSummary.losses)L")
                 .font(BoldTheme.Fonts.display(20))
                 .foregroundColor(BoldTheme.Colors.text)
               if seasonSummary.pending > 0 {
-                Text("· \(seasonSummary.pending) pending")
+                Text(verbatim: "· \(seasonSummary.pending) pending")
                   .font(BoldTheme.Fonts.body(12))
                   .foregroundColor(BoldTheme.Colors.textFaint)
               }
@@ -106,7 +106,7 @@ struct PickHistoryView: View {
                 }
               }
             } header: {
-              Text("WEEK \(week)")
+              Text(verbatim: "WEEK \(week)")
                 .font(BoldTheme.Fonts.mono(11))
                 .tracking(0.9)
                 .foregroundColor(BoldTheme.Colors.textFaint)

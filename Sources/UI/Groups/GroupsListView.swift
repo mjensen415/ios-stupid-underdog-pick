@@ -151,7 +151,7 @@ private struct GroupRowView: View {
       AvatarInitials(name: name, size: 40)
       VStack(alignment: .leading, spacing: 3) {
         Text(name).font(BoldTheme.Fonts.body(15, weight: .semibold)).foregroundColor(BoldTheme.Colors.text)
-        Text("\(memberCount) member\(memberCount == 1 ? "" : "s")")
+        Text(verbatim: "\(memberCount) member\(memberCount == 1 ? "" : "s")")
           .font(BoldTheme.Fonts.body(12))
           .foregroundColor(BoldTheme.Colors.textDim)
       }

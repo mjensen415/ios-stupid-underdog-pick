@@ -17,7 +17,7 @@ struct PickConfirmSheet: View {
     NavigationStack {
       VStack(alignment: .leading, spacing: 16) {
         Text("Confirm Pick").font(.title2).bold()
-        Text("Week \(game.week), Season \(game.season)")
+        Text(verbatim: "Week \(game.week), Season \(game.season)")
           .font(.subheadline)
           .foregroundStyle(.secondary)
 

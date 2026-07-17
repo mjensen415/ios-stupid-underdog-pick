@@ -18,7 +18,7 @@ struct CreateGroupView: View {
       Form {
         Section {
           TextField("Group name", text: $name)
-          Text("\(name.count)/40 characters")
+          Text(verbatim: "\(name.count)/40 characters")
             .font(BoldTheme.Fonts.mono(11))
             .foregroundColor(BoldTheme.Colors.textFaint)
         }

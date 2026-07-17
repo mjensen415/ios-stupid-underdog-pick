@@ -92,7 +92,7 @@ struct ProfileView: View {
             HStack {
               VStack(alignment: .leading, spacing: 2) {
                 Text("ALL-TIME RECORD").font(BoldTheme.Fonts.mono(10)).foregroundColor(BoldTheme.Colors.textFaint)
-                Text("\(careerTotals?.wins ?? 0)W – \(careerTotals?.losses ?? 0)L")
+                Text(verbatim: "\(careerTotals?.wins ?? 0)W – \(careerTotals?.losses ?? 0)L")
                   .font(BoldTheme.Fonts.display(22))
                   .foregroundColor(BoldTheme.Colors.text)
               }
@@ -108,9 +108,9 @@ struct ProfileView: View {
 
             ForEach(seasonTotals) { row in
               HStack {
-                Text("\(row.season ?? 0)").foregroundColor(BoldTheme.Colors.text)
+                Text(verbatim: "\(row.season ?? 0)").foregroundColor(BoldTheme.Colors.text)
                 Spacer()
-                Text("\(row.wins ?? 0)W-\(row.losses ?? 0)L")
+                Text(verbatim: "\(row.wins ?? 0)W-\(row.losses ?? 0)L")
                   .font(BoldTheme.Fonts.mono(12))
                   .foregroundColor(BoldTheme.Colors.textFaint)
                 Text(formatPoints(row.totalPoints))

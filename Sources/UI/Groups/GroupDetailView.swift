@@ -220,7 +220,7 @@ struct GroupDetailView: View {
             HStack(spacing: 6) {
               if let role = viewModel.myRole { RoleBadge(role: role) }
               PrivacyChip(isPrivate: group.is_private)
-              Text("\(viewModel.memberCount) member\(viewModel.memberCount == 1 ? "" : "s")")
+              Text(verbatim: "\(viewModel.memberCount) member\(viewModel.memberCount == 1 ? "" : "s")")
                 .font(BoldTheme.Fonts.body(12)).foregroundColor(BoldTheme.Colors.textDim)
             }
           }
@@ -325,7 +325,7 @@ struct GroupDetailView: View {
             Spacer()
             VStack(alignment: .trailing, spacing: 2) {
               Text(String(format: "%.1f", entry.points)).font(BoldTheme.Fonts.display(18)).foregroundColor(BoldTheme.Colors.gold)
-              Text("\(entry.wins)-\(entry.losses)").font(BoldTheme.Fonts.mono(11)).foregroundColor(BoldTheme.Colors.textFaint)
+              Text(verbatim: "\(entry.wins)-\(entry.losses)").font(BoldTheme.Fonts.mono(11)).foregroundColor(BoldTheme.Colors.textFaint)
             }
           }
           .padding(.vertical, 8)

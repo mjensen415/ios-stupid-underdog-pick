@@ -22,7 +22,7 @@ struct SeasonLeaderboardView: View {
                   selectedSeason = season
                   Task { await loadSeason() }
                 } label: {
-                  Text("\(season)")
+                  Text(verbatim: "\(season)")
                     .font(BoldTheme.Fonts.body(13, weight: .semibold))
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
