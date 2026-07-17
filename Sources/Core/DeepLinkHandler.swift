@@ -2,8 +2,11 @@ import Foundation
 import Supabase
 
 // Single entry point for every incoming URL: the sup://underdog custom
-// scheme (magic-link/OAuth callback) and https://sup.football/... or
-// https://stupidunderdogpick.com/... universal links (group invites).
+// scheme (magic-link/OAuth callback) and https://www.stupidunderdogpick.com/...
+// universal links (group invites) -- sup.football and the bare
+// stupidunderdogpick.com both redirect at the Vercel domain level, which
+// breaks Apple's no-redirect apple-app-site-association fetch requirement,
+// so www.stupidunderdogpick.com is the only domain actually registered.
 // Both StupidUnderdogApp.onOpenURL and any future universal-link entry
 // point should delegate here rather than re-implementing routing inline.
 @MainActor

@@ -476,7 +476,11 @@ private struct InviteManagementSection: View {
     defer { isCreating = false }
     do {
       let result = try await GroupsService(client: client).createInvite(groupId: group.id, maxUses: nil, expiresAt: nil)
-      justCreatedLink = "https://sup.football\(result.joinUrl)"
+      // www.stupidunderdogpick.com is the only domain that serves directly
+      // with no redirect -- sup.football and the bare stupidunderdogpick.com
+      // both redirect at the Vercel domain level, which breaks Apple's
+      // no-redirect apple-app-site-association fetch requirement.
+      justCreatedLink = "https://www.stupidunderdogpick.com\(result.joinUrl)"
       await viewModel.loadInvites()
     } catch {
       viewModel.errorText = error.localizedDescription
