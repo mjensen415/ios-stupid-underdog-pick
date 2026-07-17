@@ -19,8 +19,9 @@ struct LeaderboardView: View {
           SeasonLeaderboardView()
         }
       }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
       .background(BoldTheme.Colors.bgPage.ignoresSafeArea())
-      .navigationTitle("Leaderboard")
+      .navigationTitle(selection == 0 ? "Weekly Leaderboard" : "Season")
       .toolbarBackground(BoldTheme.Colors.bgPage, for: .navigationBar)
       .toolbarBackground(.visible, for: .navigationBar)
       .toolbarColorScheme(.dark, for: .navigationBar)

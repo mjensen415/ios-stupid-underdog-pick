@@ -65,7 +65,6 @@ struct SeasonLeaderboardView: View {
     .overlay { if isLoading { ProgressView().tint(BoldTheme.Colors.gold) } }
     .refreshable { await loadSeason() }
     .task { await loadInitial() }
-    .navigationTitle("Season")
   }
 
   private func loadInitial() async {

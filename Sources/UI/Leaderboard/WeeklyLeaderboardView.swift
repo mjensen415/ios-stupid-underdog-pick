@@ -74,6 +74,7 @@ struct WeeklyLeaderboardView: View {
         .background(BoldTheme.Colors.bgPage)
       }
     }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
     .background(BoldTheme.Colors.bgPage.ignoresSafeArea())
     .task {
       if let client {
@@ -84,6 +85,5 @@ struct WeeklyLeaderboardView: View {
     .refreshable {
       await viewModel.load()
     }
-    .navigationTitle("Weekly Leaderboard")
   }
 }
