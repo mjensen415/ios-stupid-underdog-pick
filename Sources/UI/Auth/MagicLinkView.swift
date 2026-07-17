@@ -31,7 +31,7 @@ struct MagicLinkView: View {
           }
           .padding(.bottom, 24)
 
-          SupIcon(variant: .spread)
+          SupIcon(variant: .football)
             .frame(width: 56, height: 56)
             .clipShape(RoundedRectangle(cornerRadius: 15))
             .shadow(color: .black.opacity(0.4), radius: 10, y: 8)

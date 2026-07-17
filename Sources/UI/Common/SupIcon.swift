@@ -2,10 +2,11 @@ import SwiftUI
 
 // Native port of winner-circle-dev's src/components/SupIcon.tsx -- keep
 // geometry/colors in sync with that file and with the standalone
-// public/favicon.svg / iOS AppIcon-1024.png ("The Cover") source.
+// public/favicon.svg / iOS AppIcon-1024.png ("Gold Ball") source.
 enum SupIconVariant {
   case monogram
-  case spread // "The Cover" -- chosen app icon mark
+  case spread // "The Cover" -- retired/alternate mark
+  case football // "Gold Ball" -- chosen app icon mark
 }
 
 struct SupIcon: View {
@@ -18,6 +19,7 @@ struct SupIcon: View {
         switch variant {
         case .monogram: monogram(side: side)
         case .spread: spread(side: side)
+        case .football: football(side: side)
         }
       }
       .frame(width: geo.size.width, height: geo.size.height)
@@ -67,6 +69,41 @@ struct SupIcon: View {
       }
     }
   }
+
+  @ViewBuilder
+  private func football(side: CGFloat) -> some View {
+    ZStack {
+      RadialGradient(
+        colors: [Color(hex: 0x123322), BoldTheme.Colors.bgPage],
+        center: UnitPoint(x: 0.5, y: 0.10),
+        startRadius: 0,
+        endRadius: side * 0.75
+      )
+      ZStack {
+        LinearGradient(colors: [Color(hex: 0xFFDD5C), BoldTheme.Colors.gold], startPoint: .top, endPoint: .bottom)
+        HatchPattern(color: BoldTheme.Colors.bgPage.opacity(0.16), band: side * 0.03, period: side * 0.055)
+        Rectangle()
+          .fill(BoldTheme.Colors.bgPage)
+          .frame(width: side * 0.03, height: side * 0.4)
+          .position(x: side * (0.5 - 0.43 + 0.055), y: side * 0.5)
+        Rectangle()
+          .fill(BoldTheme.Colors.bgPage)
+          .frame(width: side * 0.03, height: side * 0.4)
+          .position(x: side * (0.5 + 0.43 - 0.055), y: side * 0.5)
+        VStack(spacing: side * 0.035) {
+          ForEach(0..<4, id: \.self) { _ in
+            RoundedRectangle(cornerRadius: side * 0.02)
+              .fill(BoldTheme.Colors.bgPage)
+              .frame(width: side * 0.13, height: side * 0.028)
+          }
+        }
+      }
+      .frame(width: side * 0.86, height: side * 0.56)
+      .clipShape(Ellipse())
+      .rotationEffect(.degrees(-24))
+    }
+    .background(BoldTheme.Colors.bgPage)
+  }
 }
 
 private struct Chevron: Shape {
@@ -101,6 +138,7 @@ private struct HatchPattern: View {
 #Preview {
   HStack(spacing: 16) {
     SupIcon(variant: .monogram).frame(width: 80, height: 80).cornerRadius(18)
+    SupIcon(variant: .football).frame(width: 80, height: 80).cornerRadius(18)
     SupIcon(variant: .spread).frame(width: 80, height: 80).cornerRadius(18)
   }
   .padding()
