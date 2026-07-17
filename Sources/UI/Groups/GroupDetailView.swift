@@ -144,6 +144,18 @@ final class GroupDetailViewModel: ObservableObject {
       await loadMembers()
     } catch { errorText = error.localizedDescription }
   }
+
+  fileprivate func updateGroup(name: String, description: String?, isPrivate: Bool) async -> Bool {
+    guard let client, let group else { return false }
+    do {
+      let result = try await GroupsService(client: client).updateGroup(groupId: group.id, name: name, description: description, avatarUrl: nil, isPrivate: isPrivate)
+      self.group = GroupRow(id: group.id, name: name, slug: result.slug, avatar_url: group.avatar_url, is_private: isPrivate, description: description)
+      return true
+    } catch {
+      errorText = error.localizedDescription
+      return false
+    }
+  }
 }
 
 struct GroupDetailView: View {
@@ -385,6 +397,8 @@ struct GroupDetailView: View {
 
   private var settingsTab: some View {
     VStack(alignment: .leading, spacing: 20) {
+      EditGroupSection(viewModel: viewModel)
+
       InviteManagementSection(viewModel: viewModel)
 
       if viewModel.isOwner {
@@ -495,5 +509,77 @@ private struct InviteManagementSection: View {
     } catch {
       viewModel.errorText = error.localizedDescription
     }
+  }
+}
+
+private struct EditGroupSection: View {
+  @ObservedObject var viewModel: GroupDetailViewModel
+  @State private var name = ""
+  @State private var description = ""
+  @State private var isPrivate = true
+  @State private var isSaving = false
+  @State private var savedRecently = false
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 10) {
+      Text("GROUP SETTINGS").font(BoldTheme.Fonts.mono(11)).foregroundColor(BoldTheme.Colors.textFaint)
+
+      VStack(alignment: .leading, spacing: 6) {
+        Text("Name").font(BoldTheme.Fonts.body(12)).foregroundColor(BoldTheme.Colors.textDim)
+        TextField("Group name", text: $name)
+          .font(BoldTheme.Fonts.body(14))
+          .padding(10)
+          .background(BoldTheme.Colors.surface)
+          .cornerRadius(10)
+      }
+
+      VStack(alignment: .leading, spacing: 6) {
+        Text("Description").font(BoldTheme.Fonts.body(12)).foregroundColor(BoldTheme.Colors.textDim)
+        TextField("Description (optional)", text: $description, axis: .vertical)
+          .font(BoldTheme.Fonts.body(14))
+          .lineLimit(2...4)
+          .padding(10)
+          .background(BoldTheme.Colors.surface)
+          .cornerRadius(10)
+      }
+
+      Toggle("Private Group", isOn: $isPrivate)
+        .font(BoldTheme.Fonts.body(14))
+
+      HStack {
+        Button {
+          Task { await save() }
+        } label: {
+          if isSaving {
+            ProgressView()
+          } else {
+            Text("Save Changes").font(BoldTheme.Fonts.body(14, weight: .semibold))
+          }
+        }
+        .padding(.horizontal, 16).padding(.vertical, 10)
+        .background(BoldTheme.Colors.gold).foregroundColor(BoldTheme.Colors.bgPage).cornerRadius(10)
+        .disabled(isSaving || name.trimmingCharacters(in: .whitespaces).isEmpty)
+
+        if savedRecently {
+          Text("Saved").font(BoldTheme.Fonts.body(12)).foregroundColor(BoldTheme.Colors.gold)
+        }
+      }
+    }
+    .onAppear {
+      name = viewModel.group?.name ?? ""
+      description = viewModel.group?.description ?? ""
+      isPrivate = viewModel.group?.is_private ?? true
+    }
+  }
+
+  private func save() async {
+    isSaving = true; savedRecently = false
+    defer { isSaving = false }
+    let ok = await viewModel.updateGroup(
+      name: name.trimmingCharacters(in: .whitespaces),
+      description: description.isEmpty ? nil : description,
+      isPrivate: isPrivate
+    )
+    if ok { savedRecently = true }
   }
 }
