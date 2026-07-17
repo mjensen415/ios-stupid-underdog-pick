@@ -158,7 +158,8 @@ struct AuthView: View {
       guard let client else { throw URLError(.notConnectedToInternet) }
       let auth = AuthService(client: client)
       guard let redirect = URL(string: "sup://underdog") else { throw URLError(.badURL) }
-      _ = try await auth.signInWithGoogle(redirect: redirect)
+      let session = try await auth.signInWithGoogle(redirect: redirect)
+      appState.session = session
     } catch {
       errorMessage = "Google sign-in didn't complete. Try again."
     }
@@ -171,7 +172,8 @@ struct AuthView: View {
       guard let client else { throw URLError(.notConnectedToInternet) }
       let auth = AuthService(client: client)
       guard let redirect = URL(string: "sup://underdog") else { throw URLError(.badURL) }
-      _ = try await auth.signInWithApple(redirect: redirect)
+      let session = try await auth.signInWithApple(redirect: redirect)
+      appState.session = session
     } catch {
       errorMessage = "Apple sign-in didn't complete. Try again."
     }
