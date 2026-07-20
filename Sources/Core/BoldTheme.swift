@@ -80,6 +80,58 @@ enum BoldTheme {
       .drawingGroup()
     }
   }
+
+  // Frost's three-blob radial-gradient backdrop -- port of AmbientBlobs in
+  // web's BoldComponents.tsx. Sits behind a screen's content; render as the
+  // first layer in a ZStack, same recipe on every Frost screen (source:
+  // SUP Identity Refresh — Light.dc.html / sup-home-frost.html) rather than
+  // one-off blur blobs per screen.
+  struct AmbientBlobs: View {
+    var body: some View {
+      GeometryReader { geo in
+        ZStack {
+          Circle()
+            .fill(RadialGradient(colors: [Color(hex: 0x0E5A3A).opacity(0.45), Color(hex: 0x0E5A3A).opacity(0)], center: .center, startRadius: 0, endRadius: 260))
+            .frame(width: 520, height: 520)
+            .position(x: -80, y: -120)
+            .blur(radius: 20)
+          Circle()
+            .fill(RadialGradient(colors: [Color(hex: 0xFFD23A).opacity(0.5), Color(hex: 0xFFD23A).opacity(0)], center: .center, startRadius: 0, endRadius: 280))
+            .frame(width: 560, height: 560)
+            .position(x: geo.size.width + 120, y: 340)
+            .blur(radius: 20)
+          Circle()
+            .fill(RadialGradient(colors: [Color(hex: 0x0E5A3A).opacity(0.3), Color(hex: 0x0E5A3A).opacity(0)], center: .center, startRadius: 0, endRadius: 300))
+            .frame(width: 600, height: 600)
+            .position(x: geo.size.width * 0.3, y: geo.size.height + 100)
+            .blur(radius: 24)
+        }
+      }
+      .allowsHitTesting(false)
+    }
+  }
+
+  // Frost's frosted-glass surface, THE surface language -- ~55-78% white
+  // fill + blur + bright hairline rim + soft shadow. `strong` bumps fill
+  // opacity for smaller cards/rows (list items, stat tiles) where the
+  // lower default opacity reads too translucent. Port of GlassCard in
+  // web's BoldComponents.tsx.
+  struct GlassCard<Content: View>: View {
+    var strong: Bool = false
+    var radius: CGFloat = 20
+    var padding: CGFloat = 24
+    @ViewBuilder var content: Content
+
+    var body: some View {
+      content
+        .padding(padding)
+        .background(.ultraThinMaterial)
+        .background(strong ? Color.white.opacity(0.78) : Color.white.opacity(0.55))
+        .overlay(RoundedRectangle(cornerRadius: radius).strokeBorder(Color.white.opacity(0.78), lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: radius))
+        .shadow(color: Color(hex: 0x142A1C).opacity(0.12), radius: 20, x: 0, y: 14)
+    }
+  }
 }
 
 extension Color {

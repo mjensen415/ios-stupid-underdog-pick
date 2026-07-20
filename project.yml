@@ -46,12 +46,12 @@ targets:
           UIColorName: LaunchColor
         UIAppFonts:
           - BebasNeue-Regular.ttf
-          - DMSans-Regular.ttf
-          - DMSans-Medium.ttf
-          - DMSans-SemiBold.ttf
-          - DMSans-Bold.ttf
-          - DMMono-Regular.ttf
-          - DMMono-Medium.ttf
+          - Barlow-Regular.ttf
+          - Barlow-Medium.ttf
+          - Barlow-SemiBold.ttf
+          - Barlow-Bold.ttf
+          - JetBrainsMono-Regular.ttf
+          - JetBrainsMono-SemiBold.ttf
         SUPABASE_URL: $(SUPABASE_URL)
         SUPABASE_ANON_KEY: $(SUPABASE_ANON_KEY)
         URL_SCHEME: $(URL_SCHEME)
