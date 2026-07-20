@@ -1,14 +1,6 @@
 import SwiftUI
 import Supabase
 
-struct DiscoverGroup: Decodable, Identifiable {
-  let id: UUID
-  let name: String
-  let slug: String
-  let avatar_url: String?
-  let is_private: Bool
-}
-
 @MainActor
 final class GroupsListViewModel: ObservableObject {
   @Published var isLoading = false
@@ -27,15 +19,9 @@ final class GroupsListViewModel: ObservableObject {
     isLoading = true; errorText = nil
     defer { isLoading = false }
     do {
-      myGroups = try await GroupsService(client: client).fetchMyGroups()
-      let res = try await client
-        .from("groups")
-        .select("id, name, slug, avatar_url, is_private")
-        .eq("is_private", value: false)
-        .order("created_at", ascending: false)
-        .limit(20)
-        .execute()
-      discoverGroups = try JSONDecoder().decode([DiscoverGroup].self, from: res.data)
+      let service = GroupsService(client: client)
+      myGroups = try await service.fetchMyGroups()
+      discoverGroups = try await service.fetchDiscoverGroups()
     } catch {
       errorText = error.localizedDescription
     }
@@ -95,7 +81,12 @@ struct GroupsListView: View {
                   NavigationLink(destination: GroupDetailView(slug: group.slug)) {
                     HStack(spacing: 12) {
                       AvatarInitials(name: group.name, size: 36)
-                      Text(group.name).font(BoldTheme.Fonts.body(15)).foregroundColor(BoldTheme.Colors.text)
+                      VStack(alignment: .leading, spacing: 2) {
+                        Text(group.name).font(BoldTheme.Fonts.body(15)).foregroundColor(BoldTheme.Colors.text)
+                        Text(verbatim: "\(group.member_count) member\(group.member_count == 1 ? "" : "s")")
+                          .font(BoldTheme.Fonts.body(12))
+                          .foregroundColor(BoldTheme.Colors.textDim)
+                      }
                     }
                   }
                   .listRowBackground(BoldTheme.Colors.bgPage)

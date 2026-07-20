@@ -108,6 +108,41 @@ struct GroupsService {
     try await invoke("groups-members", method: .get, query: [URLQueryItem(name: "slug", value: slug)])
   }
 
+  /// Direct table query, not an edge function -- mirrors src/lib/api/groups.ts's
+  /// fetchDiscoverGroups exactly (same columns, same member-count join, same
+  /// includePrivate/limit knobs), which was itself extracted from a query that
+  /// used to live inline in AllGroupsSidebar.tsx/GroupsListViewModel on both platforms.
+  func fetchDiscoverGroups(includePrivate: Bool = false, limit: Int = 20) async throws -> [DiscoverGroup] {
+    let filter = client
+      .from("groups")
+      .select("id, name, slug, avatar_url, is_private")
+    let res: PostgrestResponse<Void>
+    if includePrivate {
+      res = try await filter.order("created_at", ascending: false).limit(limit).execute()
+    } else {
+      res = try await filter.eq("is_private", value: false).order("created_at", ascending: false).limit(limit).execute()
+    }
+
+    struct Row: Decodable { let id: UUID; let name: String; let slug: String; let avatar_url: String?; let is_private: Bool }
+    let rows = try JSONDecoder().decode([Row].self, from: res.data)
+    guard !rows.isEmpty else { return [] }
+
+    let groupIds = rows.map { $0.id }
+    let memberRes = try await client
+      .from("group_members")
+      .select("group_id")
+      .in("group_id", values: groupIds)
+      .neq("role", value: "pending")
+      .execute()
+    struct MemberRow: Decodable { let group_id: UUID }
+    let members = try JSONDecoder().decode([MemberRow].self, from: memberRes.data)
+    let countMap = Dictionary(grouping: members, by: { $0.group_id }).mapValues { $0.count }
+
+    return rows.map { row in
+      DiscoverGroup(id: row.id, name: row.name, slug: row.slug, avatar_url: row.avatar_url, is_private: row.is_private, member_count: countMap[row.id] ?? 0)
+    }
+  }
+
   func fetchGroupLeaderboard(slug: String, scope: String, season: Int, week: Int?) async throws -> GroupLeaderboardResult {
     var query = [URLQueryItem(name: "slug", value: slug), URLQueryItem(name: "scope", value: scope), URLQueryItem(name: "season", value: "\(season)")]
     if let week { query.append(URLQueryItem(name: "week", value: "\(week)")) }

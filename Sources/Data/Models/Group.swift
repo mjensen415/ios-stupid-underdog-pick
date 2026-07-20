@@ -29,6 +29,15 @@ struct MyGroupsResult: Codable {
   let groups: [MyGroup]
 }
 
+struct DiscoverGroup: Decodable, Identifiable, Equatable {
+  let id: UUID
+  let name: String
+  let slug: String
+  let avatar_url: String?
+  let is_private: Bool
+  let member_count: Int
+}
+
 struct GroupLeaderboardEntry: Codable, Identifiable, Equatable {
   let rank: Int
   let user_id: UUID

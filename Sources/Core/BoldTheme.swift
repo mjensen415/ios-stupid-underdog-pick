@@ -1,33 +1,41 @@
 import SwiftUI
 
 // Native port of winner-circle-dev's src/lib/boldTheme.ts -- keep these two
-// files in sync. Same palette, same font roles (display/body/mono), just
-// Swift-native color/font APIs instead of CSS custom properties.
+// files in sync. "Frost", the light-glass system that replaced Bold (the
+// original dark scoreboard-green theme). Property names kept unchanged from
+// Bold on purpose so every existing call site keeps working -- only the
+// values changed. Source of truth for exact values: the approved "SUP
+// Identity Refresh — Light.dc.html" Claude Design doc and its
+// sup-home-frost.html mockup.
 enum BoldTheme {
   enum Colors {
-    static let bgPage    = Color(hex: 0x0A1A10)
-    static let gold      = Color(hex: 0xFFD23A)
-    static let green     = Color(hex: 0x0E5A3A)
-    static let text       = Color(hex: 0xF2EFE3)
-    static let textDim    = Color(hex: 0xF2EFE3).opacity(0.6)
-    static let textFaint  = Color(hex: 0xF2EFE3).opacity(0.4)
-    static let border     = Color(hex: 0xF2EFE3).opacity(0.12)
-    static let surface    = Color(hex: 0xF2EFE3).opacity(0.03)
-    static let track      = Color(hex: 0x1F3A2A)
+    static let bgPage    = Color(hex: 0xDFE2DB) // Fog Gray
+    static let gold      = Color(hex: 0xFFD23A) // Bank Gold -- unchanged, CTA-only
+    static let green     = Color(hex: 0x0E5A3A) // Field Green -- unchanged, links/accents
+    static let text       = Color(hex: 0x0A1A10) // Ink
+    static let textDim    = Color(hex: 0x16241B).opacity(0.62)
+    static let textFaint  = Color(hex: 0x16241B).opacity(0.4)
+    static let border     = Color(hex: 0x16241B).opacity(0.14)
+    static let surface    = Color(hex: 0x16241B).opacity(0.04)
+    static let track      = Color(hex: 0xEDEAE0) // light wall -- logo-fallback circles, muted chips
+
+    // Frost glass-surface recipe -- fill + border pair, used with .background(.ultraThinMaterial)-style blur.
+    static let glass       = Color.white.opacity(0.55) // big panels / sheets
+    static let glassStrong = Color.white.opacity(0.78) // cards / rows -- more opaque
+    static let glassBorder = Color.white.opacity(0.78)
   }
 
-  // DM Sans variable font instantiated as static weights (see
-  // Sources/Resources/Fonts) -- Google Fonts only ships DM Sans as a single
-  // variable-axis file, so these are pre-instanced at wght=400/500/600/700,
-  // opsz=14 (text optical size) rather than the display 9pt default.
+  // Barlow instantiated as static weights + JetBrains Mono (see
+  // Sources/Resources/Fonts), replacing DM Sans/DM Mono -- matches Frost's
+  // body/mono font roles from the design doc.
   enum FontName {
     static let display   = "BebasNeue-Regular"
-    static let bodyReg   = "DMSans-Regular"
-    static let bodyMed   = "DMSans-Medium"
-    static let bodySemi  = "DMSans-SemiBold"
-    static let bodyBold  = "DMSans-Bold"
-    static let monoReg   = "DMMono-Regular"
-    static let monoMed   = "DMMono-Medium"
+    static let bodyReg   = "Barlow-Regular"
+    static let bodyMed   = "Barlow-Medium"
+    static let bodySemi  = "Barlow-SemiBold"
+    static let bodyBold  = "Barlow-Bold"
+    static let monoReg   = "JetBrainsMono-Regular"
+    static let monoMed   = "JetBrainsMono-SemiBold"
   }
 
   enum Fonts {
@@ -49,14 +57,14 @@ enum BoldTheme {
     }
   }
 
-  // repeating-linear-gradient(135deg, transparent 0 12px, rgba(0,0,0,.04) 12px 13px)
+  // repeating-linear-gradient(45deg, rgba(10,26,16,0) 0 7px, rgba(10,26,16,.09) 7px 12px)
   // -- CSS repeating-linear-gradient has no direct SwiftUI equivalent; ported
   // as a tiling Canvas view. Use HatchOverlay() as a background/overlay.
   struct HatchOverlay: View {
-    var angle: Angle = .degrees(135)
-    var color: Color = .black.opacity(0.04)
-    var band: CGFloat = 1
-    var period: CGFloat = 13
+    var angle: Angle = .degrees(45)
+    var color: Color = Color(hex: 0x0A1A10).opacity(0.09)
+    var band: CGFloat = 5
+    var period: CGFloat = 12
 
     var body: some View {
       Canvas { context, size in
