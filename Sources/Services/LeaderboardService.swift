@@ -149,6 +149,19 @@ struct SeasonLeaderboardRow: Decodable, Identifiable {
   }
 }
 
+struct MyRank: Decodable {
+  let rank: Int
+  let points: Double
+  let wins: Int
+  let losses: Int
+  let totalPlayers: Int
+
+  enum CodingKeys: String, CodingKey {
+    case rank, points, wins, losses
+    case totalPlayers = "total_players"
+  }
+}
+
 struct LeaderboardService {
   let client: SupabaseClient
 
@@ -199,6 +212,17 @@ struct LeaderboardService {
       .execute()
 
     return try JSONDecoder().decode([WeeklyLeaderboardRow].self, from: res.data)
+  }
+
+  /// Cheap single-row "my rank" lookup via get_my_rank, instead of pulling
+  /// the entire ordered leaderboard just to find one user's position --
+  /// backs Home's pick-status card. p_week nil = season-overall rank.
+  func fetchMyRank(userId: UUID, season: Int, week: Int? = nil) async throws -> MyRank? {
+    struct Params: Encodable { let p_user_id: UUID; let p_season: Int; let p_week: Int? }
+    let res = try await client
+      .rpc("get_my_rank", params: Params(p_user_id: userId, p_season: season, p_week: week))
+      .execute()
+    return try JSONDecoder().decode([MyRank].self, from: res.data).first
   }
 
   func fetchTotals(season: Int?) async throws -> [TotalsLeaderboardRow] {

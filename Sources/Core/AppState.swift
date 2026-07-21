@@ -11,6 +11,10 @@ final class AppState: ObservableObject {
   /// custom-scheme) is opened. Consumed by RootView's full-screen cover,
   /// which works regardless of whether the user is signed in yet.
   @Published var pendingGroupJoinToken: String?
+  /// Set by HomeView's card CTAs to request MainTabView switch to a given
+  /// tab index (e.g. "Make Your Pick" -> Games tab). MainTabView consumes
+  /// and resets it -- same request/consume pattern as pendingGroupJoinToken.
+  @Published var requestedTab: Int?
 }
 
 private struct SupabaseClientKey: EnvironmentKey {
