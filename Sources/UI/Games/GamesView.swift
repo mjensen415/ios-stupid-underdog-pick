@@ -132,6 +132,12 @@ final class GamesViewModel: ObservableObject {
   }
 }
 
+// Explicit light text for content sitting on a solid GREEN chip/banner --
+// GREEN stays dark/saturated under Frost even though the page went light,
+// so BoldTheme.Colors.text (now dark Ink) can't be reused there. Mirrors
+// web's TEXT_ON_GREEN constant in src/pages/IndexBold.tsx.
+private let textOnGreen = Color(hex: 0xF2EFE3)
+
 struct GamesView: View {
   @StateObject var viewModel: GamesViewModel
 
@@ -245,7 +251,7 @@ struct GamesView: View {
         Spacer()
         Text(msg)
           .font(BoldTheme.Fonts.body(13))
-          .foregroundColor(BoldTheme.Colors.text)
+          .foregroundColor(textOnGreen)
           .padding(.horizontal, 12).padding(.vertical, 8)
           .background(BoldTheme.Colors.green)
           .clipShape(Capsule())

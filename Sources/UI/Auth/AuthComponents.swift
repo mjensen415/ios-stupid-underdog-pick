@@ -96,7 +96,7 @@ struct BoldOAuthButton: View {
     Button(action: action) {
       HStack(spacing: 10) {
         if isLoading {
-          ProgressView().tint(style == .light ? BoldTheme.Colors.bgPage : BoldTheme.Colors.text)
+          ProgressView().tint(BoldTheme.Colors.text)
         } else {
           icon()
           Text(title)
@@ -105,11 +105,20 @@ struct BoldOAuthButton: View {
       }
       .frame(maxWidth: .infinity)
       .frame(height: 52)
-      .foregroundColor(style == .light ? BoldTheme.Colors.bgPage : BoldTheme.Colors.text)
-      .background(style == .light ? BoldTheme.Colors.text : BoldTheme.Colors.text.opacity(0.05))
+      // `.light` (Google) needs a fixed near-white chip and `.glass` (Apple)
+      // a subtle tinted chip, in both cases with dark Ink text/icon on top --
+      // under Bold this used to read correctly off BoldTheme.Colors.bgPage/
+      // text because bgPage was dark and text was light; now that Frost has
+      // flipped those two tokens' values, reusing them here would render the
+      // Google button as a dark chip with light text (inverted). Pinned to
+      // fixed light-chip values instead, matching web's Auth.tsx which also
+      // hardcodes the Google button's white background rather than reusing
+      // a theme token for it.
+      .foregroundColor(BoldTheme.Colors.text)
+      .background(style == .light ? Color.white.opacity(0.85) : BoldTheme.Colors.text.opacity(0.05))
       .overlay(
         RoundedRectangle(cornerRadius: 14)
-          .stroke(style == .glass ? BoldTheme.Colors.border : Color.clear, lineWidth: 1)
+          .stroke(BoldTheme.Colors.border, lineWidth: 1)
       )
       .clipShape(RoundedRectangle(cornerRadius: 14))
     }

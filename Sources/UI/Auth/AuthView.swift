@@ -20,15 +20,11 @@ struct AuthView: View {
   var body: some View {
     ZStack {
       BoldTheme.Colors.bgPage.ignoresSafeArea()
-      RadialGradient(
-        colors: [BoldTheme.Colors.green.opacity(0.55), BoldTheme.Colors.bgPage.opacity(0)],
-        center: UnitPoint(x: 0.5, y: -0.05),
-        startRadius: 0,
-        endRadius: 420
-      )
-      .ignoresSafeArea()
+      BoldTheme.AmbientBlobs()
+        .ignoresSafeArea()
 
       ScrollView {
+        BoldTheme.GlassCard(radius: 28, padding: 32) {
         VStack(alignment: .leading, spacing: 0) {
           SupIcon(variant: .monogram)
             .frame(width: 56, height: 56)
@@ -111,15 +107,16 @@ struct AuthView: View {
               mode = mode == .signin ? .signup : .signin
               errorMessage = nil
             }
-            .foregroundColor(BoldTheme.Colors.gold)
+            .foregroundColor(BoldTheme.Colors.green)
             .fontWeight(.bold)
           }
           .font(BoldTheme.Fonts.body(14))
           .frame(maxWidth: .infinity)
           .padding(.top, 22)
         }
-        .padding(24)
+        }
         .frame(maxWidth: 440)
+        .padding(24)
       }
     }
     .sheet(isPresented: $showMagicLink) { MagicLinkView() }

@@ -12,15 +12,11 @@ struct MagicLinkView: View {
   var body: some View {
     ZStack {
       BoldTheme.Colors.bgPage.ignoresSafeArea()
-      RadialGradient(
-        colors: [BoldTheme.Colors.green.opacity(0.55), BoldTheme.Colors.bgPage.opacity(0)],
-        center: UnitPoint(x: 0.5, y: -0.05),
-        startRadius: 0,
-        endRadius: 420
-      )
-      .ignoresSafeArea()
+      BoldTheme.AmbientBlobs()
+        .ignoresSafeArea()
 
       ScrollView {
+        BoldTheme.GlassCard(radius: 28, padding: 32) {
         VStack(alignment: .leading, spacing: 0) {
           Button {
             dismiss()
@@ -60,7 +56,7 @@ struct MagicLinkView: View {
           if isSent {
             Text("Check your email.")
               .font(BoldTheme.Fonts.body(13, weight: .medium))
-              .foregroundColor(BoldTheme.Colors.gold)
+              .foregroundColor(BoldTheme.Colors.green)
               .padding(.top, 16)
           }
           if let errorMessage {
@@ -70,8 +66,9 @@ struct MagicLinkView: View {
               .padding(.top, 16)
           }
         }
-        .padding(24)
+        }
         .frame(maxWidth: 440)
+        .padding(24)
       }
     }
   }
