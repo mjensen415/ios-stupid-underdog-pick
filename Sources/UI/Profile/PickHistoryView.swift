@@ -145,7 +145,7 @@ struct PickHistoryView: View {
       let res = try await client
         .from("games")
         .select("""
-          id, season, week, status, home_team, away_team, home_team_id, away_team_id, favorite_team_id, start_time, betting_line, latest_spread, picks_locked, home_points, away_points
+          id, season, week, status, home_team, away_team, home_team_id, away_team_id, favorite_team_id, start_time, betting_line, latest_spread, picks_locked, home_points, away_points, sport
         """)
         .in("id", values: gameIds)
         .execute()

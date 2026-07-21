@@ -5,7 +5,7 @@ import Supabase
 struct PicksService {
   let client: SupabaseClient
 
-  func myPick(season: Int, week: Int) async throws -> Pick? {
+  func myPick(season: Int, week: Int, sport: String = "cfb") async throws -> Pick? {
     let userId = try await client.auth.session.user.id
     let res = try await client
       .from("picks")
@@ -13,6 +13,7 @@ struct PicksService {
       .eq("user_id", value: userId)
       .eq("season", value: season)
       .eq("week", value: week)
+      .eq("sport", value: sport)
       .execute()
     return try JSONDecoder().decode([Pick].self, from: res.data).first
   }
@@ -57,13 +58,14 @@ struct PicksService {
     return try JSONDecoder().decode(Pick.self, from: res.data)
   }
 
-  func clearPick(season: Int, week: Int) async throws {
+  func clearPick(season: Int, week: Int, sport: String = "cfb") async throws {
     struct Params: Encodable {
       let p_season: Int
       let p_week: Int
+      let p_sport: String
     }
     _ = try await client
-      .rpc("clear_weekly_pick", params: Params(p_season: season, p_week: week))
+      .rpc("clear_weekly_pick", params: Params(p_season: season, p_week: week, p_sport: sport))
       .execute()
   }
 }

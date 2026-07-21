@@ -5,14 +5,15 @@ import Supabase
 struct GamesService {
   let client: SupabaseClient
 
-  func fetch(season: Int, week: Int) async throws -> [Game] {
+  func fetch(season: Int, week: Int, sport: String = "cfb") async throws -> [Game] {
     let res = try await client
       .from("games")
       .select("""
-        id, season, week, home_team, away_team, home_team_id, away_team_id, favorite_team_id, start_time, betting_line, latest_spread, picks_locked
+        id, season, week, home_team, away_team, home_team_id, away_team_id, favorite_team_id, start_time, betting_line, latest_spread, picks_locked, sport
       """)
       .eq("season", value: season)
       .eq("week", value: week)
+      .eq("sport", value: sport)
       .order("start_time", ascending: true)
       .execute()
 
@@ -21,11 +22,12 @@ struct GamesService {
     return try dec.decode([Game].self, from: res.data)
   }
 
-  func distinctWeeks(forSeason season: Int) async throws -> [Int] {
+  func distinctWeeks(forSeason season: Int, sport: String = "cfb") async throws -> [Int] {
     let res = try await client
       .from("games")
       .select("week", head: false, count: nil)
       .eq("season", value: season)
+      .eq("sport", value: sport)
       .order("week", ascending: true)
       .execute()
     struct W: Decodable { let week: Int }

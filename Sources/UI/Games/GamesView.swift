@@ -12,9 +12,11 @@ final class GamesViewModel: ObservableObject {
   @Published var selectedGameId: UUID? = nil
   @Published var savingPick = false
   @Published var toastMessage: String?
+  @Published var sport: String = "cfb"
 
   private let client: SupabaseClient
   private var logoMap: [UUID: URL] = [:]
+  private var toastDismissTask: Task<Void, Never>?
 
   init(client: SupabaseClient) { self.client = client }
 
@@ -23,14 +25,24 @@ final class GamesViewModel: ObservableObject {
     return s
   }
 
+  private func flashToast(_ message: String) {
+    toastDismissTask?.cancel()
+    toastMessage = message
+    toastDismissTask = Task {
+      try? await Task.sleep(nanoseconds: 2_500_000_000)
+      guard !Task.isCancelled else { return }
+      toastMessage = nil
+    }
+  }
+
   func loadInitial() async {
     isLoading = true; errorText = nil
     defer { isLoading = false }
     do {
-      let ctx = try await ContextService(client: client).getCurrentContext()
+      let ctx = try await ContextService(client: client).getCurrentContext(sport: sport)
       season = ctx.season
       selectedWeek = ctx.week
-      availableWeeks = try await GamesService(client: client).distinctWeeks(forSeason: season)
+      availableWeeks = try await GamesService(client: client).distinctWeeks(forSeason: season, sport: sport)
       // Inline team logo fetch to avoid TeamService dependency
       struct T: Decodable { let id: UUID; let logo_url: String? }
       let teamRes = try await client
@@ -46,15 +58,24 @@ final class GamesViewModel: ObservableObject {
     }
   }
 
+  /// Switch sport and reload the whole screen for it (season/week can
+  /// differ between sports, so this re-runs the full loadInitial flow
+  /// rather than just re-filtering the existing games list).
+  func switchSport(to newSport: String) async {
+    guard newSport != sport else { return }
+    sport = newSport
+    await loadInitial()
+  }
+
   func loadGames() async throws {
     isLoading = true; defer { isLoading = false }
     errorText = nil
     let svc = GamesService(client: client)
-    games = try await svc.fetch(season: season, week: selectedWeek)
+    games = try await svc.fetch(season: season, week: selectedWeek, sport: sport)
   }
 
   func loadExistingPick() async throws {
-    if let pick = try await PicksService(client: client).myPick(season: season, week: selectedWeek) {
+    if let pick = try await PicksService(client: client).myPick(season: season, week: selectedWeek, sport: sport) {
       selectedGameId = pick.game_id
     } else {
       selectedGameId = nil
@@ -105,13 +126,13 @@ final class GamesViewModel: ObservableObject {
     do {
       _ = try await PicksService(client: client)
         .upsertPick(gameId: g.id, pickedTeamId: pickedId, season: season, week: selectedWeek)
-      toastMessage = "Picked \(g.awayTeam ?? "") @ \(g.homeTeam ?? "")"
+      flashToast("Picked \(g.awayTeam ?? "") @ \(g.homeTeam ?? "")")
       #if DEBUG
       print("[pickUnderdog] SUCCESS, toast=\(toastMessage ?? "")")
       #endif
     } catch {
       selectedGameId = previous
-      toastMessage = "Couldn’t save pick: \(error.localizedDescription)"
+      flashToast("Couldn’t save pick: \(error.localizedDescription)")
       #if DEBUG
       print("[pickUnderdog] SAVE FAILED: \(error)")
       #endif
@@ -123,11 +144,11 @@ final class GamesViewModel: ObservableObject {
     selectedGameId = nil
     savingPick = true; defer { savingPick = false }
     do {
-      try await PicksService(client: client).clearPick(season: season, week: selectedWeek)
-      toastMessage = "Pick cleared"
+      try await PicksService(client: client).clearPick(season: season, week: selectedWeek, sport: sport)
+      flashToast("Pick cleared")
     } catch {
       selectedGameId = previous
-      toastMessage = "Couldn’t clear: \(error.localizedDescription)"
+      flashToast("Couldn’t clear: \(error.localizedDescription)")
     }
   }
 }
@@ -140,6 +161,7 @@ private let textOnGreen = Color(hex: 0xF2EFE3)
 
 struct GamesView: View {
   @StateObject var viewModel: GamesViewModel
+  @EnvironmentObject var appState: AppState
 
   private var header: some View {
     HStack {
@@ -168,6 +190,107 @@ struct GamesView: View {
     .padding(.horizontal, 20)
     .padding(.vertical, 14)
     .background(BoldTheme.Colors.bgPage)
+  }
+
+  // The picked team's row already tints gold + gets a checkmark badge
+  // (GameRowView.isSelected) -- this banner is the "which game, at a
+  // glance, without scrolling to find the tinted row" signal on top.
+  private var pickedGame: Game? {
+    guard let id = viewModel.selectedGameId else { return nil }
+    return viewModel.games.first { $0.id == id }
+  }
+
+  @ViewBuilder
+  private var pickedBanner: some View {
+    if let g = pickedGame {
+      let underdogIsHome = g.derivedUnderdogTeamId != nil && g.derivedUnderdogTeamId == g.homeTeamId
+      let underdogName = underdogIsHome ? (g.homeTeam ?? "Home") : (g.awayTeam ?? "Away")
+      let favoriteName = underdogIsHome ? (g.awayTeam ?? "Away") : (g.homeTeam ?? "Home")
+      HStack(spacing: 14) {
+        Circle()
+          .fill(BoldTheme.Colors.gold)
+          .frame(width: 40, height: 40)
+          .overlay(
+            AsyncImage(url: viewModel.logoURL(for: g.derivedUnderdogTeamId)) { phase in
+              switch phase {
+              case .success(let img): img.resizable().scaledToFit().padding(5)
+              default:
+                Image(systemName: "checkmark")
+                  .font(.system(size: 16, weight: .bold))
+                  .foregroundColor(BoldTheme.Colors.text)
+              }
+            }
+          )
+          .clipShape(Circle())
+        VStack(alignment: .leading, spacing: 2) {
+          Text("YOUR PICK THIS WEEK")
+            .font(BoldTheme.Fonts.mono(10, weight: .semibold))
+            .foregroundColor(textOnGreen.opacity(0.7))
+          HStack(spacing: 6) {
+            Text(underdogName.uppercased())
+              .font(BoldTheme.Fonts.display(20))
+              .foregroundColor(textOnGreen)
+            if let sp = g.underdogSpread {
+              Text(verbatim: "+\(String(format: "%.1f", sp))")
+                .font(BoldTheme.Fonts.display(20))
+                .foregroundColor(BoldTheme.Colors.gold)
+            }
+          }
+          Text(verbatim: "vs \(favoriteName)")
+            .font(BoldTheme.Fonts.body(12))
+            .foregroundColor(textOnGreen.opacity(0.75))
+        }
+        Spacer()
+      }
+      .padding(16)
+      .background(BoldTheme.Colors.green)
+      .cornerRadius(10)
+      .padding(.horizontal, 20)
+      .padding(.bottom, 12)
+    }
+  }
+
+  private var sportToggle: some View {
+    HStack(spacing: 4) {
+      ForEach(["cfb", "nfl"], id: \.self) { s in
+        let active = s == viewModel.sport
+        Button {
+          Task { await viewModel.switchSport(to: s) }
+        } label: {
+          Text(s == "cfb" ? "🏈 CFB" : "🏈 NFL")
+            .font(BoldTheme.Fonts.body(13, weight: .bold))
+            .foregroundColor(active ? BoldTheme.Colors.text : BoldTheme.Colors.textDim)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 9)
+            .background(active ? Color.white : Color.clear)
+            .cornerRadius(10)
+            .shadow(color: active ? Color(hex: 0x142A1C).opacity(0.14) : .clear, radius: 6, y: 3)
+        }
+      }
+    }
+    .padding(4)
+    .background(Color(hex: 0x16241B).opacity(0.07))
+    .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
+    .cornerRadius(13)
+    // The BETA badge must overlay the OUTER container, after its own
+    // cornerRadius -- an overlay nested inside a clipped child (e.g. on the
+    // NFL button itself, inside this same cornerRadius(13)) gets its
+    // above-the-row portion clipped flush by that corner radius, since
+    // SwiftUI's .cornerRadius() clips all descendant content to its shape.
+    .overlay(alignment: .topTrailing) {
+      Text("BETA")
+        .font(BoldTheme.Fonts.mono(8, weight: .bold))
+        .tracking(0.4)
+        .foregroundColor(BoldTheme.Colors.text)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2)
+        .background(BoldTheme.Colors.gold)
+        .clipShape(Capsule())
+        .shadow(color: Color(hex: 0x142A1C).opacity(0.25), radius: 3, y: 1)
+        .offset(x: -2, y: -8)
+    }
+    .padding(.horizontal, 20)
+    .padding(.bottom, 10)
   }
 
   @ViewBuilder private var content: some View {
@@ -246,6 +369,9 @@ struct GamesView: View {
   var body: some View {
     VStack(spacing: 0) {
       header
+      sportToggle
+      pickedBanner
+        .transition(.opacity.combined(with: .move(edge: .top)))
       content
       if let msg = viewModel.toastMessage {
         Spacer()
@@ -261,7 +387,23 @@ struct GamesView: View {
     }
     .background(BoldTheme.Colors.bgPage.ignoresSafeArea())
     .task {
+      // Consume the sport hand-off from Home's "MAKE YOUR PICK" tap, if any,
+      // so this screen lands on whichever sport was selected there instead
+      // of always resetting to CFB.
+      if let requested = appState.requestedSport {
+        viewModel.sport = requested
+        appState.requestedSport = nil
+      }
       await viewModel.loadInitial()
+    }
+    // .task only runs once per view identity, which persists across tab
+    // switches (StateObject) -- this catches later hand-offs from Home too,
+    // e.g. the user already had Games open, then tapped Home's CTA again
+    // with the other sport selected.
+    .onChange(of: appState.requestedSport) { requested in
+      guard let requested else { return }
+      appState.requestedSport = nil
+      Task { await viewModel.switchSport(to: requested) }
     }
   }
 }

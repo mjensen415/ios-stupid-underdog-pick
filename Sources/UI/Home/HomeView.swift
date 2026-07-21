@@ -5,7 +5,7 @@ import Supabase
 // model (picks have no group_id, so there's exactly one "this week's pick"
 // status for the whole account, not one per contest/group).
 
-private enum Sport { case cfb, nfl }
+private enum Sport: String { case cfb, nfl }
 
 @MainActor
 final class HomeViewModel: ObservableObject {
@@ -26,13 +26,13 @@ final class HomeViewModel: ObservableObject {
     if self.client == nil { self.client = client }
   }
 
-  func load(userId: UUID) async {
+  func load(userId: UUID, sport: String) async {
     guard let client else { return }
     isLoading = true
     defer { isLoading = false }
 
     do {
-      let ctx = try await ContextService(client: client).getCurrentContext()
+      let ctx = try await ContextService(client: client).getCurrentContext(sport: sport)
       season = ctx.season
       week = ctx.week
 
@@ -41,6 +41,7 @@ final class HomeViewModel: ObservableObject {
         .from("games")
         .select("id")
         .eq("season", value: ctx.season)
+        .eq("sport", value: sport)
         .limit(1)
         .execute()
       let games = (try? JSONDecoder().decode([CountRow].self, from: gameCountRes.data)) ?? []
@@ -51,12 +52,12 @@ final class HomeViewModel: ObservableObject {
 
     guard let season, let week, !isOffseason else { return }
 
-    async let pickTask = try? PicksService(client: client).myPick(season: season, week: week)
-    async let kickoffTask = fetchFirstKickoff(client: client, season: season, week: week)
-    async let rankTask = try? LeaderboardService(client: client).fetchMyRank(userId: userId, season: season)
+    async let pickTask = try? PicksService(client: client).myPick(season: season, week: week, sport: sport)
+    async let kickoffTask = fetchFirstKickoff(client: client, season: season, week: week, sport: sport)
+    async let rankTask = try? LeaderboardService(client: client).fetchMyRank(userId: userId, season: season, sport: sport)
     async let groupsTask = try? GroupsService(client: client).fetchMyGroups()
     async let discoverTask = try? GroupsService(client: client).fetchDiscoverGroups(limit: 6)
-    async let recapTask = fetchRecap(client: client, season: season, week: week)
+    async let recapTask = fetchRecap(client: client, season: season, week: week, sport: sport)
 
     myPick = await pickTask ?? nil
     firstKickoff = await kickoffTask
@@ -66,13 +67,14 @@ final class HomeViewModel: ObservableObject {
     recap = await recapTask
   }
 
-  private func fetchFirstKickoff(client: SupabaseClient, season: Int, week: Int) async -> Date? {
+  private func fetchFirstKickoff(client: SupabaseClient, season: Int, week: Int, sport: String) async -> Date? {
     struct Row: Decodable { let start_time: Date }
     guard let res = try? await client
       .from("v_games_named")
       .select("start_time")
       .eq("season", value: season)
       .eq("week", value: week)
+      .eq("sport", value: sport)
       .order("start_time", ascending: true)
       .limit(1)
       .execute()
@@ -82,13 +84,14 @@ final class HomeViewModel: ObservableObject {
     return try? dec.decode([Row].self, from: res.data).first?.start_time
   }
 
-  private func fetchRecap(client: SupabaseClient, season: Int, week: Int) async -> [RecapHit] {
+  private func fetchRecap(client: SupabaseClient, season: Int, week: Int, sport: String) async -> [RecapHit] {
     guard week > 1 else { return [] }
     let res = try? await client
       .from("v_recap_underdogs_hit")
       .select("game_id, match_description, line_display, score_display, abs_spread")
       .eq("season", value: season)
       .eq("week", value: week - 1)
+      .eq("sport", value: sport)
       .order("abs_spread", ascending: false)
       .limit(4)
       .execute()
@@ -128,15 +131,10 @@ struct HomeView: View {
           VStack(alignment: .leading, spacing: 0) {
             topRow
             sportToggle
-
-            if sport == .nfl {
-              nflComingSoon
-            } else {
-              pickStatusCard
-              groupsSection
-              discoverSection
-              recapSection
-            }
+            pickStatusCard
+            groupsSection
+            discoverSection
+            recapSection
           }
           .padding(18)
         }
@@ -145,12 +143,17 @@ struct HomeView: View {
       .task {
         if let client, let userId = appState.session?.user.id {
           viewModel.configure(client: client)
-          await viewModel.load(userId: userId)
+          await viewModel.load(userId: userId, sport: sport.rawValue)
+        }
+      }
+      .onChange(of: sport) { newSport in
+        if let userId = appState.session?.user.id {
+          Task { await viewModel.load(userId: userId, sport: newSport.rawValue) }
         }
       }
       .refreshable {
         if let userId = appState.session?.user.id {
-          await viewModel.load(userId: userId)
+          await viewModel.load(userId: userId, sport: sport.rawValue)
         }
       }
     }
@@ -164,7 +167,7 @@ struct HomeView: View {
         .shadow(color: Color(hex: 0x142A1C).opacity(0.3), radius: 6, y: 4)
 
       VStack(alignment: .leading, spacing: 2) {
-        Text(verbatim: viewModel.isOffseason ? "OFFSEASON" : "WEEK \(viewModel.week ?? 0) · CFB \(viewModel.season ?? 0)")
+        Text(verbatim: viewModel.isOffseason ? "OFFSEASON" : "WEEK \(viewModel.week ?? 0) · \(sport.rawValue.uppercased()) \(viewModel.season ?? 0)")
           .font(BoldTheme.Fonts.mono(10, weight: .semibold))
           .foregroundColor(BoldTheme.Colors.green)
         Text("WELCOME BACK.")
@@ -209,22 +212,26 @@ struct HomeView: View {
     .background(Color(hex: 0x16241B).opacity(0.07))
     .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
     .cornerRadius(13)
-    .padding(.bottom, 20)
-  }
-
-  private var nflComingSoon: some View {
-    BoldTheme.GlassCard(radius: 16, padding: 32) {
-      VStack(spacing: 8) {
-        Text("NFL UNDERDOG")
-          .font(BoldTheme.Fonts.display(26))
-          .foregroundColor(BoldTheme.Colors.gold)
-        Text("Coming soon. Switch back to CFB to keep picking.")
-          .font(BoldTheme.Fonts.body(14))
-          .foregroundColor(BoldTheme.Colors.textDim)
-          .multilineTextAlignment(.center)
-      }
-      .frame(maxWidth: .infinity)
+    // The BETA badge must overlay the OUTER container, after its own
+    // cornerRadius -- an overlay nested inside a clipped child (e.g. on the
+    // NFL button itself, inside this same cornerRadius(13)) gets its
+    // above-the-row portion clipped flush by that corner radius, since
+    // SwiftUI's .cornerRadius() clips all descendant content to its shape.
+    // (This was the actual bug -- confirmed from a screenshot showing the
+    // badge's top sliced off flush with the toggle's rounded background.)
+    .overlay(alignment: .topTrailing) {
+      Text("BETA")
+        .font(BoldTheme.Fonts.mono(8, weight: .bold))
+        .tracking(0.4)
+        .foregroundColor(BoldTheme.Colors.text)
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2)
+        .background(BoldTheme.Colors.gold)
+        .clipShape(Capsule())
+        .shadow(color: Color(hex: 0x142A1C).opacity(0.25), radius: 3, y: 1)
+        .offset(x: -2, y: -8)
     }
+    .padding(.bottom, 20)
   }
 
   private var pickStatusCard: some View {
@@ -234,7 +241,7 @@ struct HomeView: View {
       BoldTheme.GlassCard(strong: true, radius: 18, padding: 16) {
         VStack(alignment: .leading, spacing: 10) {
           HStack {
-            Text("GLOBAL · CFB").font(BoldTheme.Fonts.mono(10, weight: .semibold)).foregroundColor(BoldTheme.Colors.green)
+            Text(verbatim: "GLOBAL · \(sport.rawValue.uppercased())").font(BoldTheme.Fonts.mono(10, weight: .semibold)).foregroundColor(BoldTheme.Colors.green)
             Spacer()
             if let rank = viewModel.myRank {
               Text(verbatim: "#\(rank.rank) of \(rank.totalPlayers)")
@@ -295,6 +302,7 @@ struct HomeView: View {
 
   private var pickButton: some View {
     Button {
+      appState.requestedSport = sport.rawValue
       appState.requestedTab = 1 // Games tab
     } label: {
       ZStack {

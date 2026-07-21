@@ -16,9 +16,10 @@ public struct Game: Decodable, Identifiable {
   public let status: String?
   public let homePoints: Int?
   public let awayPoints: Int?
+  public let sport: String
 
   public enum CodingKeys: String, CodingKey {
-    case id, season, week, status
+    case id, season, week, status, sport
     case homeTeam = "home_team"
     case awayTeam = "away_team"
     case homeTeamId = "home_team_id"

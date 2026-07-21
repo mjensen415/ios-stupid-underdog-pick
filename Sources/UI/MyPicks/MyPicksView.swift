@@ -1,35 +1,50 @@
 import SwiftUI
 import Supabase
 
+// Full pick history, not just the current week: season pills + a W-L record
+// banner (same pattern already proven in Profile's PickHistoryView) with
+// weeks rendered as a compact ledger -- one row per pick showing outcome at
+// a glance, tap to expand into the full GameRowView card. Mixes the two
+// directions requested: "see the whole history" + "a better way to scan
+// wins/losses than a full game card per pick."
 struct MyPicksView: View {
   @Environment(\.supabaseClient) private var client
-  @State private var season: Int = 0
-  @State private var selectedWeek: Int = 1
-  @State private var availableWeeks: [Int] = []
-  @State private var games: [Game] = []
+
+  @State private var picks: [Pick] = []
+  @State private var gamesById: [UUID: Game] = [:]
   @State private var logoMap: [UUID: URL] = [:]
-  @State private var errorText: String?
   @State private var isLoading = false
+  @State private var errorText: String?
+  @State private var selectedSeason: Int?
+
+  private var availableSeasons: [Int] {
+    Array(Set(picks.map { $0.season })).sorted(by: >)
+  }
+
+  private var seasonPicks: [Pick] {
+    picks.filter { $0.season == selectedSeason }
+  }
+
+  private var seasonSummary: (wins: Int, losses: Int, pending: Int) {
+    seasonPicks.reduce((0, 0, 0)) { acc, pick in
+      guard let game = gamesById[pick.game_id] else { return (acc.0, acc.1, acc.2 + 1) }
+      switch game.outcome(forPickedTeamId: pick.picked_team_id) {
+      case .win: return (acc.0 + 1, acc.1, acc.2)
+      case .loss: return (acc.0, acc.1 + 1, acc.2)
+      case .pending: return (acc.0, acc.1, acc.2 + 1)
+      }
+    }
+  }
+
+  private var picksByWeek: [Int: [Pick]] {
+    Dictionary(grouping: seasonPicks, by: { $0.week })
+  }
 
   var body: some View {
     VStack(spacing: 0) {
       HStack {
         Text("MY PICKS").font(BoldTheme.Fonts.display(20)).tracking(0.6).foregroundColor(BoldTheme.Colors.text)
         Spacer()
-        Menu {
-          ForEach(availableWeeks, id: \.self) { wk in
-            Button {
-              selectedWeek = wk
-            } label: {
-              Label("Week \(wk)", systemImage: wk == selectedWeek ? "checkmark" : "circle")
-            }
-          }
-        } label: {
-          Label("Week \(selectedWeek)", systemImage: "calendar")
-            .font(BoldTheme.Fonts.body(14, weight: .semibold))
-            .foregroundColor(BoldTheme.Colors.gold)
-        }
-        .onChange(of: selectedWeek) { _ in Task { await reload() } }
       }
       .padding(.horizontal, 20).padding(.vertical, 14)
       .background(BoldTheme.Colors.bgPage)
@@ -37,33 +52,94 @@ struct MyPicksView: View {
       content
     }
     .background(BoldTheme.Colors.bgPage.ignoresSafeArea())
-    .task { await bootstrap() }
-    .refreshable { await reload() }
+    .task { await load() }
+    .refreshable { await load() }
   }
 
   @ViewBuilder private var content: some View {
     if let e = errorText {
-      Text(e).foregroundColor(BoldTheme.Colors.textDim).padding()
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(BoldTheme.Colors.bgPage)
+      VStack(spacing: 8) {
+        Text("Error loading picks").font(BoldTheme.Fonts.display(24)).foregroundColor(BoldTheme.Colors.text)
+        Text(e).foregroundColor(BoldTheme.Colors.textDim).multilineTextAlignment(.center)
+        Button("Retry") { Task { await load() } }
+          .foregroundColor(BoldTheme.Colors.gold)
+      }
+      .padding()
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      .background(BoldTheme.Colors.bgPage)
     }
-    else if isLoading && games.isEmpty {
+    else if isLoading && picks.isEmpty {
       ProgressView("Loading…").tint(BoldTheme.Colors.gold).foregroundColor(BoldTheme.Colors.textDim)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(BoldTheme.Colors.bgPage)
     }
-    else if games.isEmpty {
+    else if picks.isEmpty {
       Text("No picks yet.").foregroundColor(BoldTheme.Colors.textDim)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(BoldTheme.Colors.bgPage)
     }
     else {
-      List(games) { g in
-        GameRowView(
-          game: g,
-          logoFor: { id in id.flatMap { logoMap[$0] } },
-          isSelected: true
-        )
+      List {
+        if availableSeasons.count > 1 {
+          Section {
+            ScrollView(.horizontal, showsIndicators: false) {
+              HStack(spacing: 8) {
+                ForEach(availableSeasons, id: \.self) { season in
+                  let active = season == selectedSeason
+                  Button {
+                    selectedSeason = season
+                  } label: {
+                    Text(verbatim: "\(season)")
+                      .font(BoldTheme.Fonts.body(13, weight: .semibold))
+                      .padding(.horizontal, 16)
+                      .padding(.vertical, 8)
+                      .background(active ? BoldTheme.Colors.gold : BoldTheme.Colors.text.opacity(0.07))
+                      .foregroundColor(active ? BoldTheme.Colors.bgPage : BoldTheme.Colors.textDim)
+                      .clipShape(Capsule())
+                  }
+                  .buttonStyle(.plain)
+                }
+              }
+            }
+          }
+          .listRowBackground(BoldTheme.Colors.bgPage)
+          .listRowSeparator(.hidden)
+        }
+
+        Section {
+          HStack {
+            Text(verbatim: "\(selectedSeason ?? 0) Record")
+              .font(BoldTheme.Fonts.mono(11))
+              .foregroundColor(BoldTheme.Colors.textFaint)
+            Spacer()
+            Text(verbatim: "\(seasonSummary.wins)W-\(seasonSummary.losses)L")
+              .font(BoldTheme.Fonts.display(20))
+              .foregroundColor(BoldTheme.Colors.text)
+            if seasonSummary.pending > 0 {
+              Text(verbatim: "· \(seasonSummary.pending) pending")
+                .font(BoldTheme.Fonts.body(12))
+                .foregroundColor(BoldTheme.Colors.textFaint)
+            }
+          }
+          .padding(.vertical, 4)
+        }
+        .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
+        .listRowSeparator(.hidden)
+
+        ForEach(picksByWeek.keys.sorted(by: >), id: \.self) { week in
+          Section {
+            ForEach(picksByWeek[week] ?? []) { pick in
+              if let game = gamesById[pick.game_id] {
+                PickLedgerRow(pick: pick, game: game, logoFor: { id in id.flatMap { logoMap[$0] } })
+              }
+            }
+          } header: {
+            Text(verbatim: "WEEK \(week)")
+              .font(BoldTheme.Fonts.mono(11))
+              .tracking(0.9)
+              .foregroundColor(BoldTheme.Colors.textFaint)
+          }
+        }
       }
       .listStyle(.plain)
       .scrollContentBackground(.hidden)
@@ -71,56 +147,133 @@ struct MyPicksView: View {
     }
   }
 
-  private func bootstrap() async {
+  private func load() async {
     guard let client else { errorText = "No client"; return }
-    isLoading = true; defer { isLoading = false }
+    isLoading = true
+    errorText = nil
+    defer { isLoading = false }
     do {
-      let ctx = try await ContextService(client: client).getCurrentContext()
-      season = ctx.season
-      selectedWeek = ctx.week
-      availableWeeks = try await GamesService(client: client).distinctWeeks(forSeason: season)
+      let allPicks = try await PicksService(client: client).myPicks()
+      let gameIds = Array(Set(allPicks.map { $0.game_id }))
+      guard !gameIds.isEmpty else {
+        picks = []
+        return
+      }
 
-      // Fetch teams (inline; avoids dependency on TeamService)
-      struct T: Decodable { let id: UUID; let logo_url: String? }
-      let teamRes = try await client
-        .from("teams")
-        .select("id, logo_url")
-        .execute()
-      let teams = try JSONDecoder().decode([T].self, from: teamRes.data)
-      logoMap = Dictionary(uniqueKeysWithValues: teams.map { t in (t.id, t.logo_url.flatMap { URL(string: $0) }) }).compactMapValues { $0 }
-
-      try await reload()
-    } catch { errorText = error.localizedDescription }
-  }
-
-  private func reload() async {
-    guard let client else { return }
-    isLoading = true; defer { isLoading = false }
-    do {
-      let userId = try await client.auth.session.user.id
-      // Step 1: fetch game_ids for my picks this week
-      struct GID: Decodable { let game_id: UUID }
-      let pickRes = try await client
-        .from("picks")
-        .select("game_id")
-        .eq("user_id", value: userId)
-        .eq("season", value: season)
-        .eq("week", value: selectedWeek)
-        .execute()
-      let ids = try JSONDecoder().decode([GID].self, from: pickRes.data).map { $0.game_id }
-      guard !ids.isEmpty else { games = []; return }
-      // Step 2: fetch those games
       let res = try await client
         .from("games")
         .select("""
-          id, season, week, home_team, away_team, home_team_id, away_team_id, favorite_team_id, start_time, betting_line, latest_spread, picks_locked
+          id, season, week, status, home_team, away_team, home_team_id, away_team_id, favorite_team_id, start_time, betting_line, latest_spread, picks_locked, home_points, away_points, sport
         """)
-        .in("id", values: ids)
-        .order("start_time", ascending: true)
+        .in("id", values: gameIds)
         .execute()
       let dec = JSONDecoder()
       dec.dateDecodingStrategy = .iso8601withFallback
-      games = try dec.decode([Game].self, from: res.data)
-    } catch { errorText = error.localizedDescription }
+      let games = try dec.decode([Game].self, from: res.data)
+
+      struct T: Decodable { let id: UUID; let logo_url: String? }
+      let teamRes = try await client.from("teams").select("id, logo_url").execute()
+      let teams = try JSONDecoder().decode([T].self, from: teamRes.data)
+
+      gamesById = Dictionary(uniqueKeysWithValues: games.map { ($0.id, $0) })
+      logoMap = Dictionary(uniqueKeysWithValues: teams.map { t in (t.id, t.logo_url.flatMap { URL(string: $0) }) }).compactMapValues { $0 }
+      picks = allPicks
+      if selectedSeason == nil || !availableSeasons.contains(selectedSeason!) {
+        selectedSeason = allPicks.map { $0.season }.max()
+      }
+    } catch {
+      errorText = error.localizedDescription
+    }
+  }
+}
+
+// One row per pick: outcome badge + who they picked + spread, tap to expand
+// into the full GameRowView card (matchup, kickoff, logos) without leaving
+// the list.
+private struct PickLedgerRow: View {
+  let pick: Pick
+  let game: Game
+  let logoFor: (UUID?) -> URL?
+  @State private var expanded = false
+
+  private var outcome: Game.PickOutcome { game.outcome(forPickedTeamId: pick.picked_team_id) }
+  private var pickedIsHome: Bool { pick.picked_team_id == game.homeTeamId }
+  private var pickedName: String { pickedIsHome ? (game.homeTeam ?? "Home") : (game.awayTeam ?? "Away") }
+  private var opponentName: String { pickedIsHome ? (game.awayTeam ?? "Away") : (game.homeTeam ?? "Home") }
+  private var isUnderdogPick: Bool { pick.picked_team_id == game.derivedUnderdogTeamId }
+
+  private var outcomeColor: Color {
+    switch outcome {
+    case .win: return BoldTheme.Colors.green
+    case .loss: return Color(hex: 0xC6402A)
+    case .pending: return BoldTheme.Colors.textFaint
+    }
+  }
+  private var outcomeLabel: String {
+    switch outcome {
+    case .win: return "WIN"
+    case .loss: return "LOSS"
+    case .pending: return "PENDING"
+    }
+  }
+  private var outcomeIcon: String {
+    switch outcome {
+    case .win: return "checkmark"
+    case .loss: return "xmark"
+    case .pending: return "clock"
+    }
+  }
+
+  var body: some View {
+    VStack(spacing: 0) {
+      Button {
+        withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
+      } label: {
+        HStack(spacing: 12) {
+          Circle()
+            .fill(outcomeColor.opacity(0.15))
+            .frame(width: 30, height: 30)
+            .overlay(
+              Image(systemName: outcomeIcon)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundColor(outcomeColor)
+            )
+
+          VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+              Text(pickedName)
+                .font(BoldTheme.Fonts.body(14, weight: .semibold))
+                .foregroundColor(BoldTheme.Colors.text)
+              if isUnderdogPick, let sp = game.underdogSpread {
+                Text(verbatim: "+\(String(format: "%.1f", sp))")
+                  .font(BoldTheme.Fonts.mono(12))
+                  .foregroundColor(BoldTheme.Colors.gold)
+              }
+            }
+            Text(verbatim: "vs \(opponentName)")
+              .font(BoldTheme.Fonts.body(12))
+              .foregroundColor(BoldTheme.Colors.textFaint)
+          }
+
+          Spacer()
+
+          Text(outcomeLabel)
+            .font(BoldTheme.Fonts.mono(10, weight: .semibold))
+            .tracking(0.6)
+            .foregroundColor(outcomeColor)
+
+          Image(systemName: expanded ? "chevron.up" : "chevron.down")
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundColor(BoldTheme.Colors.textFaint)
+        }
+        .padding(.vertical, 10)
+        .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+
+      if expanded {
+        GameRowView(game: game, logoFor: logoFor, isSelected: true)
+      }
+    }
   }
 }

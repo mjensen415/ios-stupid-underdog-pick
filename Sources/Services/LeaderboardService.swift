@@ -179,11 +179,12 @@ struct LeaderboardService {
   }
 
   /// Season-by-season career record for one user (one row per season played).
-  func fetchMySeasonTotals(userId: UUID) async throws -> [TotalsLeaderboardRow] {
+  func fetchMySeasonTotals(userId: UUID, sport: String = "cfb") async throws -> [TotalsLeaderboardRow] {
     let res = try await client
       .from("leaderboard_totals")
       .select("id, user_id, season, wins, losses, pending, total_points")
       .eq("user_id", value: userId)
+      .eq("sport", value: sport)
       .order("season", ascending: false)
       .execute()
     return try JSONDecoder().decode([TotalsLeaderboardRow].self, from: res.data)
@@ -192,22 +193,24 @@ struct LeaderboardService {
   /// Season leaderboard standings via the same live-computed RPC web's
   /// Leaderboard.tsx already uses -- not leaderboard_totals, which has no
   /// season-scoped correctness guarantee for cross-user standings.
-  func fetchSeasonLeaderboard(season: Int) async throws -> [SeasonLeaderboardRow] {
+  func fetchSeasonLeaderboard(season: Int, sport: String = "cfb") async throws -> [SeasonLeaderboardRow] {
     struct Params: Encodable {
       let p_season: Int
+      let p_sport: String
     }
     let res = try await client
-      .rpc("get_season_leaderboard", params: Params(p_season: season))
+      .rpc("get_season_leaderboard", params: Params(p_season: season, p_sport: sport))
       .execute()
     return try JSONDecoder().decode([SeasonLeaderboardRow].self, from: res.data)
   }
 
-  func fetchWeek(season: Int, week: Int) async throws -> [WeeklyLeaderboardRow] {
+  func fetchWeek(season: Int, week: Int, sport: String = "cfb") async throws -> [WeeklyLeaderboardRow] {
     let res = try await client
       .from("leaderboard_week")
       .select("id, user_id, season, week, win, loss, points")
       .eq("season", value: season)
       .eq("week", value: week)
+      .eq("sport", value: sport)
       .order("points", ascending: false)
       .execute()
 
@@ -217,18 +220,19 @@ struct LeaderboardService {
   /// Cheap single-row "my rank" lookup via get_my_rank, instead of pulling
   /// the entire ordered leaderboard just to find one user's position --
   /// backs Home's pick-status card. p_week nil = season-overall rank.
-  func fetchMyRank(userId: UUID, season: Int, week: Int? = nil) async throws -> MyRank? {
-    struct Params: Encodable { let p_user_id: UUID; let p_season: Int; let p_week: Int? }
+  func fetchMyRank(userId: UUID, season: Int, week: Int? = nil, sport: String = "cfb") async throws -> MyRank? {
+    struct Params: Encodable { let p_user_id: UUID; let p_season: Int; let p_week: Int?; let p_sport: String }
     let res = try await client
-      .rpc("get_my_rank", params: Params(p_user_id: userId, p_season: season, p_week: week))
+      .rpc("get_my_rank", params: Params(p_user_id: userId, p_season: season, p_week: week, p_sport: sport))
       .execute()
     return try JSONDecoder().decode([MyRank].self, from: res.data).first
   }
 
-  func fetchTotals(season: Int?) async throws -> [TotalsLeaderboardRow] {
+  func fetchTotals(season: Int?, sport: String = "cfb") async throws -> [TotalsLeaderboardRow] {
     var builder = client
       .from("leaderboard_totals")
       .select("id, user_id, season, wins, losses, pending, total_points")
+      .eq("sport", value: sport)
 
     if let season { builder = builder.eq("season", value: season) }
 

@@ -15,6 +15,10 @@ final class AppState: ObservableObject {
   /// tab index (e.g. "Make Your Pick" -> Games tab). MainTabView consumes
   /// and resets it -- same request/consume pattern as pendingGroupJoinToken.
   @Published var requestedTab: Int?
+  /// Set alongside requestedTab when Home's CTA is tapped, so the Games tab
+  /// lands on whichever sport was selected on Home instead of always
+  /// resetting to CFB. GamesView consumes and resets it, same pattern.
+  @Published var requestedSport: String?
 }
 
 private struct SupabaseClientKey: EnvironmentKey {
