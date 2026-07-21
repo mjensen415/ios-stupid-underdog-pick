@@ -115,7 +115,10 @@ struct ProfileView: View {
                   .foregroundColor(BoldTheme.Colors.textFaint)
                 Text(formatPoints(row.totalPoints))
                   .font(BoldTheme.Fonts.display(16))
-                  .foregroundColor(BoldTheme.Colors.gold)
+                  // Per-season point totals down a list are GREEN, not gold --
+                  // gold stays reserved for the single all-time career total
+                  // above. Matches web's AccountInfoTab.tsx "By Season" list.
+                  .foregroundColor(BoldTheme.Colors.green)
                   .frame(minWidth: 50, alignment: .trailing)
               }
             }
@@ -158,7 +161,9 @@ struct ProfileView: View {
       .navigationTitle("Profile")
       .toolbarBackground(BoldTheme.Colors.bgPage, for: .navigationBar)
       .toolbarBackground(.visible, for: .navigationBar)
-      .toolbarColorScheme(.dark, for: .navigationBar)
+      // Frost's bgPage is light now (was dark under Bold) -- see
+      // LeaderboardView.swift for the same fix and rationale.
+      .toolbarColorScheme(.light, for: .navigationBar)
       .task { await load() }
     }
     .tint(BoldTheme.Colors.gold)

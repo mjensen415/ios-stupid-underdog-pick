@@ -123,7 +123,9 @@ struct PickHistoryView: View {
     .navigationBarTitleDisplayMode(.inline)
     .toolbarBackground(BoldTheme.Colors.bgPage, for: .navigationBar)
     .toolbarBackground(.visible, for: .navigationBar)
-    .toolbarColorScheme(.dark, for: .navigationBar)
+    // Frost's bgPage is light now (was dark under Bold) -- see
+    // LeaderboardView.swift for the same fix and rationale.
+    .toolbarColorScheme(.light, for: .navigationBar)
     .task { await load() }
   }
 

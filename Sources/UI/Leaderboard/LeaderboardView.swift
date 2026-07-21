@@ -24,7 +24,10 @@ struct LeaderboardView: View {
       .navigationTitle(selection == 0 ? "Weekly Leaderboard" : "Season")
       .toolbarBackground(BoldTheme.Colors.bgPage, for: .navigationBar)
       .toolbarBackground(.visible, for: .navigationBar)
-      .toolbarColorScheme(.dark, for: .navigationBar)
+      // Frost's bgPage is light now (was dark under Bold), so nav bar
+      // chrome (title/buttons) needs the light color scheme for contrast --
+      // .dark would render light-on-light and be illegible.
+      .toolbarColorScheme(.light, for: .navigationBar)
     }
     .tint(BoldTheme.Colors.gold)
   }
