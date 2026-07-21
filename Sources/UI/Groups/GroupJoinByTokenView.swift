@@ -18,44 +18,51 @@ struct GroupJoinByTokenView: View {
 
   var body: some View {
     NavigationStack {
-      VStack(spacing: 20) {
-        Spacer()
+      ZStack {
+        BoldTheme.Colors.bgPage.ignoresSafeArea()
+        BoldTheme.AmbientBlobs().ignoresSafeArea()
 
-        switch state {
-        case .idle, .joining:
-          ProgressView("Joining group…").tint(BoldTheme.Colors.gold).foregroundColor(BoldTheme.Colors.textDim)
-        case .success(_, let name, let alreadyMember):
-          Image(systemName: "checkmark.circle.fill").font(.system(size: 48)).foregroundColor(BoldTheme.Colors.gold)
-          Text(alreadyMember ? "Already in!" : "You're in!")
-            .font(BoldTheme.Fonts.display(28)).foregroundColor(BoldTheme.Colors.text)
-          Text(name).font(BoldTheme.Fonts.body(15)).foregroundColor(BoldTheme.Colors.textDim)
-          Button("Go to Group") { dismiss() }
-            .font(BoldTheme.Fonts.body(14, weight: .semibold))
-            .padding(.horizontal, 20).padding(.vertical, 12)
-            .background(BoldTheme.Colors.gold).foregroundColor(BoldTheme.Colors.bgPage).cornerRadius(12)
-        case .failure(let message):
-          Image(systemName: "xmark.circle.fill").font(.system(size: 48)).foregroundColor(.red)
-          Text("Invalid Invite").font(BoldTheme.Fonts.display(28)).foregroundColor(BoldTheme.Colors.text)
-          Text(message).font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Colors.textDim).multilineTextAlignment(.center)
-          Button("Close") { dismiss() }
-            .font(BoldTheme.Fonts.body(14, weight: .semibold))
-            .foregroundColor(BoldTheme.Colors.gold)
-        }
+        VStack(spacing: 20) {
+          Spacer()
 
-        Spacer()
-
-        if appState.session == nil {
-          VStack(spacing: 10) {
-            Text("Sign in to accept this invite").font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Colors.textDim)
-            Button("Sign in to Join") { showSignIn = true }
+          switch state {
+          case .idle, .joining:
+            ProgressView("Joining group…").tint(BoldTheme.Colors.gold).foregroundColor(BoldTheme.Colors.textDim)
+          case .success(_, let name, let alreadyMember):
+            // GREEN, not gold -- "Go to Group" below is this screen's one
+            // primary-action CTA; this icon is just a status indicator (and
+            // green reads as "success" here too).
+            Image(systemName: "checkmark.circle.fill").font(.system(size: 48)).foregroundColor(BoldTheme.Colors.green)
+            Text(alreadyMember ? "Already in!" : "You're in!")
+              .font(BoldTheme.Fonts.display(28)).foregroundColor(BoldTheme.Colors.text)
+            Text(name).font(BoldTheme.Fonts.body(15)).foregroundColor(BoldTheme.Colors.textDim)
+            Button("Go to Group") { dismiss() }
               .font(BoldTheme.Fonts.body(14, weight: .semibold))
               .padding(.horizontal, 20).padding(.vertical, 12)
               .background(BoldTheme.Colors.gold).foregroundColor(BoldTheme.Colors.bgPage).cornerRadius(12)
+          case .failure(let message):
+            Image(systemName: "xmark.circle.fill").font(.system(size: 48)).foregroundColor(.red)
+            Text("Invalid Invite").font(BoldTheme.Fonts.display(28)).foregroundColor(BoldTheme.Colors.text)
+            Text(message).font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Colors.textDim).multilineTextAlignment(.center)
+            Button("Close") { dismiss() }
+              .font(BoldTheme.Fonts.body(14, weight: .semibold))
+              .foregroundColor(BoldTheme.Colors.gold)
+          }
+
+          Spacer()
+
+          if appState.session == nil {
+            VStack(spacing: 10) {
+              Text("Sign in to accept this invite").font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Colors.textDim)
+              Button("Sign in to Join") { showSignIn = true }
+                .font(BoldTheme.Fonts.body(14, weight: .semibold))
+                .padding(.horizontal, 20).padding(.vertical, 12)
+                .background(BoldTheme.Colors.gold).foregroundColor(BoldTheme.Colors.bgPage).cornerRadius(12)
+            }
           }
         }
+        .padding(24)
       }
-      .padding(24)
-      .background(BoldTheme.Colors.bgPage.ignoresSafeArea())
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Close") { dismiss() }

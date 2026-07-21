@@ -19,7 +19,12 @@ struct PillToggle<T: Hashable>: View {
             .font(BoldTheme.Fonts.body(13, weight: .semibold))
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
-            .background(active ? BoldTheme.Colors.gold : BoldTheme.Colors.text.opacity(0.07))
+            // GREEN, not gold -- PillToggle can appear more than once on the
+            // same screen at once (e.g. GroupDetailView's tab selector +
+            // leaderboard-scope selector simultaneously), so its active
+            // state can't be gold without competing with the screen's one
+            // true primary-action CTA.
+            .background(active ? BoldTheme.Colors.green : BoldTheme.Colors.text.opacity(0.07))
             .foregroundColor(active ? BoldTheme.Colors.bgPage : BoldTheme.Colors.textDim)
             .clipShape(Capsule())
         }

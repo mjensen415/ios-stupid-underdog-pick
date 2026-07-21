@@ -1,5 +1,11 @@
 import SwiftUI
 
+// Explicit light text/icon for content sitting on a solid GREEN badge fill --
+// GREEN stays dark/saturated under Frost even though the page went light, so
+// BoldTheme.Colors.text (now dark Ink) can't be reused there. Mirrors
+// GamesView's local textOnGreen constant / web's TEXT_ON_GREEN.
+private let textOnGreen = Color(hex: 0xF2EFE3)
+
 // Native port of src/components/groups/RoleBadge.tsx.
 struct RoleBadge: View {
   let role: GroupRole
@@ -25,18 +31,21 @@ struct RoleBadge: View {
   private var filled: Bool { role == .owner || role == .admin }
   private var dashed: Bool { role == .pending }
 
+  // GREEN for both filled roles, not gold -- a groups list or leaderboard
+  // can show this badge many times over on one screen (once per owned/admin
+  // row), so it reads as a repeated decoration rather than the screen's one
+  // primary action. Owner vs. admin stays distinguishable via icon (crown
+  // vs. shield).
   private var background: Color {
     switch role {
-    case .owner: return BoldTheme.Colors.gold
-    case .admin: return BoldTheme.Colors.green
+    case .owner, .admin: return BoldTheme.Colors.green
     case .member, .pending: return .clear
     }
   }
 
   private var foreground: Color {
     switch role {
-    case .owner: return BoldTheme.Colors.bgPage
-    case .admin: return BoldTheme.Colors.text
+    case .owner, .admin: return textOnGreen
     case .member, .pending: return BoldTheme.Colors.textDim
     }
   }
