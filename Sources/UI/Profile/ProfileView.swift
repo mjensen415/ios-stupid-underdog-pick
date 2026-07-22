@@ -25,6 +25,10 @@ struct ProfileView: View {
   @State private var careerTotals: CareerTotals?
   @State private var seasonTotals: [TotalsLeaderboardRow] = []
 
+  @State private var showDeleteConfirm = false
+  @State private var isDeletingAccount = false
+  @State private var deleteError: String?
+
   var body: some View {
     NavigationStack {
       Form {
@@ -151,6 +155,26 @@ struct ProfileView: View {
         }
         .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
 
+        Section(footer: deleteError.map { Text($0).foregroundColor(.red) }) {
+          Button(isDeletingAccount ? "Deleting…" : "Delete Account", role: .destructive) {
+            showDeleteConfirm = true
+          }
+          .disabled(isDeletingAccount)
+        }
+        .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
+        .confirmationDialog(
+          "Delete your account?",
+          isPresented: $showDeleteConfirm,
+          titleVisibility: .visible
+        ) {
+          Button("Delete Account", role: .destructive) {
+            Task { await deleteAccount() }
+          }
+          Button("Cancel", role: .cancel) {}
+        } message: {
+          Text("This permanently deletes your profile and removes you from every group. This can't be undone.")
+        }
+
         if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String,
            let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String {
           Section(footer: Text("v\(version) (\(build))").foregroundColor(BoldTheme.Colors.textFaint)) { EmptyView() }
@@ -247,6 +271,21 @@ struct ProfileView: View {
       }
     } catch {
       await MainActor.run { emailMessage = "Couldn't update email. Try again." }
+    }
+  }
+
+  private func deleteAccount() async {
+    guard let client else { return }
+    isDeletingAccount = true
+    deleteError = nil
+    defer { isDeletingAccount = false }
+    do {
+      try await ProfilesService(client: client).deleteAccount()
+      // Account is gone server-side; the local session is no longer valid
+      // either way, so just drop it and let RootView route back to Auth.
+      await MainActor.run { appState.session = nil }
+    } catch {
+      await MainActor.run { deleteError = error.localizedDescription }
     }
   }
 

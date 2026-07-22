@@ -69,5 +69,33 @@ struct ProfilesService {
     try await client.storage.from("avatars").upload(path, data: data, options: FileOptions(upsert: true))
     return try client.storage.from("avatars").getPublicURL(path: path).absoluteString
   }
+
+  /// Self-service account deletion (Apple Guideline 5.1.1(v)). Calls the
+  /// delete-account edge function, which authenticates the caller from
+  /// their own JWT (never a client-supplied id), cleans up profile/group
+  /// membership rows, and deletes the auth.users row via the Admin API.
+  /// Mirrors GroupsService.invoke's error-unwrapping pattern -- the function
+  /// returns non-2xx (401/409/500) with a JSON {success:false, error} body
+  /// for expected failures (not signed in, owns a group with other members,
+  /// etc.), which surfaces as FunctionsError.httpError rather than a
+  /// decoded response.
+  struct DeleteAccountError: LocalizedError {
+    let message: String
+    var errorDescription: String? { message }
+  }
+
+  private struct DeleteAccountResponse: Decodable { let success: Bool }
+  private struct DeleteAccountErrorBody: Decodable { let success: Bool; let error: String? }
+
+  func deleteAccount() async throws {
+    do {
+      let _: DeleteAccountResponse = try await client.functions.invoke("delete-account", options: .init(method: .post))
+    } catch let FunctionsError.httpError(_, data) {
+      if let body = try? JSONDecoder().decode(DeleteAccountErrorBody.self, from: data), let message = body.error {
+        throw DeleteAccountError(message: message)
+      }
+      throw DeleteAccountError(message: "Couldn't delete account. Try again.")
+    }
+  }
 }
 
