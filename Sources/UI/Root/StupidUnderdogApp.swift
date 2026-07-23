@@ -83,6 +83,12 @@ struct StupidUnderdogApp: App {
           await DeepLinkHandler(client: client, appState: appState).handle(url: url)
         }
       }
+      // Frost's palette is fixed hardcoded hex values, not adaptive system
+      // colors -- system Dark Mode still darkens materials like
+      // .ultraThinMaterial (GlassCard) while text stays hardcoded for a
+      // light background, producing near-invisible low-contrast text.
+      // Force light appearance until Frost gets a real dark variant.
+      .preferredColorScheme(.light)
     }
   }
 }
