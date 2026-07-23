@@ -180,7 +180,7 @@ struct GamesView: View {
           .font(BoldTheme.Fonts.body(14, weight: .semibold))
           .foregroundColor(BoldTheme.Colors.goldDeep)
       }
-        .onChange(of: viewModel.selectedWeek) { _ in
+        .onChange(of: viewModel.selectedWeek) {
           Task {
             try? await viewModel.loadGames()
             try? await viewModel.loadExistingPick()
@@ -400,7 +400,7 @@ struct GamesView: View {
     // switches (StateObject) -- this catches later hand-offs from Home too,
     // e.g. the user already had Games open, then tapped Home's CTA again
     // with the other sport selected.
-    .onChange(of: appState.requestedSport) { requested in
+    .onChange(of: appState.requestedSport) { _, requested in
       guard let requested else { return }
       appState.requestedSport = nil
       Task { await viewModel.switchSport(to: requested) }

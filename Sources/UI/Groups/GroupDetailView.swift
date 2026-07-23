@@ -299,14 +299,14 @@ struct GroupDetailView: View {
     VStack(alignment: .leading, spacing: 14) {
       HStack {
         PillToggle(options: [(label: "This Week", value: LeaderboardScope.week), (label: "Season", value: .season)], selection: $leaderboardScope)
-          .onChange(of: leaderboardScope) { newValue in
+          .onChange(of: leaderboardScope) { _, newValue in
             Task { await viewModel.loadLeaderboard(scope: newValue) }
           }
         Spacer()
         if leaderboardScope == .week {
           Stepper("Wk \(viewModel.week)", value: $viewModel.week, in: 1...20)
             .fixedSize()
-            .onChange(of: viewModel.week) { _ in Task { await viewModel.loadLeaderboard(scope: leaderboardScope) } }
+            .onChange(of: viewModel.week) { Task { await viewModel.loadLeaderboard(scope: leaderboardScope) } }
         }
       }
 

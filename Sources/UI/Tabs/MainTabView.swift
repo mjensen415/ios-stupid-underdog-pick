@@ -46,7 +46,7 @@ struct MainTabView: View {
         .tag(5)
     }
     .tint(BoldTheme.Colors.goldDeep)
-    .onChange(of: appState.requestedTab) { newValue in
+    .onChange(of: appState.requestedTab) { _, newValue in
       guard let newValue else { return }
       selection = newValue
       appState.requestedTab = nil

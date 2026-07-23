@@ -71,7 +71,7 @@ struct GroupJoinByTokenView: View {
       .sheet(isPresented: $showSignIn) {
         MagicLinkView()
       }
-      .onChange(of: appState.session) { newSession in
+      .onChange(of: appState.session) { _, newSession in
         if newSession != nil, state == .idle { Task { await join() } }
       }
       .task {

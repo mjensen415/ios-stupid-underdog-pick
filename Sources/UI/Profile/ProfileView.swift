@@ -148,7 +148,7 @@ struct ProfileView: View {
         Section {
           Button("Sign Out", role: .destructive) {
             Task {
-              if let client { try? await AuthService(client: client).signOut() }
+              if let client { await AuthService(client: client).signOut() }
               await MainActor.run { appState.session = nil }
             }
           }

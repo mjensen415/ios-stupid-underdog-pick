@@ -146,7 +146,7 @@ struct HomeView: View {
           await viewModel.load(userId: userId, sport: sport.rawValue)
         }
       }
-      .onChange(of: sport) { newSport in
+      .onChange(of: sport) { _, newSport in
         if let userId = appState.session?.user.id {
           Task { await viewModel.load(userId: userId, sport: newSport.rawValue) }
         }

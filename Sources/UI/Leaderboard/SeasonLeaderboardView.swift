@@ -70,7 +70,7 @@ struct SeasonLeaderboardView: View {
   private func loadInitial() async {
     isLoading = true
     defer { isLoading = false }
-    guard let client = (try? await MainActor.run { appState.client }) else { return }
+    guard let client = (await MainActor.run { appState.client }) else { return }
     do {
       let ctx = try await ContextService(client: client).getCurrentContext()
 
@@ -97,7 +97,7 @@ struct SeasonLeaderboardView: View {
     guard let season = selectedSeason else { return }
     isLoading = true
     defer { isLoading = false }
-    guard let client = (try? await MainActor.run { appState.client }) else { return }
+    guard let client = (await MainActor.run { appState.client }) else { return }
     do {
       let list = try await LeaderboardService(client: client).fetchSeasonLeaderboard(season: season)
       rows = list
