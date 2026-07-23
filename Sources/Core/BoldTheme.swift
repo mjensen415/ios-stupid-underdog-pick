@@ -10,7 +10,8 @@ import SwiftUI
 enum BoldTheme {
   enum Colors {
     static let bgPage    = Color(hex: 0xDFE2DB) // Fog Gray
-    static let gold      = Color(hex: 0xFFD23A) // Bank Gold -- unchanged, CTA-only
+    static let gold      = Color(hex: 0xFFD23A) // Bank Gold -- unchanged, CTA-only. Only ~1.1:1 contrast on bgPage -- never use as text on a light background, use goldDeep instead. Fine on dark surfaces (green/black) or as a filled badge background.
+    static let goldDeep  = Color(hex: 0x7A5009) // Deep Gold -- same hue as gold, ~5.4:1 contrast on bgPage. Use for gold-meaning TEXT (spreads, "you're #1", stat highlights) on light/glass backgrounds.
     static let green     = Color(hex: 0x0E5A3A) // Field Green -- unchanged, links/accents
     static let text       = Color(hex: 0x0A1A10) // Ink
     static let textDim    = Color(hex: 0x16241B).opacity(0.62)

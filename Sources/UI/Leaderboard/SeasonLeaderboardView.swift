@@ -27,7 +27,7 @@ struct SeasonLeaderboardView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
                     .background(active ? BoldTheme.Colors.gold : BoldTheme.Colors.text.opacity(0.07))
-                    .foregroundColor(active ? BoldTheme.Colors.bgPage : BoldTheme.Colors.textDim)
+                    .foregroundColor(active ? BoldTheme.Colors.text : BoldTheme.Colors.textDim)
                     .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)

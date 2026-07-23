@@ -178,7 +178,7 @@ struct GamesView: View {
       } label: {
         Label("Week \(viewModel.selectedWeek)", systemImage: "calendar")
           .font(BoldTheme.Fonts.body(14, weight: .semibold))
-          .foregroundColor(BoldTheme.Colors.gold)
+          .foregroundColor(BoldTheme.Colors.goldDeep)
       }
         .onChange(of: viewModel.selectedWeek) { _ in
           Task {
@@ -299,7 +299,7 @@ struct GamesView: View {
         Text("Error loading games").font(BoldTheme.Fonts.display(24)).foregroundColor(BoldTheme.Colors.text)
         Text(e).foregroundColor(BoldTheme.Colors.textDim).multilineTextAlignment(.center)
         Button("Retry") { Task { await viewModel.loadInitial() } }
-          .foregroundColor(BoldTheme.Colors.gold)
+          .foregroundColor(BoldTheme.Colors.goldDeep)
       }
       .padding()
       .frame(maxWidth: .infinity, maxHeight: .infinity)

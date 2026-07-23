@@ -39,14 +39,14 @@ struct GroupJoinByTokenView: View {
             Button("Go to Group") { dismiss() }
               .font(BoldTheme.Fonts.body(14, weight: .semibold))
               .padding(.horizontal, 20).padding(.vertical, 12)
-              .background(BoldTheme.Colors.gold).foregroundColor(BoldTheme.Colors.bgPage).cornerRadius(12)
+              .background(BoldTheme.Colors.gold).foregroundColor(BoldTheme.Colors.text).cornerRadius(12)
           case .failure(let message):
             Image(systemName: "xmark.circle.fill").font(.system(size: 48)).foregroundColor(.red)
             Text("Invalid Invite").font(BoldTheme.Fonts.display(28)).foregroundColor(BoldTheme.Colors.text)
             Text(message).font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Colors.textDim).multilineTextAlignment(.center)
             Button("Close") { dismiss() }
               .font(BoldTheme.Fonts.body(14, weight: .semibold))
-              .foregroundColor(BoldTheme.Colors.gold)
+              .foregroundColor(BoldTheme.Colors.goldDeep)
           }
 
           Spacer()
@@ -57,7 +57,7 @@ struct GroupJoinByTokenView: View {
               Button("Sign in to Join") { showSignIn = true }
                 .font(BoldTheme.Fonts.body(14, weight: .semibold))
                 .padding(.horizontal, 20).padding(.vertical, 12)
-                .background(BoldTheme.Colors.gold).foregroundColor(BoldTheme.Colors.bgPage).cornerRadius(12)
+                .background(BoldTheme.Colors.gold).foregroundColor(BoldTheme.Colors.text).cornerRadius(12)
             }
           }
         }

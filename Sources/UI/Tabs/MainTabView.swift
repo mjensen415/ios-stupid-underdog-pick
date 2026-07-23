@@ -12,8 +12,8 @@ struct MainTabView: View {
     let normal = UITabBarItemAppearance()
     normal.normal.iconColor = UIColor(BoldTheme.Colors.textFaint)
     normal.normal.titleTextAttributes = [.foregroundColor: UIColor(BoldTheme.Colors.textFaint)]
-    normal.selected.iconColor = UIColor(BoldTheme.Colors.gold)
-    normal.selected.titleTextAttributes = [.foregroundColor: UIColor(BoldTheme.Colors.gold)]
+    normal.selected.iconColor = UIColor(BoldTheme.Colors.goldDeep)
+    normal.selected.titleTextAttributes = [.foregroundColor: UIColor(BoldTheme.Colors.goldDeep)]
     appearance.stackedLayoutAppearance = normal
     UITabBar.appearance().standardAppearance = appearance
     UITabBar.appearance().scrollEdgeAppearance = appearance
@@ -45,7 +45,7 @@ struct MainTabView: View {
         .tabItem { Label("Profile", systemImage: "person.crop.circle") }
         .tag(5)
     }
-    .tint(BoldTheme.Colors.gold)
+    .tint(BoldTheme.Colors.goldDeep)
     .onChange(of: appState.requestedTab) { newValue in
       guard let newValue else { return }
       selection = newValue

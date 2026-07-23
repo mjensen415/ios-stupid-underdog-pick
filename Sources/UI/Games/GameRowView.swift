@@ -43,9 +43,9 @@ struct GameRowView: View {
       VStack(spacing: 4) {
         Text(kickoffText).font(BoldTheme.Fonts.mono(12)).foregroundColor(BoldTheme.Colors.textFaint)
         if let bl = game.bettingLine, !bl.isEmpty {
-          Text(bl).font(BoldTheme.Fonts.mono(13)).foregroundColor(BoldTheme.Colors.gold)
+          Text(bl).font(BoldTheme.Fonts.mono(13)).foregroundColor(BoldTheme.Colors.goldDeep)
         } else if let sp = game.underdogSpread {
-          Text(String(format: "%.1f", sp)).font(BoldTheme.Fonts.mono(13)).foregroundColor(BoldTheme.Colors.gold)
+          Text(String(format: "%.1f", sp)).font(BoldTheme.Fonts.mono(13)).foregroundColor(BoldTheme.Colors.goldDeep)
         } else {
           Text("—").font(BoldTheme.Fonts.mono(13)).foregroundColor(BoldTheme.Colors.textFaint)
         }

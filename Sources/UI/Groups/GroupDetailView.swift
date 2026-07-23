@@ -187,7 +187,7 @@ struct GroupDetailView: View {
           VStack(spacing: 8) {
             Text("Error loading group").font(BoldTheme.Fonts.display(24)).foregroundColor(BoldTheme.Colors.text)
             Text(e).foregroundColor(BoldTheme.Colors.textDim)
-            Button("Retry") { Task { await viewModel.loadInitial() } }.foregroundColor(BoldTheme.Colors.gold)
+            Button("Retry") { Task { await viewModel.loadInitial() } }.foregroundColor(BoldTheme.Colors.goldDeep)
           }.padding()
         } else if viewModel.isLoading && viewModel.group == nil {
           ProgressView("Loading…").tint(BoldTheme.Colors.gold)
@@ -243,7 +243,7 @@ struct GroupDetailView: View {
               Button("Request to Join") { Task { await viewModel.join() } }
                 .font(BoldTheme.Fonts.body(14, weight: .semibold))
                 .padding(.horizontal, 16).padding(.vertical, 10)
-                .background(BoldTheme.Colors.gold).foregroundColor(BoldTheme.Colors.bgPage).cornerRadius(10)
+                .background(BoldTheme.Colors.gold).foregroundColor(BoldTheme.Colors.text).cornerRadius(10)
             }
           }
         }
@@ -589,7 +589,7 @@ private struct EditGroupSection: View {
           }
         }
         .padding(.horizontal, 16).padding(.vertical, 10)
-        .background(BoldTheme.Colors.gold).foregroundColor(BoldTheme.Colors.bgPage).cornerRadius(10)
+        .background(BoldTheme.Colors.gold).foregroundColor(BoldTheme.Colors.text).cornerRadius(10)
         .disabled(isSaving || name.trimmingCharacters(in: .whitespaces).isEmpty)
 
         if savedRecently {

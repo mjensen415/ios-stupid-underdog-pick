@@ -76,7 +76,7 @@ struct ProfileView: View {
             }
             Button(isSavingName ? "Saving…" : "Save Name") { Task { await saveName() } }
               .disabled(isSavingName || displayName == (profile.display_name ?? ""))
-              .foregroundColor(BoldTheme.Colors.gold)
+              .foregroundColor(BoldTheme.Colors.goldDeep)
 
             TextField("Email", text: $email)
               .keyboardType(.emailAddress)
@@ -88,7 +88,7 @@ struct ProfileView: View {
             }
             Button(isSavingEmail ? "Updating…" : "Update Email") { Task { await saveEmail() } }
               .disabled(isSavingEmail || email == (profile.email ?? ""))
-              .foregroundColor(BoldTheme.Colors.gold)
+              .foregroundColor(BoldTheme.Colors.goldDeep)
           }
           .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
 
@@ -105,7 +105,7 @@ struct ProfileView: View {
                 Text("POINTS").font(BoldTheme.Fonts.mono(10)).foregroundColor(BoldTheme.Colors.textFaint)
                 Text(formatPoints(careerTotals?.totalPoints))
                   .font(BoldTheme.Fonts.display(22))
-                  .foregroundColor(BoldTheme.Colors.gold)
+                  .foregroundColor(BoldTheme.Colors.goldDeep)
               }
             }
             .padding(.vertical, 4)
@@ -129,7 +129,7 @@ struct ProfileView: View {
 
             NavigationLink(destination: PickHistoryView()) {
               Text("View Full Pick History")
-                .foregroundColor(BoldTheme.Colors.gold)
+                .foregroundColor(BoldTheme.Colors.goldDeep)
             }
           }
           .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
@@ -137,7 +137,7 @@ struct ProfileView: View {
           Section {
             Text(loadError).foregroundColor(.red)
             Button("Retry") { Task { await load() } }
-              .foregroundColor(BoldTheme.Colors.gold)
+              .foregroundColor(BoldTheme.Colors.goldDeep)
           }
           .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
         } else {

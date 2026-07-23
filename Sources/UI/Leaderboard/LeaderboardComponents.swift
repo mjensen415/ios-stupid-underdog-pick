@@ -51,7 +51,7 @@ struct LeaderboardRow: View {
         // Gold reserved for rank #1 down a ranked list -- everything else
         // is GREEN, matching web's Leaderboard.tsx (`index === 0 ? GOLD :
         // GREEN`). Avoids gold-for-every-row diluting the highlight.
-        .foregroundColor(rank == 1 ? BoldTheme.Colors.gold : BoldTheme.Colors.green)
+        .foregroundColor(rank == 1 ? BoldTheme.Colors.goldDeep : BoldTheme.Colors.green)
     }
     .padding(.vertical, 12)
     .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))

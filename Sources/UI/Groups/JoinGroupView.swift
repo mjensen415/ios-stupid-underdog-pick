@@ -79,7 +79,7 @@ struct JoinGroupView: View {
           .font(BoldTheme.Fonts.display(20))
           .padding(.vertical, 14)
           .background(BoldTheme.Colors.gold)
-          .foregroundColor(BoldTheme.Colors.bgPage)
+          .foregroundColor(BoldTheme.Colors.text)
           .cornerRadius(14)
           .disabled(isSubmitting || (mode == .code ? inviteCode.isEmpty : groupIdText.isEmpty))
         }

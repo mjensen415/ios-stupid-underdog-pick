@@ -51,7 +51,7 @@ struct WeeklyLeaderboardView: View {
           Text("Error loading leaderboard").font(BoldTheme.Fonts.display(24)).foregroundColor(BoldTheme.Colors.text)
           Text(e).foregroundColor(BoldTheme.Colors.textDim).multilineTextAlignment(.center)
           Button("Retry") { Task { await viewModel.load() } }
-            .foregroundColor(BoldTheme.Colors.gold)
+            .foregroundColor(BoldTheme.Colors.goldDeep)
         }.padding()
       } else if viewModel.isLoading {
         ProgressView("Loading leaderboard…").tint(BoldTheme.Colors.gold).foregroundColor(BoldTheme.Colors.textDim)
