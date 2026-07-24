@@ -333,7 +333,11 @@ struct GamesView: View {
                 Button("Pick this upset") {
                   Task { await viewModel.pickUnderdog(for: g) }
                 }
-                .tint(viewModel.canPick(g) ? BoldTheme.Colors.gold : .gray)
+                // swipeActions buttons always render white label text with
+                // .tint() only coloring the background -- goldDeep (not the
+                // bright brand gold) is what gives that white text real
+                // contrast here.
+                .tint(viewModel.canPick(g) ? BoldTheme.Colors.goldDeep : .gray)
                 .disabled(!viewModel.canPick(g))
               }
             }
