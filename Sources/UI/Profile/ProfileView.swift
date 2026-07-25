@@ -1,6 +1,7 @@
 import SwiftUI
 import Supabase
 import PhotosUI
+import UserNotifications
 
 struct ProfileView: View {
   @EnvironmentObject var appState: AppState
@@ -25,6 +26,10 @@ struct ProfileView: View {
   @State private var careerTotals: CareerTotals?
   @State private var seasonTotals: [TotalsLeaderboardRow] = []
   @State private var streak: Int = 0
+
+  @State private var notificationAuthStatus: UNAuthorizationStatus = .notDetermined
+  @State private var notificationPrefs: NotificationPreferencesRow = .allEnabled
+  @State private var isRequestingPushPermission = false
 
   @State private var showDeleteConfirm = false
   @State private var isDeletingAccount = false
@@ -161,6 +166,38 @@ struct ProfileView: View {
             Label("Trophy Case", systemImage: "trophy.fill")
           }
           .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
+
+          Section {
+            switch notificationAuthStatus {
+            case .denied:
+              Text("Notifications are off for SUP. Turn them on in iOS Settings to get pick reminders and score alerts.")
+                .font(BoldTheme.Fonts.body(12)).foregroundColor(BoldTheme.Colors.textDim)
+              Button("Open Settings") {
+                if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
+              }
+              .foregroundColor(BoldTheme.Colors.goldDeep)
+            case .authorized, .provisional, .ephemeral:
+              Toggle("Pick reminders", isOn: $notificationPrefs.pick_reminder)
+              Toggle("Game kickoff", isOn: $notificationPrefs.game_live)
+              Toggle("Game results", isOn: $notificationPrefs.game_result)
+              Toggle("Weekly recap", isOn: $notificationPrefs.weekly_recap)
+            default:
+              // .notDetermined -- covers existing users who upgraded past
+              // this build and never saw the onboarding-flow prompt.
+              Button(isRequestingPushPermission ? "Requesting…" : "Turn on notifications") {
+                Task { await enablePush() }
+              }
+              .disabled(isRequestingPushPermission)
+              .foregroundColor(BoldTheme.Colors.goldDeep)
+            }
+          } header: {
+            Label("Notifications", systemImage: "bell.badge")
+          }
+          .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
+          .onChange(of: notificationPrefs) { _, newValue in
+            guard let client else { return }
+            Task { try? await PushService(client: client).updatePreferences(newValue) }
+          }
         } else if let loadError {
           Section {
             Text(loadError).foregroundColor(.red)
@@ -269,11 +306,15 @@ struct ProfileView: View {
         guard let ctx = try? await ContextService(client: client).getCurrentContext() else { return nil }
         return try? await LeaderboardService(client: client).fetchStreak(userId: p.user_id, season: ctx.season)
       }()
-      let (careerResult, seasonsResult, streakValue) = await (career, seasons, streakResult)
+      async let authStatus = PushService(client: client).currentAuthorizationStatus()
+      async let prefs = try? PushService(client: client).fetchPreferences()
+      let (careerResult, seasonsResult, streakValue, authStatusValue, prefsValue) = await (career, seasons, streakResult, authStatus, prefs)
       await MainActor.run {
         careerTotals = careerResult ?? nil
         seasonTotals = seasonsResult ?? []
         streak = streakValue ?? 0
+        notificationAuthStatus = authStatusValue
+        notificationPrefs = prefsValue ?? .allEnabled
       }
     } catch {
       await MainActor.run {
@@ -310,6 +351,16 @@ struct ProfileView: View {
       }
     } catch {
       await MainActor.run { emailMessage = "Couldn't update email. Try again." }
+    }
+  }
+
+  private func enablePush() async {
+    guard let client else { return }
+    isRequestingPushPermission = true
+    defer { isRequestingPushPermission = false }
+    let granted = await PushService(client: client).requestPermission()
+    await MainActor.run {
+      notificationAuthStatus = granted ? .authorized : .denied
     }
   }
 

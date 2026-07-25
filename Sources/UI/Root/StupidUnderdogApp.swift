@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct StupidUnderdogApp: App {
   @StateObject private var appState = AppState()
+  @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
   var body: some Scene {
     WindowGroup {
@@ -82,6 +83,11 @@ struct StupidUnderdogApp: App {
           }
           await DeepLinkHandler(client: client, appState: appState).handle(url: url)
         }
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .apnsDeviceTokenReceived)) { note in
+        guard let client = appState.client, appState.session != nil,
+              let token = note.userInfo?["token"] as? String else { return }
+        Task { try? await PushService(client: client).registerDeviceToken(token) }
       }
       // Frost's palette is fixed hardcoded hex values, not adaptive system
       // colors -- system Dark Mode still darkens materials like

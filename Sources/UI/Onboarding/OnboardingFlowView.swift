@@ -219,6 +219,12 @@ struct OnboardingFlowView: View {
     guard !saving else { return }
     saving = true
     try? await ProfilesService(client: client).completeOnboarding()
+    // Ask for push permission once, right as onboarding wraps -- after the
+    // user has already seen real value (team, pick, or group), not at cold
+    // launch. Existing users who upgrade past this build never see
+    // onboarding again, so they get the same ask from a manual button in
+    // Profile > Notifications instead.
+    _ = await PushService(client: client).requestPermission()
     isPresented = false
   }
 }
