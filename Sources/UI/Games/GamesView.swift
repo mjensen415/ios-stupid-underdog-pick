@@ -13,6 +13,10 @@ final class GamesViewModel: ObservableObject {
   @Published var savingPick = false
   @Published var toastMessage: String?
   @Published var sport: String = "cfb"
+  /// Set to a fresh id only on a just-now successful pick (never on load),
+  /// so GamesView can fire a one-shot confetti burst without re-celebrating
+  /// every time the screen re-renders an existing pick.
+  @Published var pickCelebrationTrigger: UUID?
 
   private let client: SupabaseClient
   private var logoMap: [UUID: URL] = [:]
@@ -127,6 +131,8 @@ final class GamesViewModel: ObservableObject {
       _ = try await PicksService(client: client)
         .upsertPick(gameId: g.id, pickedTeamId: pickedId, season: season, week: selectedWeek)
       flashToast("Picked \(g.awayTeam ?? "") @ \(g.homeTeam ?? "")")
+      Haptics.success()
+      pickCelebrationTrigger = UUID()
       #if DEBUG
       print("[pickUnderdog] SUCCESS, toast=\(toastMessage ?? "")")
       #endif
@@ -239,6 +245,12 @@ struct GamesView: View {
           Text(verbatim: "vs \(favoriteName)")
             .font(BoldTheme.Fonts.body(12))
             .foregroundColor(textOnGreen.opacity(0.75))
+          if let sp = g.underdogSpread {
+            Text(verbatim: "Loses by fewer than \(String(format: "%.1f", sp)), or wins outright, and you bank it.")
+              .font(BoldTheme.Fonts.body(11))
+              .foregroundColor(textOnGreen.opacity(0.65))
+              .padding(.top, 2)
+          }
         }
         Spacer()
       }
@@ -371,22 +383,31 @@ struct GamesView: View {
   }
 
   var body: some View {
-    VStack(spacing: 0) {
-      header
-      sportToggle
-      pickedBanner
-        .transition(.opacity.combined(with: .move(edge: .top)))
-      content
-      if let msg = viewModel.toastMessage {
-        Spacer()
-        Text(msg)
-          .font(BoldTheme.Fonts.body(13))
-          .foregroundColor(textOnGreen)
-          .padding(.horizontal, 12).padding(.vertical, 8)
-          .background(BoldTheme.Colors.green)
-          .clipShape(Capsule())
-          .shadow(radius: 2)
-          .padding(.bottom, 12)
+    ZStack {
+      VStack(spacing: 0) {
+        header
+        sportToggle
+        pickedBanner
+          .transition(.opacity.combined(with: .move(edge: .top)))
+        content
+        if let msg = viewModel.toastMessage {
+          Spacer()
+          Text(msg)
+            .font(BoldTheme.Fonts.body(13))
+            .foregroundColor(textOnGreen)
+            .padding(.horizontal, 12).padding(.vertical, 8)
+            .background(BoldTheme.Colors.green)
+            .clipShape(Capsule())
+            .shadow(radius: 2)
+            .padding(.bottom, 12)
+        }
+      }
+      // A fresh trigger only fires on a just-now successful pick (see
+      // pickCelebrationTrigger's doc comment) -- this is iOS's fanfare
+      // moment, the equivalent of web's confirmation-sheet celebration,
+      // since the swipe-to-pick gesture here has no separate confirm step.
+      if let trigger = viewModel.pickCelebrationTrigger {
+        ConfettiView(trigger: trigger, count: 50)
       }
     }
     .background(BoldTheme.Colors.bgPage.ignoresSafeArea())
