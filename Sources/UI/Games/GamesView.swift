@@ -168,6 +168,7 @@ private let textOnGreen = Color(hex: 0xF2EFE3)
 struct GamesView: View {
   @StateObject var viewModel: GamesViewModel
   @EnvironmentObject var appState: AppState
+  @State private var shareImage: Image?
 
   private var header: some View {
     HStack {
@@ -253,12 +254,31 @@ struct GamesView: View {
           }
         }
         Spacer()
+        if let shareImage, let sp = g.underdogSpread {
+          // No singular `item: Image` initializer exists on ShareLink --
+          // only items:/preview: (Image conforms to Transferable, so a
+          // one-element array is the correct way to share a single image).
+          ShareLink(
+            items: [shareImage],
+            preview: { img in SharePreview(Text(verbatim: "\(underdogName) +\(String(format: "%.1f", sp))"), image: img) }
+          ) {
+            Image(systemName: "square.and.arrow.up")
+              .font(.system(size: 16, weight: .semibold))
+              .foregroundColor(textOnGreen)
+          }
+        }
       }
       .padding(16)
       .background(BoldTheme.Colors.green)
       .cornerRadius(10)
       .padding(.horizontal, 20)
       .padding(.bottom, 12)
+      .task(id: g.id) {
+        guard let sp = g.underdogSpread else { shareImage = nil; return }
+        if let uiImage = renderShareCardImage(dogName: underdogName, spread: sp, favoriteName: favoriteName) {
+          shareImage = Image(uiImage: uiImage)
+        }
+      }
     }
   }
 

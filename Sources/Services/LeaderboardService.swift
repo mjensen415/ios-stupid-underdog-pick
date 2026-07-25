@@ -228,6 +228,16 @@ struct LeaderboardService {
     return try JSONDecoder().decode([MyRank].self, from: res.data).first
   }
 
+  /// Current consecutive-weeks-covered streak (get_user_streak, W4) --
+  /// mirrors web's Home.tsx streak query.
+  func fetchStreak(userId: UUID, season: Int, sport: String = "cfb") async throws -> Int {
+    struct Params: Encodable { let p_user_id: UUID; let p_season: Int; let p_sport: String }
+    let res = try await client
+      .rpc("get_user_streak", params: Params(p_user_id: userId, p_season: season, p_sport: sport))
+      .execute()
+    return try JSONDecoder().decode(Int.self, from: res.data)
+  }
+
   func fetchTotals(season: Int?, sport: String = "cfb") async throws -> [TotalsLeaderboardRow] {
     var builder = client
       .from("leaderboard_totals")

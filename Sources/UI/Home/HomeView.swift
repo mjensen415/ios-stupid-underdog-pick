@@ -19,6 +19,7 @@ final class HomeViewModel: ObservableObject {
   @Published var myGroups: [MyGroup] = []
   @Published var discoverGroups: [DiscoverGroup] = []
   @Published var recap: [RecapHit] = []
+  @Published var streak: Int = 0
 
   private var client: SupabaseClient?
 
@@ -58,6 +59,7 @@ final class HomeViewModel: ObservableObject {
     async let groupsTask = try? GroupsService(client: client).fetchMyGroups()
     async let discoverTask = try? GroupsService(client: client).fetchDiscoverGroups(limit: 6)
     async let recapTask = fetchRecap(client: client, season: season, week: week, sport: sport)
+    async let streakTask = try? LeaderboardService(client: client).fetchStreak(userId: userId, season: season, sport: sport)
 
     myPick = await pickTask ?? nil
     firstKickoff = await kickoffTask
@@ -65,6 +67,7 @@ final class HomeViewModel: ObservableObject {
     myGroups = await groupsTask ?? []
     discoverGroups = await discoverTask ?? []
     recap = await recapTask
+    streak = await streakTask ?? 0
   }
 
   private func fetchFirstKickoff(client: SupabaseClient, season: Int, week: Int, sport: String) async -> Date? {
@@ -170,9 +173,19 @@ struct HomeView: View {
         Text(verbatim: viewModel.isOffseason ? "OFFSEASON" : "WEEK \(viewModel.week ?? 0) · \(sport.rawValue.uppercased()) \(viewModel.season ?? 0)")
           .font(BoldTheme.Fonts.mono(10, weight: .semibold))
           .foregroundColor(BoldTheme.Colors.green)
-        Text("WELCOME BACK.")
-          .font(BoldTheme.Fonts.display(19))
-          .foregroundColor(BoldTheme.Colors.text)
+        HStack(spacing: 8) {
+          Text("WELCOME BACK.")
+            .font(BoldTheme.Fonts.display(19))
+            .foregroundColor(BoldTheme.Colors.text)
+          if viewModel.streak > 0 {
+            Text(verbatim: "🔥 \(viewModel.streak)-week streak")
+              .font(BoldTheme.Fonts.mono(11, weight: .semibold))
+              .foregroundColor(BoldTheme.Colors.goldDeep)
+              .padding(.horizontal, 9).padding(.vertical, 3)
+              .background(BoldTheme.Colors.goldDeep.opacity(0.1))
+              .clipShape(Capsule())
+          }
+        }
       }
 
       Spacer()
