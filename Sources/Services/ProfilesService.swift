@@ -6,6 +6,8 @@ struct ProfileRow: Decodable {
   let user_id: UUID
   let display_name: String?
   let avatar_url: String?
+  let has_onboarded: Bool
+  let favorite_team_id: UUID?
   // Not a DB column -- profiles has no email column at all (email lives on
   // auth.users, which clients can't query directly). Filled in from the
   // already-authenticated session below, not decoded from the row.
@@ -16,6 +18,8 @@ struct ProfileRow: Decodable {
     case user_id
     case display_name
     case avatar_url
+    case has_onboarded
+    case favorite_team_id
   }
 }
 
@@ -32,7 +36,7 @@ struct ProfilesService {
     let user = try await client.auth.session.user
     let res = try await client
       .from("profiles")
-      .select("id, user_id, display_name, avatar_url")
+      .select("id, user_id, display_name, avatar_url, has_onboarded, favorite_team_id")
       .eq("user_id", value: user.id)
       .limit(1)
       .execute()
@@ -56,6 +60,32 @@ struct ProfilesService {
     _ = try await client
       .from("profiles")
       .update(Update(display_name: displayName, avatar_url: avatarUrl))
+      .eq("user_id", value: userId)
+      .execute()
+  }
+
+  /// Sets the user's optional favorite team, independent of onboarding
+  /// completion -- called as soon as a team is tapped in the onboarding
+  /// flow, not deferred to the end, so a partial run still saves it.
+  func setFavoriteTeam(_ teamId: UUID) async throws {
+    struct Update: Encodable { let favorite_team_id: UUID }
+    let userId = try await client.auth.session.user.id
+    _ = try await client
+      .from("profiles")
+      .update(Update(favorite_team_id: teamId))
+      .eq("user_id", value: userId)
+      .execute()
+  }
+
+  /// Marks the one-time first-run flow (team -> first pick -> group) done,
+  /// whether completed or explicitly skipped -- RootView never shows it
+  /// again once this is true.
+  func completeOnboarding() async throws {
+    struct Update: Encodable { let has_onboarded: Bool }
+    let userId = try await client.auth.session.user.id
+    _ = try await client
+      .from("profiles")
+      .update(Update(has_onboarded: true))
       .eq("user_id", value: userId)
       .execute()
   }
