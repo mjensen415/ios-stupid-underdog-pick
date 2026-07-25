@@ -24,6 +24,7 @@ struct ProfileView: View {
 
   @State private var careerTotals: CareerTotals?
   @State private var seasonTotals: [TotalsLeaderboardRow] = []
+  @State private var streak: Int = 0
 
   @State private var showDeleteConfirm = false
   @State private var isDeletingAccount = false
@@ -33,7 +34,7 @@ struct ProfileView: View {
     NavigationStack {
       Form {
         if let profile {
-          Section("Account") {
+          Section {
             HStack {
               Spacer()
               VStack(spacing: 10) {
@@ -89,10 +90,26 @@ struct ProfileView: View {
             Button(isSavingEmail ? "Updating…" : "Update Email") { Task { await saveEmail() } }
               .disabled(isSavingEmail || email == (profile.email ?? ""))
               .foregroundColor(BoldTheme.Colors.goldDeep)
+          } header: {
+            Label("Account", systemImage: "person.crop.circle")
           }
           .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
 
-          Section("Career Stats") {
+          Section {
+            if streak > 0 {
+              HStack(spacing: 6) {
+                Text("🔥").font(.system(size: 13))
+                Text(verbatim: "\(streak)-week streak")
+                  .font(BoldTheme.Fonts.mono(12, weight: .semibold))
+                  .foregroundColor(BoldTheme.Colors.goldDeep)
+              }
+              .padding(.horizontal, 10).padding(.vertical, 5)
+              .background(BoldTheme.Colors.goldDeep.opacity(0.1))
+              .clipShape(Capsule())
+              .listRowInsets(EdgeInsets())
+              .padding(.horizontal, 16).padding(.top, 4)
+            }
+
             HStack {
               VStack(alignment: .leading, spacing: 2) {
                 Text("ALL-TIME RECORD").font(BoldTheme.Fonts.mono(10)).foregroundColor(BoldTheme.Colors.textFaint)
@@ -101,6 +118,15 @@ struct ProfileView: View {
                   .foregroundColor(BoldTheme.Colors.text)
               }
               Spacer()
+              if let w = careerTotals?.wins, let l = careerTotals?.losses, w + l > 0 {
+                VStack(alignment: .trailing, spacing: 2) {
+                  Text("COVER RATE").font(BoldTheme.Fonts.mono(10)).foregroundColor(BoldTheme.Colors.textFaint)
+                  Text(verbatim: "\(Int((Double(w) / Double(w + l) * 100).rounded()))%")
+                    .font(BoldTheme.Fonts.display(22))
+                    .foregroundColor(BoldTheme.Colors.green)
+                }
+                Spacer()
+              }
               VStack(alignment: .trailing, spacing: 2) {
                 Text("POINTS").font(BoldTheme.Fonts.mono(10)).foregroundColor(BoldTheme.Colors.textFaint)
                 Text(formatPoints(careerTotals?.totalPoints))
@@ -131,6 +157,8 @@ struct ProfileView: View {
               Text("View Full Pick History")
                 .foregroundColor(BoldTheme.Colors.goldDeep)
             }
+          } header: {
+            Label("Trophy Case", systemImage: "trophy.fill")
           }
           .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
         } else if let loadError {
@@ -152,14 +180,20 @@ struct ProfileView: View {
               await MainActor.run { appState.session = nil }
             }
           }
+        } header: {
+          Label("Session", systemImage: "rectangle.portrait.and.arrow.right")
         }
         .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
 
-        Section(footer: deleteError.map { Text($0).foregroundColor(.red) }) {
+        Section {
           Button(isDeletingAccount ? "Deleting…" : "Delete Account", role: .destructive) {
             showDeleteConfirm = true
           }
           .disabled(isDeletingAccount)
+        } header: {
+          Label("Danger Zone", systemImage: "exclamationmark.triangle")
+        } footer: {
+          deleteError.map { Text($0).foregroundColor(.red) }
         }
         .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
         .confirmationDialog(
@@ -231,10 +265,15 @@ struct ProfileView: View {
 
       async let career = try? LeaderboardService(client: client).fetchMyCareerTotals(userId: p.user_id)
       async let seasons = try? LeaderboardService(client: client).fetchMySeasonTotals(userId: p.user_id)
-      let (careerResult, seasonsResult) = await (career, seasons)
+      async let streakResult: Int? = {
+        guard let ctx = try? await ContextService(client: client).getCurrentContext() else { return nil }
+        return try? await LeaderboardService(client: client).fetchStreak(userId: p.user_id, season: ctx.season)
+      }()
+      let (careerResult, seasonsResult, streakValue) = await (career, seasons, streakResult)
       await MainActor.run {
         careerTotals = careerResult ?? nil
         seasonTotals = seasonsResult ?? []
+        streak = streakValue ?? 0
       }
     } catch {
       await MainActor.run {
@@ -252,7 +291,7 @@ struct ProfileView: View {
       await MainActor.run {
         errorMessage = nil
         if let p = profile {
-          profile = ProfileRow(id: p.id, user_id: p.user_id, display_name: displayName, avatar_url: p.avatar_url, email: p.email)
+          profile = ProfileRow(id: p.id, user_id: p.user_id, display_name: displayName, avatar_url: p.avatar_url, has_onboarded: p.has_onboarded, favorite_team_id: p.favorite_team_id, email: p.email)
         }
       }
     } catch {
@@ -298,7 +337,7 @@ struct ProfileView: View {
       let url = try await ProfilesService(client: client).uploadAvatar(data: data, fileExtension: "jpg")
       try await ProfilesService(client: client).updateProfile(avatarUrl: url)
       await MainActor.run {
-        profile = ProfileRow(id: p.id, user_id: p.user_id, display_name: p.display_name, avatar_url: url, email: p.email)
+        profile = ProfileRow(id: p.id, user_id: p.user_id, display_name: p.display_name, avatar_url: url, has_onboarded: p.has_onboarded, favorite_team_id: p.favorite_team_id, email: p.email)
       }
     } catch {
       await MainActor.run { errorMessage = "Couldn't upload photo. Try again." }
