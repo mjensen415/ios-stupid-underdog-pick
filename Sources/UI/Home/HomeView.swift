@@ -118,6 +118,18 @@ struct HomeView: View {
   @EnvironmentObject var appState: AppState
   @StateObject private var viewModel = HomeViewModel()
   @State private var sport: Sport = .cfb
+  @State private var showCreateGroup = false
+  @State private var showJoinGroup = false
+  @State private var showInvitePicker = false
+  @State private var pushGroupSlug: String?
+  @State private var shareURL: URL?
+  @State private var showShareSheet = false
+
+  // groups-create-invite is admin-only server-side (assertIsGroupAdmin) --
+  // only owner/admin rows can actually generate a link.
+  private var inviteableGroups: [MyGroup] {
+    viewModel.myGroups.filter { $0.my_role == .owner || $0.my_role == .admin }
+  }
 
   private var initials: String {
     let email = appState.session?.user.email ?? "??"
@@ -134,6 +146,7 @@ struct HomeView: View {
           VStack(alignment: .leading, spacing: 0) {
             topRow
             sportToggle
+            quickActionsRow
             pickStatusCard
             groupsSection
             discoverSection
@@ -158,6 +171,86 @@ struct HomeView: View {
         if let userId = appState.session?.user.id {
           await viewModel.load(userId: userId, sport: sport.rawValue)
         }
+      }
+      .navigationDestination(item: $pushGroupSlug) { slug in
+        GroupDetailView(slug: slug)
+      }
+      .sheet(isPresented: $showCreateGroup) {
+        CreateGroupView {
+          if let userId = appState.session?.user.id {
+            await viewModel.load(userId: userId, sport: sport.rawValue)
+          }
+        }
+      }
+      .sheet(isPresented: $showJoinGroup) {
+        JoinGroupView {
+          if let userId = appState.session?.user.id {
+            await viewModel.load(userId: userId, sport: sport.rawValue)
+          }
+        }
+      }
+      .sheet(isPresented: $showInvitePicker) {
+        InviteGroupPickerSheet(groups: inviteableGroups) { group in
+          showInvitePicker = false
+          Task { await shareGroupInvite(group) }
+        }
+      }
+      .sheet(isPresented: $showShareSheet) {
+        if let shareURL {
+          ActivityShareSheet(activityItems: [shareURL])
+        }
+      }
+    }
+  }
+
+  private func handleInviteTap() {
+    if inviteableGroups.isEmpty {
+      showCreateGroup = true
+    } else if inviteableGroups.count == 1, let only = inviteableGroups.first {
+      Task { await shareGroupInvite(only) }
+    } else {
+      showInvitePicker = true
+    }
+  }
+
+  private func shareGroupInvite(_ group: MyGroup) async {
+    guard let client else { return }
+    do {
+      let result = try await GroupsService(client: client).createInvite(groupId: group.group_id, maxUses: nil, expiresAt: nil)
+      guard let url = URL(string: "https://www.stupidunderdogpick.com\(result.joinUrl)") else { return }
+      shareURL = url
+      showShareSheet = true
+    } catch {
+      // Invite creation failing here (e.g. a network blip) isn't worth a
+      // blocking alert -- the group's own Invite panel remains available
+      // as a fallback with its own error handling.
+    }
+  }
+
+  private var quickActionsRow: some View {
+    HStack(spacing: 34) {
+      quickAction(label: "Create Group", systemImage: "plus", gold: true) { showCreateGroup = true }
+      quickAction(label: "Join Group", systemImage: "link", gold: false) { showJoinGroup = true }
+      quickAction(label: "Invite Friends", systemImage: "square.and.arrow.up", gold: false, action: handleInviteTap)
+    }
+    .padding(.bottom, 20)
+  }
+
+  private func quickAction(label: String, systemImage: String, gold: Bool, action: @escaping () -> Void) -> some View {
+    Button(action: action) {
+      VStack(spacing: 8) {
+        ZStack {
+          Circle()
+            .fill(gold ? BoldTheme.Colors.gold : Color.white.opacity(0.7))
+            .frame(width: 50, height: 50)
+            .overlay(gold ? nil : Circle().strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
+            .overlay { if gold { BoldTheme.HatchOverlay().clipShape(Circle()) } }
+            .shadow(color: Color(hex: 0x142A1C).opacity(gold ? 0.22 : 0.08), radius: 8, y: 4)
+          Image(systemName: systemImage)
+            .font(.system(size: 18, weight: .semibold))
+            .foregroundColor(BoldTheme.Colors.text)
+        }
+        Text(label).font(BoldTheme.Fonts.body(12, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
       }
     }
   }
@@ -345,13 +438,34 @@ struct HomeView: View {
   private var groupsSection: some View {
     VStack(alignment: .leading, spacing: 10) {
       HStack {
-        Text("MY GROUPS").font(BoldTheme.Fonts.mono(10, weight: .semibold)).foregroundColor(BoldTheme.Colors.textFaint)
+        Text("YOUR GROUPS").font(BoldTheme.Fonts.display(20)).foregroundColor(BoldTheme.Colors.text)
         Spacer()
         Button {
           appState.requestedTab = 4 // Groups tab
         } label: {
-          Text("See all →").font(BoldTheme.Fonts.body(12, weight: .bold)).foregroundColor(BoldTheme.Colors.green)
+          Text("Discover public groups →").font(BoldTheme.Fonts.body(12, weight: .bold)).foregroundColor(BoldTheme.Colors.green)
         }
+      }
+
+      Button { showCreateGroup = true } label: {
+        HStack(spacing: 14) {
+          ZStack {
+            Circle().fill(BoldTheme.Colors.gold).frame(width: 42, height: 42)
+              .overlay { BoldTheme.HatchOverlay().clipShape(Circle()) }
+            Text("+").font(BoldTheme.Fonts.display(22)).foregroundColor(BoldTheme.Colors.text)
+          }
+          VStack(alignment: .leading, spacing: 2) {
+            Text("Start a group").font(BoldTheme.Fonts.body(14.5, weight: .heavy)).foregroundColor(BoldTheme.Colors.text)
+            Text("Invite friends, run your own pool, set your own bragging rights.")
+              .font(BoldTheme.Fonts.body(12))
+              .foregroundColor(BoldTheme.Colors.textDim)
+          }
+          Spacer(minLength: 0)
+        }
+        .padding(16)
+        .background(Color.white.opacity(0.28))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(BoldTheme.Colors.border, style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])))
+        .cornerRadius(16)
       }
 
       if viewModel.myGroups.isEmpty {
@@ -362,19 +476,22 @@ struct HomeView: View {
             .frame(maxWidth: .infinity)
         }
       } else {
-        ForEach(viewModel.myGroups.prefix(3)) { g in
-          Button { appState.requestedTab = 4 } label: {
+        ForEach(viewModel.myGroups) { g in
+          Button { pushGroupSlug = g.slug } label: {
             BoldTheme.GlassCard(strong: true, radius: 14, padding: 16) {
               HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                  Text(g.name).font(BoldTheme.Fonts.body(14, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
+                VStack(alignment: .leading, spacing: 3) {
+                  HStack(spacing: 8) {
+                    Text(g.name).font(BoldTheme.Fonts.body(14, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
+                    if g.my_role != .member { RoleBadge(role: g.my_role) }
+                  }
                   Text(verbatim: "\(g.member_count) member\(g.member_count == 1 ? "" : "s")")
                     .font(BoldTheme.Fonts.body(11.5))
                     .foregroundColor(BoldTheme.Colors.textDim)
                 }
                 Spacer()
                 if let rank = g.rank {
-                  Text(verbatim: "#\(rank)").font(BoldTheme.Fonts.display(18)).foregroundColor(BoldTheme.Colors.green)
+                  Text(verbatim: "#\(rank)").font(BoldTheme.Fonts.mono(13, weight: .semibold)).foregroundColor(BoldTheme.Colors.goldDeep)
                 }
               }
             }
@@ -452,4 +569,65 @@ struct HomeView: View {
       }
     }
   }
+}
+
+// ── Invite quick action, 2+ inviteable-groups case -- which group's invite
+// link? (0 inviteable groups opens CreateGroupView, 1 shares immediately,
+// both handled in HomeView.handleInviteTap without needing this sheet.)
+private struct InviteGroupPickerSheet: View {
+  let groups: [MyGroup]
+  let onPick: (MyGroup) -> Void
+  @Environment(\.dismiss) private var dismiss
+
+  var body: some View {
+    NavigationStack {
+      ZStack {
+        BoldTheme.Colors.bgPage.ignoresSafeArea()
+        ScrollView {
+          VStack(alignment: .leading, spacing: 8) {
+            Text("Pick a group to share its invite link.")
+              .font(BoldTheme.Fonts.body(12.5))
+              .foregroundColor(BoldTheme.Colors.textDim)
+              .padding(.bottom, 4)
+            ForEach(groups) { g in
+              Button { onPick(g) } label: {
+                HStack {
+                  Text(g.name).font(BoldTheme.Fonts.body(13.5, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
+                  Spacer()
+                }
+                .padding(14)
+                .background(Color.white.opacity(0.7))
+                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
+                .cornerRadius(12)
+              }
+            }
+          }
+          .padding(20)
+        }
+      }
+      .navigationTitle("Invite to which group?")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .navigationBarTrailing) {
+          Button("Cancel") { dismiss() }
+        }
+      }
+    }
+    .presentationDetents([.medium])
+  }
+}
+
+// ── System share sheet wrapper -- SwiftUI's ShareLink can't be triggered
+// programmatically after an async fetch (it's a tap-to-share button, see
+// GamesView's pick-image share for that pattern); the invite link only
+// exists after createInvite() returns, so this goes through
+// UIActivityViewController directly instead. ─────────────────────────────
+private struct ActivityShareSheet: UIViewControllerRepresentable {
+  let activityItems: [Any]
+
+  func makeUIViewController(context: Context) -> UIActivityViewController {
+    UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+  }
+
+  func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

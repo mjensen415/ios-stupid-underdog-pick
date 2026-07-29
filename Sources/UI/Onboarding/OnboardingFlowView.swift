@@ -12,6 +12,7 @@ struct OnboardingFlowView: View {
   @State private var step = 1
   @State private var teams: [Team] = []
   @State private var search = ""
+  @State private var activeConference: String?
   @State private var selectedTeamId: UUID?
   @State private var existingPick: Pick?
   @State private var season: Int?
@@ -19,6 +20,25 @@ struct OnboardingFlowView: View {
   @State private var saving = false
 
   private var haptic: UISelectionFeedbackGenerator { UISelectionFeedbackGenerator() }
+
+  // Mirrors web's CONFERENCE_ORDER (src/hooks/useCfbNews.ts) so the
+  // drill-down reads the same on both platforms -- Power 4 + notable
+  // Group of 5 first, National catch-all last.
+  private static let conferenceOrder = [
+    "SEC", "Big Ten", "Big 12", "ACC",
+    "American Athletic", "Mountain West", "Sun Belt", "Conference USA", "MAC", "Independent",
+    "National",
+  ]
+
+  private var teamsByConference: [String: [Team]] {
+    Dictionary(grouping: teams) { $0.conference ?? "Independent" }
+  }
+
+  private var searchResults: [Team] {
+    let q = search.trimmingCharacters(in: .whitespaces).lowercased()
+    guard !q.isEmpty else { return [] }
+    return teams.filter { $0.name.lowercased().contains(q) }
+  }
 
   var body: some View {
     ZStack {
@@ -69,23 +89,21 @@ struct OnboardingFlowView: View {
         if let s = season, let w = week {
           existingPick = try? await PicksService(client: client).myPick(season: s, week: w)
         }
-        teams = try await loadTeams(search: "")
+        teams = try await loadTeams()
       } catch {
-        teams = (try? await loadTeams(search: "")) ?? []
+        teams = (try? await loadTeams()) ?? []
       }
     }
   }
 
-  private func loadTeams(search: String) async throws -> [Team] {
-    // .order/.limit return PostgrestTransformBuilder, which .ilike isn't
-    // defined on -- filters have to chain first while it's still a
-    // PostgrestFilterBuilder, transforms applied last.
-    var filterQuery = client.from("teams").select("id, name, short_name, logo_url").eq("sport", value: "cfb")
-    let trimmed = search.trimmingCharacters(in: .whitespaces)
-    if !trimmed.isEmpty {
-      filterQuery = filterQuery.ilike("name", pattern: "%\(trimmed)%")
-    }
-    let res = try await filterQuery.order("name").limit(30).execute()
+  // Full CFB team set, fetched once -- small enough (~130 rows) to group
+  // client-side by conference for the drill-down rather than paginate.
+  private func loadTeams() async throws -> [Team] {
+    let res = try await client.from("teams")
+      .select("id, name, short_name, logo_url, conference")
+      .eq("sport", value: "cfb")
+      .order("name")
+      .execute()
     return try JSONDecoder().decode([Team].self, from: res.data)
   }
 
@@ -98,46 +116,14 @@ struct OnboardingFlowView: View {
 
       HStack(spacing: 8) {
         Image(systemName: "magnifyingglass").foregroundColor(BoldTheme.Colors.textFaint)
-        TextField("Search teams…", text: $search)
+        TextField("Or search for a team…", text: $search)
           .font(BoldTheme.Fonts.body(14))
-          .onChange(of: search) { _, newValue in
-            Task { teams = (try? await loadTeams(search: newValue)) ?? teams }
-          }
       }
       .padding(10)
       .background(Color.white.opacity(0.6))
       .cornerRadius(8)
 
-      ScrollView {
-        VStack(spacing: 0) {
-          ForEach(teams) { t in
-            Button {
-              haptic.selectionChanged()
-              selectedTeamId = t.id
-              Task { try? await ProfilesService(client: client).setFavoriteTeam(t.id) }
-            } label: {
-              HStack(spacing: 10) {
-                AsyncImage(url: t.logo_url.flatMap { URL(string: $0) }) { phase in
-                  if case .success(let img) = phase { img.resizable().scaledToFit() }
-                  else { Circle().fill(BoldTheme.Colors.track) }
-                }
-                .frame(width: 24, height: 24)
-                Text(t.name).font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Colors.text)
-                Spacer()
-                if selectedTeamId == t.id {
-                  Image(systemName: "checkmark").foregroundColor(BoldTheme.Colors.green)
-                }
-              }
-              .padding(.vertical, 10).padding(.horizontal, 4)
-              .background(selectedTeamId == t.id ? BoldTheme.Colors.green.opacity(0.1) : Color.clear)
-            }
-            Divider().opacity(0.3)
-          }
-        }
-      }
-      .frame(maxHeight: 220)
-      .background(Color.white.opacity(0.4))
-      .cornerRadius(8)
+      teamPickerList
 
       Button {
         step = 2
@@ -146,6 +132,87 @@ struct OnboardingFlowView: View {
       }
       .buttonStyle(GoldButtonStyle())
     }
+  }
+
+  private func teamRow(_ t: Team) -> some View {
+    Button {
+      haptic.selectionChanged()
+      selectedTeamId = t.id
+      Task { try? await ProfilesService(client: client).setFavoriteTeam(t.id) }
+    } label: {
+      HStack(spacing: 10) {
+        AsyncImage(url: t.logo_url.flatMap { URL(string: $0) }) { phase in
+          if case .success(let img) = phase { img.resizable().scaledToFit() }
+          else { Circle().fill(BoldTheme.Colors.track) }
+        }
+        .frame(width: 24, height: 24)
+        Text(t.name).font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Colors.text)
+        Spacer()
+        if selectedTeamId == t.id {
+          Image(systemName: "checkmark").foregroundColor(BoldTheme.Colors.green)
+        }
+      }
+      .padding(.vertical, 10).padding(.horizontal, 4)
+      .background(selectedTeamId == t.id ? BoldTheme.Colors.green.opacity(0.1) : Color.clear)
+    }
+  }
+
+  // Search flattens across every conference for people who already know
+  // the name; otherwise it's a two-level drill-down (conference, then team
+  // within it) instead of one long flat list.
+  @ViewBuilder private var teamPickerList: some View {
+    ScrollView {
+      VStack(spacing: 0) {
+        if !search.trimmingCharacters(in: .whitespaces).isEmpty {
+          ForEach(searchResults) { t in
+            teamRow(t)
+            Divider().opacity(0.3)
+          }
+          if searchResults.isEmpty {
+            Text("No teams found.")
+              .font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textFaint)
+              .padding(.vertical, 16)
+          }
+        } else if let activeConference {
+          Button {
+            self.activeConference = nil
+          } label: {
+            HStack(spacing: 4) {
+              Image(systemName: "chevron.left")
+              Text(activeConference)
+            }
+            .font(BoldTheme.Fonts.body(12, weight: .semibold))
+            .foregroundColor(BoldTheme.Colors.green)
+          }
+          .padding(.vertical, 8).padding(.horizontal, 4)
+          .frame(maxWidth: .infinity, alignment: .leading)
+
+          ForEach(teamsByConference[activeConference] ?? []) { t in
+            teamRow(t)
+            Divider().opacity(0.3)
+          }
+        } else {
+          ForEach(Self.conferenceOrder.filter { !(teamsByConference[$0] ?? []).isEmpty }, id: \.self) { conf in
+            Button {
+              activeConference = conf
+            } label: {
+              HStack {
+                Text(conf).font(BoldTheme.Fonts.body(14, weight: .semibold)).foregroundColor(BoldTheme.Colors.text)
+                Spacer()
+                Text("\(teamsByConference[conf]?.count ?? 0)")
+                  .font(BoldTheme.Fonts.mono(11)).foregroundColor(BoldTheme.Colors.textFaint)
+                Image(systemName: "chevron.right").foregroundColor(BoldTheme.Colors.textFaint)
+              }
+              .padding(.vertical, 10).padding(.horizontal, 4)
+            }
+            Divider().opacity(0.3)
+          }
+        }
+      }
+    }
+    .frame(maxHeight: 220)
+    .background(Color.white.opacity(0.4))
+    .cornerRadius(8)
   }
 
   @ViewBuilder private var pickStep: some View {

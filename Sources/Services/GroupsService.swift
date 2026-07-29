@@ -108,20 +108,33 @@ struct GroupsService {
     try await invoke("groups-members", method: .get, query: [URLQueryItem(name: "slug", value: slug)])
   }
 
-  /// Direct table query, not an edge function -- mirrors src/lib/api/groups.ts's
-  /// fetchDiscoverGroups exactly (same columns, same member-count join, same
-  /// includePrivate/limit knobs), which was itself extracted from a query that
-  /// used to live inline in AllGroupsSidebar.tsx/GroupsListViewModel on both platforms.
+  /// Public-groups-only path goes through a SECURITY DEFINER RPC -- mirrors
+  /// src/lib/api/groups.ts's fetchDiscoverGroups fix exactly. The anon/
+  /// authenticated client has no table-level SELECT grant on groups/
+  /// group_members, so a direct table query silently returned nothing for
+  /// logged-out callers. See migration add_get_discover_groups_rpc.
+  /// includePrivate stays supported (no current iOS caller uses it, but web's
+  /// AllGroupsSidebar does) via the original direct-table path, which is
+  /// fine for authenticated admins who do have table SELECT grants.
   func fetchDiscoverGroups(includePrivate: Bool = false, limit: Int = 20) async throws -> [DiscoverGroup] {
-    let filter = client
+    if !includePrivate {
+      struct Params: Encodable { let p_limit: Int }
+      let res = try await client
+        .rpc("get_discover_groups", params: Params(p_limit: limit))
+        .execute()
+      struct Row: Decodable { let id: UUID; let name: String; let slug: String; let avatar_url: String?; let member_count: Int }
+      let rows = try JSONDecoder().decode([Row].self, from: res.data)
+      return rows.map {
+        DiscoverGroup(id: $0.id, name: $0.name, slug: $0.slug, avatar_url: $0.avatar_url, is_private: false, member_count: $0.member_count)
+      }
+    }
+
+    let res = try await client
       .from("groups")
       .select("id, name, slug, avatar_url, is_private")
-    let res: PostgrestResponse<Void>
-    if includePrivate {
-      res = try await filter.order("created_at", ascending: false).limit(limit).execute()
-    } else {
-      res = try await filter.eq("is_private", value: false).order("created_at", ascending: false).limit(limit).execute()
-    }
+      .order("created_at", ascending: false)
+      .limit(limit)
+      .execute()
 
     struct Row: Decodable { let id: UUID; let name: String; let slug: String; let avatar_url: String?; let is_private: Bool }
     let rows = try JSONDecoder().decode([Row].self, from: res.data)

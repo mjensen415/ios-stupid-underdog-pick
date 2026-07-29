@@ -5,5 +5,6 @@ struct Team: Codable, Identifiable, Equatable {
   let name: String
   let short_name: String
   let logo_url: String?
+  let conference: String?
 }
 
