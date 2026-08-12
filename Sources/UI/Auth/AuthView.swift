@@ -32,7 +32,7 @@ struct AuthView: View {
             .shadow(color: .black.opacity(0.4), radius: 10, y: 8)
             .padding(.bottom, 22)
 
-          Text(mode == .signin ? "WELCOME BACK,\nDEGENERATE." : "PICK THE\nDOG.")
+          Text(mode == .signin ? "BACK FOR\nMORE." : "PICK THE\nDOG.")
             .font(BoldTheme.Fonts.display(40))
             .lineSpacing(-4)
             .foregroundColor(BoldTheme.Colors.text)
