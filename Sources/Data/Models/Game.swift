@@ -20,8 +20,13 @@ public struct Game: Decodable, Identifiable {
 
   public enum CodingKeys: String, CodingKey {
     case id, season, week, status, sport
-    case homeTeam = "home_team"
-    case awayTeam = "away_team"
+    // Sourced from v_games_named's home_name/away_name (not the raw games
+    // table's home_team/away_team) -- App Store 4.1(a): that view already
+    // resolves NFL rows to city-only names (e.g. "Buffalo" not "Buffalo
+    // Bills"), so reading through it here keeps iOS consistent with web
+    // without duplicating the city-vs-mascot logic client-side.
+    case homeTeam = "home_name"
+    case awayTeam = "away_name"
     case homeTeamId = "home_team_id"
     case awayTeamId = "away_team_id"
     case favoriteTeamId = "favorite_team_id"

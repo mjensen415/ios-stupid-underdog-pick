@@ -303,7 +303,7 @@ struct HomeView: View {
         Button {
           sport = s
         } label: {
-          Text(s == .cfb ? "🏈 CFB" : "🏈 NFL")
+          Text(s == .cfb ? "🏈 CFB" : "🏈 PRO BALL")
             .font(BoldTheme.Fonts.body(13, weight: .bold))
             .foregroundColor(active ? BoldTheme.Colors.text : BoldTheme.Colors.textDim)
             .frame(maxWidth: .infinity)
@@ -318,25 +318,6 @@ struct HomeView: View {
     .background(Color(hex: 0x16241B).opacity(0.07))
     .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
     .cornerRadius(13)
-    // The BETA badge must overlay the OUTER container, after its own
-    // cornerRadius -- an overlay nested inside a clipped child (e.g. on the
-    // NFL button itself, inside this same cornerRadius(13)) gets its
-    // above-the-row portion clipped flush by that corner radius, since
-    // SwiftUI's .cornerRadius() clips all descendant content to its shape.
-    // (This was the actual bug -- confirmed from a screenshot showing the
-    // badge's top sliced off flush with the toggle's rounded background.)
-    .overlay(alignment: .topTrailing) {
-      Text("BETA")
-        .font(BoldTheme.Fonts.mono(8, weight: .bold))
-        .tracking(0.4)
-        .foregroundColor(BoldTheme.Colors.text)
-        .padding(.horizontal, 5)
-        .padding(.vertical, 2)
-        .background(BoldTheme.Colors.gold)
-        .clipShape(Capsule())
-        .shadow(color: Color(hex: 0x142A1C).opacity(0.25), radius: 3, y: 1)
-        .offset(x: -2, y: -8)
-    }
     .padding(.bottom, 20)
   }
 

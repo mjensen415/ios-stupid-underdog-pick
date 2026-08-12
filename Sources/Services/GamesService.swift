@@ -6,10 +6,11 @@ struct GamesService {
   let client: SupabaseClient
 
   func fetch(season: Int, week: Int, sport: String = "cfb") async throws -> [Game] {
+    // v_games_named, not the raw games table -- see Game.CodingKeys for why.
     let res = try await client
-      .from("games")
+      .from("v_games_named")
       .select("""
-        id, season, week, home_team, away_team, home_team_id, away_team_id, favorite_team_id, start_time, betting_line, latest_spread, picks_locked, sport
+        id, season, week, home_name, away_name, home_team_id, away_team_id, favorite_team_id, start_time, betting_line, latest_spread, picks_locked, sport
       """)
       .eq("season", value: season)
       .eq("week", value: week)
