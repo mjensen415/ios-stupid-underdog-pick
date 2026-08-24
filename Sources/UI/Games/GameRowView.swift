@@ -29,11 +29,16 @@ struct GameRowView: View {
     isHomeFavorite ? game.awayTeamId : game.homeTeamId
   }
 
+  // Games span multiple days within a single week, so time alone isn't
+  // enough to tell them apart at a glance -- weekday + date on one line,
+  // kickoff time on the next.
   private var kickoffText: String {
-    let f = DateFormatter()
-    f.timeStyle = .short
-    f.dateStyle = .none
-    return f.string(from: game.startTime)
+    let day = DateFormatter()
+    day.dateFormat = "EEE M/d"
+    let time = DateFormatter()
+    time.timeStyle = .short
+    time.dateStyle = .none
+    return "\(day.string(from: game.startTime))\n\(time.string(from: game.startTime))"
   }
 
   var body: some View {
@@ -41,7 +46,7 @@ struct GameRowView: View {
       teamBlock(name: leftTeamName, logo: logoFor(leftTeamId))
 
       VStack(spacing: 4) {
-        Text(kickoffText).font(BoldTheme.Fonts.mono(12)).foregroundColor(BoldTheme.Colors.textFaint)
+        Text(kickoffText).font(BoldTheme.Fonts.mono(12)).foregroundColor(BoldTheme.Colors.textFaint).multilineTextAlignment(.center)
         if let bl = game.bettingLine, !bl.isEmpty {
           Text(bl).font(BoldTheme.Fonts.mono(13)).foregroundColor(BoldTheme.Colors.goldDeep)
         } else if let sp = game.underdogSpread {

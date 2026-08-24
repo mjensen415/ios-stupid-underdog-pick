@@ -142,6 +142,11 @@ final class GamesViewModel: ObservableObject {
       flashToast("Picked \(g.awayTeam ?? "") @ \(g.homeTeam ?? "")")
       Haptics.success()
       pickCelebrationTrigger = UUID()
+      // They just used the swipe gesture successfully -- the hint banner
+      // has nothing left to teach them. Written directly to UserDefaults
+      // (shared key with GamesView's @AppStorage) since the ViewModel has
+      // no view-level binding to flip.
+      UserDefaults.standard.set(true, forKey: GamesView.swipeHintDefaultsKey)
       #if DEBUG
       print("[pickUnderdog] SUCCESS, toast=\(toastMessage ?? "")")
       #endif
@@ -179,6 +184,14 @@ struct GamesView: View {
   @EnvironmentObject var appState: AppState
   @State private var shareImage: Image?
 
+  // Picking here is a swipe-left gesture on the row (see .swipeActions
+  // below) with no other on-screen affordance -- feedback showed people
+  // land on this screen and don't discover it. One-time dismissible
+  // banner, shown until dismissed or until they successfully make a pick
+  // (whichever first -- see GamesViewModel.pickUnderdog).
+  static let swipeHintDefaultsKey = "hasSeenSwipeToPickHint"
+  @AppStorage(GamesView.swipeHintDefaultsKey) private var hasSeenSwipeHint = false
+
   private var header: some View {
     HStack {
       SupIcon(variant: .monogram)
@@ -192,7 +205,12 @@ struct GamesView: View {
           }
         }
       } label: {
-        Label("Week \(formatWeekLabel(viewModel.selectedWeek))", systemImage: "calendar")
+        // CFB and Pro Ball run on separate week numbering (offset by
+        // roughly a week), so the sport always rides along with the
+        // week number here rather than leaving it to the sport toggle
+        // below to imply -- otherwise switching sports and seeing the
+        // week number change on its own reads as a bug, not a feature.
+        Label("\(viewModel.sport == "cfb" ? "CFB" : "PRO BALL") · Week \(formatWeekLabel(viewModel.selectedWeek))", systemImage: "calendar")
           .font(BoldTheme.Fonts.body(14, weight: .semibold))
           .foregroundColor(BoldTheme.Colors.goldDeep)
       }
@@ -288,6 +306,34 @@ struct GamesView: View {
           shareImage = Image(uiImage: uiImage)
         }
       }
+    }
+  }
+
+  @ViewBuilder
+  private var swipeHintBanner: some View {
+    if !hasSeenSwipeHint {
+      HStack(spacing: 10) {
+        Image(systemName: "hand.draw.fill")
+          .foregroundColor(BoldTheme.Colors.goldDeep)
+        Text("Swipe left on a game to lock in that underdog.")
+          .font(BoldTheme.Fonts.body(13, weight: .medium))
+          .foregroundColor(BoldTheme.Colors.text)
+        Spacer()
+        Button {
+          withAnimation { hasSeenSwipeHint = true }
+        } label: {
+          Image(systemName: "xmark")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundColor(BoldTheme.Colors.textFaint)
+        }
+      }
+      .padding(12)
+      .background(BoldTheme.Colors.gold.opacity(0.12))
+      .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(BoldTheme.Colors.goldDeep.opacity(0.3), lineWidth: 1))
+      .cornerRadius(10)
+      .padding(.horizontal, 20)
+      .padding(.bottom, 8)
+      .transition(.opacity.combined(with: .move(edge: .top)))
     }
   }
 
@@ -399,6 +445,7 @@ struct GamesView: View {
       VStack(spacing: 0) {
         header
         sportToggle
+        swipeHintBanner
         pickedBanner
           .transition(.opacity.combined(with: .move(edge: .top)))
         content
