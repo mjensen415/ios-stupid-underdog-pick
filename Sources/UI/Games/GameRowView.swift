@@ -10,6 +10,15 @@ struct GameRowView: View {
     return fav == game.homeTeamId
   }
 
+  // Same condition GamesViewModel.canPick gates on -- CFB lines mostly
+  // don't post until close to kickoff, so most of a week's games sit in
+  // this state for days. Previously the row looked identical to a
+  // pickable one and only revealed "actually can't pick this" once you
+  // swiped and saw the action button greyed out.
+  private var hasLine: Bool {
+    game.derivedFavoriteTeamId != nil
+  }
+
   // Favorite/underdog decides left-vs-right; home/away is a separate axis
   // (the home team can land on either side depending on who's favored) --
   // whichever slot is showing the home team gets the "@" prefix, standard
@@ -52,7 +61,7 @@ struct GameRowView: View {
         } else if let sp = game.underdogSpread {
           Text(String(format: "%.1f", sp)).font(BoldTheme.Fonts.mono(13)).foregroundColor(BoldTheme.Colors.goldDeep)
         } else {
-          Text("—").font(BoldTheme.Fonts.mono(13)).foregroundColor(BoldTheme.Colors.textFaint)
+          Text("LINE\nTBD").font(BoldTheme.Fonts.mono(10, weight: .semibold)).foregroundColor(BoldTheme.Colors.textFaint).multilineTextAlignment(.center)
         }
       }
       .frame(maxWidth: .infinity)
@@ -67,6 +76,7 @@ struct GameRowView: View {
         }
       }
     }
+    .opacity(hasLine || isSelected ? 1 : 0.55)
     .padding(.vertical, 14)
     .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
     .listRowSeparatorTint(BoldTheme.Colors.border)

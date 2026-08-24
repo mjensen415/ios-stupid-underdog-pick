@@ -86,6 +86,21 @@ final class GamesViewModel: ObservableObject {
     }
   }
 
+  /// NFL lines are effectively guaranteed to post (just not synced yet at
+  /// any given moment) -- NFL keeps showing every game, with GameRowView's
+  /// muted "LINE TBD" treatment covering that brief gap. CFB is different:
+  /// a real chunk of each week's slate genuinely won't have a line for
+  /// days, so per explicit product call, those CFB games are hidden
+  /// entirely rather than shown disabled. Locked/finished games stay
+  /// visible either way -- this only hides upcoming CFB games nobody could
+  /// pick yet regardless.
+  var visibleGames: [Game] {
+    guard sport == "cfb" else { return games }
+    return games.filter { g in
+      g.derivedFavoriteTeamId != nil || g.picksLocked == true || g.status == "final"
+    }
+  }
+
   func canPick(_ g: Game) -> Bool {
     if g.picksLocked == true {
       #if DEBUG
@@ -376,10 +391,20 @@ struct GamesView: View {
         .foregroundColor(BoldTheme.Colors.textDim)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(BoldTheme.Colors.bgPage)
+    } else if viewModel.visibleGames.isEmpty {
+      // Games exist for the week but every CFB one is still hidden
+      // pending a line -- distinct from the "nothing scheduled" case
+      // above so this doesn't read as a bug.
+      Text("Lines haven't posted for this week yet. Check back soon.")
+        .foregroundColor(BoldTheme.Colors.textDim)
+        .multilineTextAlignment(.center)
+        .padding(.horizontal, 32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(BoldTheme.Colors.bgPage)
     } else {
       List {
         Section {
-          ForEach(viewModel.games) { g in
+          ForEach(viewModel.visibleGames) { g in
             GameRowView(
               game: g,
               logoFor: { id in viewModel.logoURL(for: id) },
