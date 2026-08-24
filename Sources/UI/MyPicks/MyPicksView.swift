@@ -134,7 +134,7 @@ struct MyPicksView: View {
               }
             }
           } header: {
-            Text(verbatim: "WEEK \(week)")
+            Text(verbatim: "WEEK \(formatWeekLabel(week))")
               .font(BoldTheme.Fonts.mono(11))
               .tracking(0.9)
               .foregroundColor(BoldTheme.Colors.textFaint)
@@ -160,10 +160,11 @@ struct MyPicksView: View {
         return
       }
 
+      // v_games_named, not the raw games table -- see Game.CodingKeys for why.
       let res = try await client
-        .from("games")
+        .from("v_games_named")
         .select("""
-          id, season, week, status, home_team, away_team, home_team_id, away_team_id, favorite_team_id, start_time, betting_line, latest_spread, picks_locked, home_points, away_points, sport
+          id, season, week, status, home_name, away_name, home_team_id, away_team_id, favorite_team_id, start_time, betting_line, latest_spread, picks_locked, home_points, away_points, sport
         """)
         .in("id", values: gameIds)
         .execute()
@@ -187,14 +188,13 @@ struct MyPicksView: View {
   }
 }
 
-// One row per pick: outcome badge + who they picked + spread, tap to expand
-// into the full GameRowView card (matchup, kickoff, logos) without leaving
-// the list.
+// One row per pick: outcome badge + the picked team's logo + who they
+// picked + spread. Flat, not a disclosure -- there's nothing more useful
+// to reveal by expanding into the full matchup card here.
 private struct PickLedgerRow: View {
   let pick: Pick
   let game: Game
   let logoFor: (UUID?) -> URL?
-  @State private var expanded = false
 
   private var outcome: Game.PickOutcome { game.outcome(forPickedTeamId: pick.picked_team_id) }
   private var pickedIsHome: Bool { pick.picked_team_id == game.homeTeamId }
@@ -225,55 +225,47 @@ private struct PickLedgerRow: View {
   }
 
   var body: some View {
-    VStack(spacing: 0) {
-      Button {
-        withAnimation(.easeInOut(duration: 0.2)) { expanded.toggle() }
-      } label: {
-        HStack(spacing: 12) {
-          Circle()
-            .fill(outcomeColor.opacity(0.15))
-            .frame(width: 30, height: 30)
-            .overlay(
-              Image(systemName: outcomeIcon)
-                .font(.system(size: 13, weight: .bold))
-                .foregroundColor(outcomeColor)
-            )
-
-          VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 6) {
-              Text(pickedName)
-                .font(BoldTheme.Fonts.body(14, weight: .semibold))
-                .foregroundColor(BoldTheme.Colors.text)
-              if isUnderdogPick, let sp = game.underdogSpread {
-                Text(verbatim: "+\(String(format: "%.1f", sp))")
-                  .font(BoldTheme.Fonts.mono(12))
-                  .foregroundColor(BoldTheme.Colors.goldDeep)
-              }
-            }
-            Text(verbatim: "vs \(opponentName)")
-              .font(BoldTheme.Fonts.body(12))
-              .foregroundColor(BoldTheme.Colors.textFaint)
-          }
-
-          Spacer()
-
-          Text(outcomeLabel)
-            .font(BoldTheme.Fonts.mono(10, weight: .semibold))
-            .tracking(0.6)
+    HStack(spacing: 12) {
+      Circle()
+        .fill(outcomeColor.opacity(0.15))
+        .frame(width: 30, height: 30)
+        .overlay(
+          Image(systemName: outcomeIcon)
+            .font(.system(size: 13, weight: .bold))
             .foregroundColor(outcomeColor)
+        )
 
-          Image(systemName: expanded ? "chevron.up" : "chevron.down")
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundColor(BoldTheme.Colors.textFaint)
+      AsyncImage(url: logoFor(pick.picked_team_id)) { phase in
+        switch phase {
+        case .success(let img): img.resizable().scaledToFit()
+        default: Image(systemName: "football").resizable().scaledToFit().opacity(0.3).foregroundColor(BoldTheme.Colors.textFaint)
         }
-        .padding(.vertical, 10)
-        .contentShape(Rectangle())
       }
-      .buttonStyle(.plain)
+      .frame(width: 28, height: 28)
 
-      if expanded {
-        GameRowView(game: game, logoFor: logoFor, isSelected: true)
+      VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: 6) {
+          Text(pickedName)
+            .font(BoldTheme.Fonts.body(14, weight: .semibold))
+            .foregroundColor(BoldTheme.Colors.text)
+          if isUnderdogPick, let sp = game.underdogSpread {
+            Text(verbatim: "+\(String(format: "%.1f", sp))")
+              .font(BoldTheme.Fonts.mono(12))
+              .foregroundColor(BoldTheme.Colors.goldDeep)
+          }
+        }
+        Text(verbatim: "vs \(opponentName)")
+          .font(BoldTheme.Fonts.body(12))
+          .foregroundColor(BoldTheme.Colors.textFaint)
       }
+
+      Spacer()
+
+      Text(outcomeLabel)
+        .font(BoldTheme.Fonts.mono(10, weight: .semibold))
+        .tracking(0.6)
+        .foregroundColor(outcomeColor)
     }
+    .padding(.vertical, 10)
   }
 }

@@ -29,6 +29,15 @@ final class GamesViewModel: ObservableObject {
     return s
   }
 
+  /// Games with no line (or a 0 line -- no favorite means no underdog to
+  /// pick) don't show up at all, matching web's IndexBold filter. Keeps
+  /// the currently-picked game visible even if its line later goes
+  /// missing/zero, so a confirmed pick never disappears out from under
+  /// someone.
+  var visibleGames: [Game] {
+    games.filter { $0.derivedFavoriteTeamId != nil || $0.id == selectedGameId }
+  }
+
   private func flashToast(_ message: String) {
     toastDismissTask?.cancel()
     toastMessage = message
@@ -138,7 +147,7 @@ final class GamesViewModel: ObservableObject {
       #endif
     } catch {
       selectedGameId = previous
-      flashToast("Couldn’t save pick: \(error.localizedDescription)")
+      flashToast("Couldn’t save pick: \(friendlyPickErrorMessage(error))")
       #if DEBUG
       print("[pickUnderdog] SAVE FAILED: \(error)")
       #endif
@@ -179,11 +188,11 @@ struct GamesView: View {
       Menu {
         ForEach(viewModel.availableWeeks, id: \.self) { wk in
           Button { viewModel.selectedWeek = wk } label: {
-            Label("Week \(wk)", systemImage: wk == viewModel.selectedWeek ? "checkmark" : "circle")
+            Label("Week \(formatWeekLabel(wk))", systemImage: wk == viewModel.selectedWeek ? "checkmark" : "circle")
           }
         }
       } label: {
-        Label("Week \(viewModel.selectedWeek)", systemImage: "calendar")
+        Label("Week \(formatWeekLabel(viewModel.selectedWeek))", systemImage: "calendar")
           .font(BoldTheme.Fonts.body(14, weight: .semibold))
           .foregroundColor(BoldTheme.Colors.goldDeep)
       }
@@ -325,7 +334,7 @@ struct GamesView: View {
         .foregroundColor(BoldTheme.Colors.textDim)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(BoldTheme.Colors.bgPage)
-    } else if viewModel.games.isEmpty {
+    } else if viewModel.visibleGames.isEmpty {
       Text("No games for this week yet.")
         .foregroundColor(BoldTheme.Colors.textDim)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -333,7 +342,7 @@ struct GamesView: View {
     } else {
       List {
         Section {
-          ForEach(viewModel.games) { g in
+          ForEach(viewModel.visibleGames) { g in
             GameRowView(
               game: g,
               logoFor: { id in viewModel.logoURL(for: id) },

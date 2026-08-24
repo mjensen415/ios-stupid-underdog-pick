@@ -263,7 +263,7 @@ struct HomeView: View {
         .shadow(color: Color(hex: 0x142A1C).opacity(0.3), radius: 6, y: 4)
 
       VStack(alignment: .leading, spacing: 2) {
-        Text(verbatim: viewModel.isOffseason ? "OFFSEASON" : "WEEK \(viewModel.week ?? 0) · \(sport.rawValue.uppercased()) \(viewModel.season ?? 0)")
+        Text(verbatim: viewModel.isOffseason ? "OFFSEASON" : "WEEK \(formatWeekLabel(viewModel.week ?? 0)) · \(sport.rawValue.uppercased()) \(viewModel.season ?? 0)")
           .font(BoldTheme.Fonts.mono(10, weight: .semibold))
           .foregroundColor(BoldTheme.Colors.green)
         HStack(spacing: 8) {

@@ -9,11 +9,11 @@ struct WeekPicker: View {
         Button {
           selected = wk
         } label: {
-          Label("Week \(wk)", systemImage: wk == selected ? "checkmark" : "circle")
+          Label("Week \(formatWeekLabel(wk))", systemImage: wk == selected ? "checkmark" : "circle")
         }
       }
     } label: {
-      Label("Week \(selected)", systemImage: "calendar")
+      Label("Week \(formatWeekLabel(selected))", systemImage: "calendar")
         .font(.subheadline.bold())
     }
   }

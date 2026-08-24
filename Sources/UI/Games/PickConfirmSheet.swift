@@ -17,7 +17,7 @@ struct PickConfirmSheet: View {
     NavigationStack {
       VStack(alignment: .leading, spacing: 16) {
         Text("Confirm Pick").font(.title2).bold()
-        Text(verbatim: "Week \(game.week), Season \(game.season)")
+        Text(verbatim: "Week \(formatWeekLabel(game.week)), Season \(game.season)")
           .font(.subheadline)
           .foregroundStyle(.secondary)
 
@@ -65,7 +65,7 @@ struct PickConfirmSheet: View {
       dismiss()
     } catch {
       onComplete(false, error)
-      errorMessage = error.localizedDescription
+      errorMessage = friendlyPickErrorMessage(error)
     }
   }
 

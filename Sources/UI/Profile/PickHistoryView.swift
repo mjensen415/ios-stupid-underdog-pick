@@ -106,7 +106,7 @@ struct PickHistoryView: View {
                 }
               }
             } header: {
-              Text(verbatim: "WEEK \(week)")
+              Text(verbatim: "WEEK \(formatWeekLabel(week))")
                 .font(BoldTheme.Fonts.mono(11))
                 .tracking(0.9)
                 .foregroundColor(BoldTheme.Colors.textFaint)
@@ -142,10 +142,11 @@ struct PickHistoryView: View {
         return
       }
 
+      // v_games_named, not the raw games table -- see Game.CodingKeys for why.
       let res = try await client
-        .from("games")
+        .from("v_games_named")
         .select("""
-          id, season, week, status, home_team, away_team, home_team_id, away_team_id, favorite_team_id, start_time, betting_line, latest_spread, picks_locked, home_points, away_points, sport
+          id, season, week, status, home_name, away_name, home_team_id, away_team_id, favorite_team_id, start_time, betting_line, latest_spread, picks_locked, home_points, away_points, sport
         """)
         .in("id", values: gameIds)
         .execute()
