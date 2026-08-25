@@ -29,8 +29,19 @@ struct PickHistoryView: View {
     }
   }
 
-  private var picksByWeek: [Int: [Pick]] {
-    Dictionary(grouping: seasonPicks, by: { $0.week })
+  // CFB and Pro Ball run on offset week numbering (see formatWeekLabel),
+  // so grouping by raw week alone can silently interleave a CFB pick and
+  // an NFL pick from different weeks under one ambiguous "WEEK 3" header.
+  // Sport comes from the joined game, not Pick itself (picks don't carry
+  // sport directly).
+  private struct WeekGroupKey: Hashable { let sport: String; let week: Int }
+
+  private func sport(for pick: Pick) -> String {
+    gamesById[pick.game_id]?.sport ?? "cfb"
+  }
+
+  private var picksByWeek: [WeekGroupKey: [Pick]] {
+    Dictionary(grouping: seasonPicks, by: { WeekGroupKey(sport: sport(for: $0), week: $0.week) })
   }
 
   var body: some View {
@@ -94,9 +105,12 @@ struct PickHistoryView: View {
           .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
           .listRowSeparator(.hidden)
 
-          ForEach(picksByWeek.keys.sorted(by: >), id: \.self) { week in
+          ForEach(
+            picksByWeek.keys.sorted(by: { $0.week != $1.week ? $0.week > $1.week : $0.sport < $1.sport }),
+            id: \.self
+          ) { key in
             Section {
-              ForEach(picksByWeek[week] ?? []) { pick in
+              ForEach(picksByWeek[key] ?? []) { pick in
                 if let game = gamesById[pick.game_id] {
                   GameRowView(
                     game: game,
@@ -106,7 +120,7 @@ struct PickHistoryView: View {
                 }
               }
             } header: {
-              Text(verbatim: "WEEK \(formatWeekLabel(week))")
+              Text(verbatim: "\(key.sport == "nfl" ? "PRO BALL" : "CFB") · WEEK \(formatWeekLabel(key.week))")
                 .font(BoldTheme.Fonts.mono(11))
                 .tracking(0.9)
                 .foregroundColor(BoldTheme.Colors.textFaint)
