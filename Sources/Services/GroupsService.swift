@@ -50,9 +50,9 @@ struct GroupsService {
 
   // MARK: - Group CRUD
 
-  func createGroup(name: String, description: String?, isPrivate: Bool) async throws -> CreateGroupResult {
-    struct Body: Encodable { let name: String; let description: String?; let isPrivate: Bool }
-    return try await invoke("groups-create", body: Body(name: name, description: description, isPrivate: isPrivate))
+  func createGroup(name: String, description: String?, isPrivate: Bool, sport: GroupSport) async throws -> CreateGroupResult {
+    struct Body: Encodable { let name: String; let description: String?; let isPrivate: Bool; let sport: String }
+    return try await invoke("groups-create", body: Body(name: name, description: description, isPrivate: isPrivate, sport: sport.rawValue))
   }
 
   func updateGroup(groupId: UUID, name: String?, description: String?, avatarUrl: String?, isPrivate: Bool?) async throws -> UpdateGroupResult {
@@ -122,21 +122,21 @@ struct GroupsService {
       let res = try await client
         .rpc("get_discover_groups", params: Params(p_limit: limit))
         .execute()
-      struct Row: Decodable { let id: UUID; let name: String; let slug: String; let avatar_url: String?; let member_count: Int }
+      struct Row: Decodable { let id: UUID; let name: String; let slug: String; let avatar_url: String?; let sport: GroupSport; let member_count: Int }
       let rows = try JSONDecoder().decode([Row].self, from: res.data)
       return rows.map {
-        DiscoverGroup(id: $0.id, name: $0.name, slug: $0.slug, avatar_url: $0.avatar_url, is_private: false, member_count: $0.member_count)
+        DiscoverGroup(id: $0.id, name: $0.name, slug: $0.slug, avatar_url: $0.avatar_url, is_private: false, sport: $0.sport, member_count: $0.member_count)
       }
     }
 
     let res = try await client
       .from("groups")
-      .select("id, name, slug, avatar_url, is_private")
+      .select("id, name, slug, avatar_url, is_private, sport")
       .order("created_at", ascending: false)
       .limit(limit)
       .execute()
 
-    struct Row: Decodable { let id: UUID; let name: String; let slug: String; let avatar_url: String?; let is_private: Bool }
+    struct Row: Decodable { let id: UUID; let name: String; let slug: String; let avatar_url: String?; let is_private: Bool; let sport: GroupSport }
     let rows = try JSONDecoder().decode([Row].self, from: res.data)
     guard !rows.isEmpty else { return [] }
 
@@ -152,21 +152,21 @@ struct GroupsService {
     let countMap = Dictionary(grouping: members, by: { $0.group_id }).mapValues { $0.count }
 
     return rows.map { row in
-      DiscoverGroup(id: row.id, name: row.name, slug: row.slug, avatar_url: row.avatar_url, is_private: row.is_private, member_count: countMap[row.id] ?? 0)
+      DiscoverGroup(id: row.id, name: row.name, slug: row.slug, avatar_url: row.avatar_url, is_private: row.is_private, sport: row.sport, member_count: countMap[row.id] ?? 0)
     }
   }
 
-  func fetchGroupLeaderboard(slug: String, scope: String, season: Int, week: Int?) async throws -> GroupLeaderboardResult {
-    var query = [URLQueryItem(name: "slug", value: slug), URLQueryItem(name: "scope", value: scope), URLQueryItem(name: "season", value: "\(season)")]
+  func fetchGroupLeaderboard(slug: String, scope: String, season: Int, week: Int?, sport: String = "cfb") async throws -> GroupLeaderboardResult {
+    var query = [URLQueryItem(name: "slug", value: slug), URLQueryItem(name: "scope", value: scope), URLQueryItem(name: "season", value: "\(season)"), URLQueryItem(name: "sport", value: sport)]
     if let week { query.append(URLQueryItem(name: "week", value: "\(week)")) }
     return try await invoke("groups-leaderboard", method: .get, query: query)
   }
 
   // MARK: - Invites
 
-  func createInvite(groupId: UUID, maxUses: Int?, expiresAt: String?) async throws -> CreateInviteResult {
-    struct Body: Encodable { let groupId: UUID; let maxUses: Int?; let expiresAt: String? }
-    return try await invoke("groups-create-invite", body: Body(groupId: groupId, maxUses: maxUses, expiresAt: expiresAt))
+  func createInvite(groupId: UUID, maxUses: Int?, expiresAt: String?, emails: [String]? = nil) async throws -> CreateInviteResult {
+    struct Body: Encodable { let groupId: UUID; let maxUses: Int?; let expiresAt: String?; let emails: [String]? }
+    return try await invoke("groups-create-invite", body: Body(groupId: groupId, maxUses: maxUses, expiresAt: expiresAt, emails: emails))
   }
 
   func revokeInvite(inviteToken: String) async throws -> GroupMessageResult {

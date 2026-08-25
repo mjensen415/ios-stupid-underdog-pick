@@ -66,8 +66,11 @@ struct GroupsListView: View {
               } else {
                 ForEach(viewModel.myGroups) { group in
                   NavigationLink(destination: GroupDetailView(slug: group.slug)) {
-                    GroupRowView(name: group.name, memberCount: group.member_count, isPrivate: group.is_private, role: group.my_role)
+                    GroupRowView(group: group)
                   }
+                  .buttonStyle(.plain)
+                  .listRowInsets(EdgeInsets(top: 6, leading: 20, bottom: 6, trailing: 20))
+                  .listRowSeparator(.hidden)
                   .listRowBackground(BoldTheme.Colors.bgPage)
                 }
               }
@@ -131,24 +134,45 @@ struct GroupsListView: View {
   }
 }
 
+// Cards, not plain rows -- reads as tappable at a glance, and the
+// standings line surfaces "how am I doing" without opening the group.
 private struct GroupRowView: View {
-  let name: String
-  let memberCount: Int
-  let isPrivate: Bool
-  let role: GroupRole
+  let group: MyGroup
+
+  private var sportLabel: String {
+    switch group.sport {
+    case .cfb: return "CFB"
+    case .nfl: return "PRO BALL"
+    case .both: return "CFB + PRO"
+    }
+  }
 
   var body: some View {
-    HStack(spacing: 12) {
-      AvatarInitials(name: name, size: 40)
-      VStack(alignment: .leading, spacing: 3) {
-        Text(name).font(BoldTheme.Fonts.body(15, weight: .semibold)).foregroundColor(BoldTheme.Colors.text)
-        Text(verbatim: "\(memberCount) member\(memberCount == 1 ? "" : "s")")
-          .font(BoldTheme.Fonts.body(12))
-          .foregroundColor(BoldTheme.Colors.textDim)
+    BoldTheme.GlassCard(radius: 14, padding: 16) {
+      HStack(spacing: 12) {
+        AvatarInitials(name: group.name, size: 40)
+        VStack(alignment: .leading, spacing: 4) {
+          HStack(spacing: 6) {
+            Text(group.name).font(BoldTheme.Fonts.body(15, weight: .semibold)).foregroundColor(BoldTheme.Colors.text)
+            Text(sportLabel)
+              .font(BoldTheme.Fonts.mono(9, weight: .semibold))
+              .tracking(0.4)
+              .foregroundColor(BoldTheme.Colors.textFaint)
+              .padding(.horizontal, 6).padding(.vertical, 2)
+              .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
+          }
+          Text(verbatim: "\(group.member_count) member\(group.member_count == 1 ? "" : "s")")
+            .font(BoldTheme.Fonts.body(12))
+            .foregroundColor(BoldTheme.Colors.textDim)
+          if let line = group.standingsLine {
+            Text(line)
+              .font(BoldTheme.Fonts.body(12, weight: .semibold))
+              .foregroundColor(BoldTheme.Colors.goldDeep)
+          }
+        }
+        Spacer()
+        RoleBadge(role: group.my_role)
       }
-      Spacer()
-      RoleBadge(role: role)
     }
-    .padding(.vertical, 4)
   }
 }

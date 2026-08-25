@@ -8,6 +8,7 @@ fileprivate struct GroupRow: Decodable {
   let avatar_url: String?
   let is_private: Bool
   let description: String?
+  let sport: GroupSport
 }
 
 fileprivate enum DetailTab: Hashable { case leaderboard, members, settings }
@@ -26,6 +27,15 @@ final class GroupDetailViewModel: ObservableObject {
   @Published var season = 2025
   @Published var week = 1
   @Published var toastMessage: String?
+  // Only meaningful (and only shown) when group.sport == .both -- a
+  // single-sport group's board always uses its own sport regardless of
+  // this value, see effectiveLeaderboardSport.
+  @Published var leaderboardSport: GroupSport = .cfb
+
+  fileprivate var effectiveLeaderboardSport: GroupSport {
+    guard let group, group.sport != .both else { return leaderboardSport }
+    return group.sport
+  }
 
   private var client: SupabaseClient?
   let slug: String
@@ -53,11 +63,11 @@ final class GroupDetailViewModel: ObservableObject {
       // (gives role); fall back to a direct public-group lookup otherwise.
       let mine = try await GroupsService(client: client).fetchMyGroups()
       if let match = mine.first(where: { $0.slug == slug }) {
-        group = GroupRow(id: match.group_id, name: match.name, slug: match.slug, avatar_url: match.avatar_url, is_private: match.is_private, description: match.description)
+        group = GroupRow(id: match.group_id, name: match.name, slug: match.slug, avatar_url: match.avatar_url, is_private: match.is_private, description: match.description, sport: match.sport)
         myRole = match.my_role
         memberCount = match.member_count
       } else {
-        let res = try await client.from("groups").select("id, name, slug, avatar_url, is_private, description").eq("slug", value: slug).single().execute()
+        let res = try await client.from("groups").select("id, name, slug, avatar_url, is_private, description, sport").eq("slug", value: slug).single().execute()
         let row = try JSONDecoder().decode(GroupRow.self, from: res.data)
         if row.is_private {
           group = nil
@@ -92,7 +102,8 @@ final class GroupDetailViewModel: ObservableObject {
     guard let client, let group else { return }
     do {
       let result = try await GroupsService(client: client).fetchGroupLeaderboard(
-        slug: group.slug, scope: scope == .week ? "week" : "season", season: season, week: scope == .week ? week : nil
+        slug: group.slug, scope: scope == .week ? "week" : "season", season: season, week: scope == .week ? week : nil,
+        sport: effectiveLeaderboardSport == .nfl ? "nfl" : "cfb"
       )
       leaderboard = result.leaderboard
     } catch {
@@ -149,7 +160,7 @@ final class GroupDetailViewModel: ObservableObject {
     guard let client, let group else { return false }
     do {
       let result = try await GroupsService(client: client).updateGroup(groupId: group.id, name: name, description: description, avatarUrl: nil, isPrivate: isPrivate)
-      self.group = GroupRow(id: group.id, name: name, slug: result.slug, avatar_url: group.avatar_url, is_private: isPrivate, description: description)
+      self.group = GroupRow(id: group.id, name: name, slug: result.slug, avatar_url: group.avatar_url, is_private: isPrivate, description: description, sport: group.sport)
       return true
     } catch {
       errorText = error.localizedDescription
@@ -297,6 +308,12 @@ struct GroupDetailView: View {
 
   private var leaderboardTab: some View {
     VStack(alignment: .leading, spacing: 14) {
+      if viewModel.group?.sport == .both {
+        PillToggle(options: [(label: "CFB", value: GroupSport.cfb), (label: "Pro Ball", value: .nfl)], selection: $viewModel.leaderboardSport)
+          .onChange(of: viewModel.leaderboardSport) { _, _ in
+            Task { await viewModel.loadLeaderboard(scope: leaderboardScope) }
+          }
+      }
       HStack {
         PillToggle(options: [(label: "This Week", value: LeaderboardScope.week), (label: "Season", value: .season)], selection: $leaderboardScope)
           .onChange(of: leaderboardScope) { _, newValue in
@@ -456,6 +473,8 @@ private struct InviteManagementSection: View {
   @ObservedObject var viewModel: GroupDetailViewModel
   @State private var isCreating = false
   @State private var justCreatedLink: String?
+  @State private var justCreatedEmailResults: [InviteEmailResult] = []
+  @State private var emailsInput = ""
 
   var body: some View {
     BoldTheme.GlassCard {
@@ -472,6 +491,17 @@ private struct InviteManagementSection: View {
             .disabled(isCreating)
         }
 
+        // Optional -- leaving this blank still generates a plain shareable
+        // link, same as before this existed.
+        TextField("Email invites (optional, comma-separated)", text: $emailsInput)
+          .font(BoldTheme.Fonts.body(13))
+          .textInputAutocapitalization(.never)
+          .autocorrectionDisabled()
+          .keyboardType(.emailAddress)
+          .padding(10)
+          .background(BoldTheme.Colors.surface)
+          .cornerRadius(10)
+
         if let link = justCreatedLink {
           HStack {
             Text(link).font(BoldTheme.Fonts.mono(12)).foregroundColor(BoldTheme.Colors.text).lineLimit(1)
@@ -483,6 +513,20 @@ private struct InviteManagementSection: View {
             }
           }
           .padding(10).background(BoldTheme.Colors.surface).cornerRadius(10)
+        }
+
+        if !justCreatedEmailResults.isEmpty {
+          VStack(alignment: .leading, spacing: 4) {
+            ForEach(justCreatedEmailResults) { result in
+              HStack {
+                Text(result.email).font(BoldTheme.Fonts.body(12)).foregroundColor(BoldTheme.Colors.textDim).lineLimit(1)
+                Spacer()
+                Text(result.ok ? "Sent" : "Failed")
+                  .font(BoldTheme.Fonts.body(11, weight: .semibold))
+                  .foregroundColor(result.ok ? BoldTheme.Colors.green : .red)
+              }
+            }
+          }
         }
 
         if viewModel.invites.isEmpty {
@@ -520,12 +564,22 @@ private struct InviteManagementSection: View {
     isCreating = true
     defer { isCreating = false }
     do {
-      let result = try await GroupsService(client: client).createInvite(groupId: group.id, maxUses: nil, expiresAt: nil)
+      // Accept commas, newlines, or spaces -- people paste lists in
+      // whatever shape they have them.
+      let emails = emailsInput
+        .split(whereSeparator: { $0 == "," || $0 == "\n" || $0 == " " })
+        .map { $0.trimmingCharacters(in: .whitespaces) }
+        .filter { !$0.isEmpty }
+      let result = try await GroupsService(client: client).createInvite(
+        groupId: group.id, maxUses: nil, expiresAt: nil, emails: emails.isEmpty ? nil : emails
+      )
       // www.stupidunderdogpick.com is the only domain that serves directly
       // with no redirect -- sup.football and the bare stupidunderdogpick.com
       // both redirect at the Vercel domain level, which breaks Apple's
       // no-redirect apple-app-site-association fetch requirement.
       justCreatedLink = "https://www.stupidunderdogpick.com\(result.joinUrl)"
+      justCreatedEmailResults = result.emailResults ?? []
+      emailsInput = ""
       await viewModel.loadInvites()
     } catch {
       viewModel.errorText = error.localizedDescription

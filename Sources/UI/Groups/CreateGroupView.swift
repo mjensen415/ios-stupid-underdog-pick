@@ -8,6 +8,7 @@ struct CreateGroupView: View {
   @State private var name = ""
   @State private var description = ""
   @State private var isPrivate = true
+  @State private var sport: GroupSport = .both
   @State private var isSubmitting = false
   @State private var errorText: String?
 
@@ -25,6 +26,21 @@ struct CreateGroupView: View {
         Section {
           TextField("Description (optional)", text: $description, axis: .vertical)
             .lineLimit(3...6)
+        }
+        Section {
+          Picker("Sport", selection: $sport) {
+            Text("CFB").tag(GroupSport.cfb)
+            Text("Pro Ball").tag(GroupSport.nfl)
+            Text("Both").tag(GroupSport.both)
+          }
+          .pickerStyle(.segmented)
+          Text(
+            sport == .both
+              ? "Members can view either sport's leaderboard."
+              : "This group is scoped to \(sport == .cfb ? "CFB" : "Pro Ball") only."
+          )
+          .font(BoldTheme.Fonts.body(12))
+          .foregroundColor(BoldTheme.Colors.textDim)
         }
         Section {
           Toggle("Private Group", isOn: $isPrivate)
@@ -60,7 +76,8 @@ struct CreateGroupView: View {
       _ = try await GroupsService(client: client).createGroup(
         name: name.trimmingCharacters(in: .whitespaces),
         description: description.isEmpty ? nil : description,
-        isPrivate: isPrivate
+        isPrivate: isPrivate,
+        sport: sport
       )
       await onCreated()
       dismiss()
