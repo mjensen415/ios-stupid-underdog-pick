@@ -4,6 +4,11 @@ struct GameRowView: View {
   let game: Game
   let logoFor: (UUID?) -> URL?
   let isSelected: Bool
+  // Position within its day-group -- rounds only the outer corners so
+  // consecutive rows for one day fuse into a single card, matching the
+  // rounded day-group container web's IndexBold.tsx now wraps games in.
+  var isFirstInDay: Bool = false
+  var isLastInDay: Bool = false
 
   private var isHomeFavorite: Bool {
     guard let fav = game.derivedFavoriteTeamId else { return false }
@@ -107,7 +112,21 @@ struct GameRowView: View {
     // positioned relative to variable content height. The checkmark badge on
     // the picked team's logo (below) is the primary "you picked this"
     // signal; the tint just reinforces it at a glance while scrolling.
-    .listRowBackground(isSelected ? BoldTheme.Colors.gold.opacity(0.08) : BoldTheme.Colors.bgPage)
+    .listRowBackground(cardRowBackground)
+  }
+
+  // Frost glass card fill (same recipe as BoldTheme.GlassCard) with only the
+  // day-group's outer corners rounded, so every row for one day reads as a
+  // single card rather than each row floating separately -- the native
+  // equivalent of the rounded day-group container on web.
+  private var cardRowBackground: some View {
+    UnevenRoundedRectangle(
+      topLeadingRadius: isFirstInDay ? 16 : 0,
+      bottomLeadingRadius: isLastInDay ? 16 : 0,
+      bottomTrailingRadius: isLastInDay ? 16 : 0,
+      topTrailingRadius: isFirstInDay ? 16 : 0
+    )
+    .fill(isSelected ? BoldTheme.Colors.gold.opacity(0.10) : BoldTheme.Colors.glassStrong)
   }
 
   @ViewBuilder

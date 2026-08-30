@@ -409,7 +409,9 @@ struct GamesView: View {
               GameRowView(
                 game: g,
                 logoFor: { id in viewModel.logoURL(for: id) },
-                isSelected: viewModel.selectedGameId == g.id
+                isSelected: viewModel.selectedGameId == g.id,
+                isFirstInDay: g.id == day.games.first?.id,
+                isLastInDay: g.id == day.games.last?.id
               )
               .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                 if viewModel.selectedGameId == g.id {
@@ -431,6 +433,11 @@ struct GamesView: View {
             }
           } header: {
             columnHeader(dateLabel: day.dateLabel)
+          } footer: {
+            // Visible gap between one day's card and the next -- otherwise
+            // adjoining cards' rounded bottom/top corners would touch with
+            // no breathing room, reading as one broken shape instead of two.
+            Color.clear.frame(height: 16).listRowInsets(EdgeInsets())
           }
         }
       }

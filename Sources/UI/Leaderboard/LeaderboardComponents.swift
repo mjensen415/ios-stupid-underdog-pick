@@ -18,7 +18,13 @@ struct LeaderboardHeaderRow: View {
     .foregroundColor(BoldTheme.Colors.textFaint)
     .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 12, trailing: 20))
     .listRowSeparatorTint(BoldTheme.Colors.border)
-    .listRowBackground(BoldTheme.Colors.bgPage)
+    // Always the top row of the ranked list -- rounds only the top corners
+    // so it fuses with the LeaderboardRows below into one card, matching
+    // the day-group card treatment on the games screen.
+    .listRowBackground(
+      UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: 16)
+        .fill(BoldTheme.Colors.glassStrong)
+    )
   }
 }
 
@@ -27,6 +33,9 @@ struct LeaderboardRow: View {
   let name: String
   let record: String
   let points: String
+  // Last row in the ranked list -- rounds the bottom corners to close out
+  // the card that LeaderboardHeaderRow opens at the top.
+  var isLast: Bool = false
 
   var body: some View {
     HStack(alignment: .center, spacing: 16) {
@@ -56,6 +65,9 @@ struct LeaderboardRow: View {
     .padding(.vertical, 12)
     .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
     .listRowSeparatorTint(BoldTheme.Colors.border)
-    .listRowBackground(BoldTheme.Colors.bgPage)
+    .listRowBackground(
+      UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: isLast ? 16 : 0, bottomTrailingRadius: isLast ? 16 : 0, topTrailingRadius: 0)
+        .fill(BoldTheme.Colors.glassStrong)
+    )
   }
 }

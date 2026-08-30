@@ -65,7 +65,8 @@ struct WeeklyLeaderboardView: View {
               rank: index + 1,
               name: viewModel.names[row.userId] ?? "Player",
               record: "\(row.win ?? 0)W-\(row.loss ?? 0)L",
-              points: String(format: "%.1f", row.points ?? 0)
+              points: String(format: "%.1f", row.points ?? 0),
+              isLast: index == viewModel.rows.count - 1
             )
           }
         }
