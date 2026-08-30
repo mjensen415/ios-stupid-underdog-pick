@@ -280,7 +280,7 @@ struct GamesView: View {
             .font(BoldTheme.Fonts.body(12))
             .foregroundColor(textOnGreen.opacity(0.75))
           if let sp = g.underdogSpread {
-            Text(verbatim: "Loses by fewer than \(String(format: "%.1f", sp)), or wins outright, and you bank it.")
+            Text(verbatim: "Wins outright and you bank \(String(format: "%.1f", sp)) points.")
               .font(BoldTheme.Fonts.body(11))
               .foregroundColor(textOnGreen.opacity(0.65))
               .padding(.top, 2)
