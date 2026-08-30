@@ -344,11 +344,20 @@ struct GroupDetailView: View {
             ForEach(viewModel.leaderboard) { entry in
               HStack(spacing: 12) {
                 Text(entry.rank == 1 ? "🏆" : "#\(entry.rank)").frame(width: 28, alignment: .leading)
-                AvatarInitials(name: entry.display_name ?? "?", size: 32)
-                VStack(alignment: .leading, spacing: 2) {
-                  Text(entry.display_name ?? "Unknown").font(BoldTheme.Fonts.body(14, weight: .medium)).foregroundColor(BoldTheme.Colors.text)
-                  if entry.role == .owner || entry.role == .admin { RoleBadge(role: entry.role) }
+                // Only the avatar+name area is the NavigationLink -- the row
+                // isn't in a List, so a link wrapping the whole HStack would
+                // fight with sibling controls elsewhere in this tab (kick/
+                // promote menus on the Members tab use this same row shape).
+                NavigationLink(destination: PublicProfileView(userId: entry.user_id)) {
+                  HStack(spacing: 12) {
+                    AvatarInitials(name: entry.display_name ?? "?", size: 32)
+                    VStack(alignment: .leading, spacing: 2) {
+                      Text(entry.display_name ?? "Unknown").font(BoldTheme.Fonts.body(14, weight: .medium)).foregroundColor(BoldTheme.Colors.text)
+                      if entry.role == .owner || entry.role == .admin { RoleBadge(role: entry.role) }
+                    }
+                  }
                 }
+                .buttonStyle(.plain)
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
                   // GREEN, not gold -- one pill per leaderboard row would
@@ -383,8 +392,13 @@ struct GroupDetailView: View {
           ForEach(pending) { member in
             BoldTheme.GlassCard(strong: true, radius: 12, padding: 10) {
               HStack {
-                AvatarInitials(name: member.display_name ?? "?", size: 32)
-                Text(member.display_name ?? "Unknown").font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Colors.text)
+                NavigationLink(destination: PublicProfileView(userId: member.user_id)) {
+                  HStack {
+                    AvatarInitials(name: member.display_name ?? "?", size: 32)
+                    Text(member.display_name ?? "Unknown").font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Colors.text)
+                  }
+                }
+                .buttonStyle(.plain)
                 Spacer()
                 Button { Task { await viewModel.approve(userId: member.user_id) } } label: {
                   // GREEN, not gold -- repeats once per pending member, so
@@ -406,8 +420,13 @@ struct GroupDetailView: View {
         ForEach(active) { member in
           BoldTheme.GlassCard(strong: true, radius: 12, padding: 10) {
             HStack {
-              AvatarInitials(name: member.display_name ?? "?", size: 32)
-              Text(member.display_name ?? "Unknown").font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Colors.text)
+              NavigationLink(destination: PublicProfileView(userId: member.user_id)) {
+                HStack {
+                  AvatarInitials(name: member.display_name ?? "?", size: 32)
+                  Text(member.display_name ?? "Unknown").font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Colors.text)
+                }
+              }
+              .buttonStyle(.plain)
               Spacer()
               RoleBadge(role: member.role)
               if canManage(member) {

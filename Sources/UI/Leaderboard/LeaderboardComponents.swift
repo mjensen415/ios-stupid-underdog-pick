@@ -30,6 +30,7 @@ struct LeaderboardHeaderRow: View {
 
 struct LeaderboardRow: View {
   let rank: Int
+  let userId: UUID
   let name: String
   let record: String
   let points: String
@@ -38,29 +39,31 @@ struct LeaderboardRow: View {
   var isLast: Bool = false
 
   var body: some View {
-    HStack(alignment: .center, spacing: 16) {
-      Text(verbatim: "\(rank)")
-        .font(BoldTheme.Fonts.body(14))
-        .foregroundColor(BoldTheme.Colors.textFaint)
-        .frame(width: 28, alignment: .leading)
-
-      VStack(alignment: .leading, spacing: 2) {
-        Text(name)
-          .font(BoldTheme.Fonts.body(15, weight: .semibold))
-          .foregroundColor(BoldTheme.Colors.text)
-        Text(record)
-          .font(BoldTheme.Fonts.mono(11))
+    NavigationLink(destination: PublicProfileView(userId: userId)) {
+      HStack(alignment: .center, spacing: 16) {
+        Text(verbatim: "\(rank)")
+          .font(BoldTheme.Fonts.body(14))
           .foregroundColor(BoldTheme.Colors.textFaint)
+          .frame(width: 28, alignment: .leading)
+
+        VStack(alignment: .leading, spacing: 2) {
+          Text(name)
+            .font(BoldTheme.Fonts.body(15, weight: .semibold))
+            .foregroundColor(BoldTheme.Colors.text)
+          Text(record)
+            .font(BoldTheme.Fonts.mono(11))
+            .foregroundColor(BoldTheme.Colors.textFaint)
+        }
+
+        Spacer()
+
+        Text(points)
+          .font(BoldTheme.Fonts.display(22))
+          // Gold reserved for rank #1 down a ranked list -- everything else
+          // is GREEN, matching web's Leaderboard.tsx (`index === 0 ? GOLD :
+          // GREEN`). Avoids gold-for-every-row diluting the highlight.
+          .foregroundColor(rank == 1 ? BoldTheme.Colors.goldDeep : BoldTheme.Colors.green)
       }
-
-      Spacer()
-
-      Text(points)
-        .font(BoldTheme.Fonts.display(22))
-        // Gold reserved for rank #1 down a ranked list -- everything else
-        // is GREEN, matching web's Leaderboard.tsx (`index === 0 ? GOLD :
-        // GREEN`). Avoids gold-for-every-row diluting the highlight.
-        .foregroundColor(rank == 1 ? BoldTheme.Colors.goldDeep : BoldTheme.Colors.green)
     }
     .padding(.vertical, 12)
     .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))

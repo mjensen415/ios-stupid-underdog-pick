@@ -63,6 +63,7 @@ struct WeeklyLeaderboardView: View {
           ForEach(Array(viewModel.rows.enumerated()), id: \.element.id) { index, row in
             LeaderboardRow(
               rank: index + 1,
+              userId: row.userId,
               name: viewModel.names[row.userId] ?? "Player",
               record: "\(row.win ?? 0)W-\(row.loss ?? 0)L",
               points: String(format: "%.1f", row.points ?? 0),

@@ -45,6 +45,7 @@ struct SeasonLeaderboardView: View {
       ForEach(rows) { row in
         LeaderboardRow(
           rank: rows.firstIndex(where: { $0.id == row.id }).map { $0 + 1 } ?? 0,
+          userId: row.userId,
           name: row.displayName ?? "Player",
           record: "\(row.totalWins ?? 0)W-\(row.totalLosses ?? 0)L",
           points: String(format: "%.1f", row.seasonPoints ?? 0),

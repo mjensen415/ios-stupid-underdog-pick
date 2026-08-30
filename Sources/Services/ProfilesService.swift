@@ -46,6 +46,22 @@ struct ProfilesService {
     return rows.first
   }
 
+  /// Another user's profile for the public profile screen -- profiles RLS
+  /// (profiles_read_names: true) already makes every row name/avatar
+  /// readable regardless of is_public, so this is a plain lookup by id,
+  /// not gated the way fetchMyProfile's own-session read is. No email:
+  /// that's session-only, never exposed for someone else's account.
+  func fetchProfile(userId: UUID) async throws -> ProfileRow? {
+    let res = try await client
+      .from("profiles")
+      .select("id, user_id, display_name, avatar_url, has_onboarded, favorite_team_id")
+      .eq("user_id", value: userId)
+      .limit(1)
+      .execute()
+    let rows = try JSONDecoder().decode([ProfileRow].self, from: res.data)
+    return rows.first
+  }
+
   /// profiles previously granted `authenticated` SELECT only -- this update
   /// threw "permission denied for table profiles" for every caller, even
   /// though the RLS policy scoping it to the caller's own row was already
