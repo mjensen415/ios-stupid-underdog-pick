@@ -19,6 +19,14 @@ struct GameRowView: View {
     game.derivedFavoriteTeamId != nil
   }
 
+  // Distinct from "locked" (canPick also blocks postponed/other non-live
+  // states) -- previously nothing on this row signaled a game is live
+  // *right now* versus just not-yet-startable, since refresh-scores never
+  // actually ran to update status in real time until today.
+  private var isLive: Bool { game.status == "in_progress" }
+  private var isFinal: Bool { game.status == "final" }
+  private var showScore: Bool { (isLive || isFinal) && game.homePoints != nil && game.awayPoints != nil }
+
   // Favorite/underdog decides left-vs-right; home/away is a separate axis
   // (the home team can land on either side depending on who's favored) --
   // whichever slot is showing the home team gets the "@" prefix, standard
@@ -37,6 +45,12 @@ struct GameRowView: View {
   private var rightTeamId: UUID? {
     isHomeFavorite ? game.awayTeamId : game.homeTeamId
   }
+  private var leftScore: Int? {
+    isHomeFavorite ? game.homePoints : game.awayPoints
+  }
+  private var rightScore: Int? {
+    isHomeFavorite ? game.awayPoints : game.homePoints
+  }
 
   // Games span multiple days within a single week, so time alone isn't
   // enough to tell them apart at a glance -- weekday + date on one line,
@@ -52,10 +66,16 @@ struct GameRowView: View {
 
   var body: some View {
     HStack(spacing: 12) {
-      teamBlock(name: leftTeamName, logo: logoFor(leftTeamId))
+      teamBlock(name: leftTeamName, logo: logoFor(leftTeamId), score: leftScore)
 
       VStack(spacing: 4) {
-        Text(kickoffText).font(BoldTheme.Fonts.mono(12)).foregroundColor(BoldTheme.Colors.textFaint).multilineTextAlignment(.center)
+        if isLive {
+          LivePulseBadge()
+        } else if isFinal {
+          Text("FINAL").font(BoldTheme.Fonts.mono(11, weight: .semibold)).foregroundColor(BoldTheme.Colors.textFaint)
+        } else {
+          Text(kickoffText).font(BoldTheme.Fonts.mono(12)).foregroundColor(BoldTheme.Colors.textFaint).multilineTextAlignment(.center)
+        }
         if let bl = game.bettingLine, !bl.isEmpty {
           Text(bl).font(BoldTheme.Fonts.mono(13)).foregroundColor(BoldTheme.Colors.goldDeep)
         } else if let sp = game.underdogSpread {
@@ -67,7 +87,7 @@ struct GameRowView: View {
       .frame(maxWidth: .infinity)
 
       ZStack(alignment: .topTrailing) {
-        teamBlock(name: rightTeamName, logo: logoFor(rightTeamId))
+        teamBlock(name: rightTeamName, logo: logoFor(rightTeamId), score: rightScore)
         if isSelected {
           Image(systemName: "checkmark.circle.fill")
             .imageScale(.medium)
@@ -91,7 +111,7 @@ struct GameRowView: View {
   }
 
   @ViewBuilder
-  private func teamBlock(name: String, logo: URL?) -> some View {
+  private func teamBlock(name: String, logo: URL?, score: Int? = nil) -> some View {
     VStack(spacing: 6) {
       AsyncImage(url: logo) { phase in
         switch phase {
@@ -105,8 +125,35 @@ struct GameRowView: View {
         .foregroundColor(BoldTheme.Colors.text)
         .lineLimit(2)
         .multilineTextAlignment(.center)
+      if let score {
+        Text(verbatim: "\(score)")
+          .font(BoldTheme.Fonts.mono(12))
+          .foregroundColor(BoldTheme.Colors.textDim)
+      }
     }
     .frame(width: 96)
+  }
+}
+
+// Small red pulsing dot + "LIVE" label -- distinct from the plain gray
+// "LOCKED"/"FINAL" states so a game in progress reads as urgent/current
+// at a glance, matching the same treatment added to web.
+private struct LivePulseBadge: View {
+  @State private var pulsing = false
+
+  var body: some View {
+    HStack(spacing: 5) {
+      Circle()
+        .fill(Color(hex: 0xC6402A))
+        .frame(width: 6, height: 6)
+        .opacity(pulsing ? 0.35 : 1)
+        .animation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true), value: pulsing)
+      Text("LIVE")
+        .font(BoldTheme.Fonts.mono(11, weight: .bold))
+        .foregroundColor(Color(hex: 0xC6402A))
+        .tracking(0.5)
+    }
+    .onAppear { pulsing = true }
   }
 }
 

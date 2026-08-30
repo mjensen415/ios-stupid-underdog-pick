@@ -403,33 +403,35 @@ struct GamesView: View {
         .background(BoldTheme.Colors.bgPage)
     } else {
       List {
-        Section {
-          ForEach(viewModel.visibleGames) { g in
-            GameRowView(
-              game: g,
-              logoFor: { id in viewModel.logoURL(for: id) },
-              isSelected: viewModel.selectedGameId == g.id
-            )
-            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-              if viewModel.selectedGameId == g.id {
-                Button("Clear pick") {
-                  Task { await viewModel.clearPickForWeek() }
-                }.tint(.gray)
-              } else {
-                Button("Pick this upset") {
-                  Task { await viewModel.pickUnderdog(for: g) }
+        ForEach(dayGroups) { day in
+          Section {
+            ForEach(day.games) { g in
+              GameRowView(
+                game: g,
+                logoFor: { id in viewModel.logoURL(for: id) },
+                isSelected: viewModel.selectedGameId == g.id
+              )
+              .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                if viewModel.selectedGameId == g.id {
+                  Button("Clear pick") {
+                    Task { await viewModel.clearPickForWeek() }
+                  }.tint(.gray)
+                } else {
+                  Button("Pick this upset") {
+                    Task { await viewModel.pickUnderdog(for: g) }
+                  }
+                  // swipeActions buttons always render white label text with
+                  // .tint() only coloring the background -- goldDeep (not the
+                  // bright brand gold) is what gives that white text real
+                  // contrast here.
+                  .tint(viewModel.canPick(g) ? BoldTheme.Colors.goldDeep : .gray)
+                  .disabled(!viewModel.canPick(g))
                 }
-                // swipeActions buttons always render white label text with
-                // .tint() only coloring the background -- goldDeep (not the
-                // bright brand gold) is what gives that white text real
-                // contrast here.
-                .tint(viewModel.canPick(g) ? BoldTheme.Colors.goldDeep : .gray)
-                .disabled(!viewModel.canPick(g))
               }
             }
+          } header: {
+            columnHeader(dateLabel: day.dateLabel)
           }
-        } header: {
-          columnHeader
         }
       }
       .listStyle(.plain)
@@ -438,18 +440,53 @@ struct GamesView: View {
     }
   }
 
+  // Games in one week span multiple calendar days -- grouping into one
+  // Section per day (instead of a single flat list) gives each day its
+  // own floating header as you scroll, matching List's .plain
+  // sticky-header behavior, and makes it visually obvious where one day
+  // ends and the next begins.
+  private struct DayGroup: Identifiable {
+    let id: String
+    let dateLabel: String
+    let games: [Game]
+  }
+
+  private var dayGroups: [DayGroup] {
+    var order: [String] = []
+    var byDay: [String: [Game]] = [:]
+    let dayFormatter = DateFormatter()
+    dayFormatter.dateFormat = "EEEE, MMM d"
+
+    for g in viewModel.visibleGames {
+      let key = Calendar.current.startOfDay(for: g.startTime).description
+      if byDay[key] == nil { order.append(key); byDay[key] = [] }
+      byDay[key]?.append(g)
+    }
+
+    return order.compactMap { key in
+      guard let games = byDay[key], let first = games.first else { return nil }
+      return DayGroup(id: key, dateLabel: dayFormatter.string(from: first.startTime).uppercased(), games: games)
+    }
+  }
+
   // Pinned column labels -- List's .plain style floats section headers at
   // the top on scroll (native UITableView.Style.plain behavior), so this
   // stays visible above the rows instead of scrolling away with them.
-  private var columnHeader: some View {
-    HStack {
-      Text("FAVORITE")
-      Spacer()
-      Text("UNDERDOG")
+  private func columnHeader(dateLabel: String) -> some View {
+    VStack(alignment: .leading, spacing: 4) {
+      Text(dateLabel)
+        .font(BoldTheme.Fonts.mono(11, weight: .bold))
+        .tracking(0.6)
+        .foregroundColor(BoldTheme.Colors.text)
+      HStack {
+        Text("FAVORITE")
+        Spacer()
+        Text("UNDERDOG")
+      }
+      .font(BoldTheme.Fonts.mono(11))
+      .tracking(0.9)
+      .foregroundColor(BoldTheme.Colors.textFaint)
     }
-    .font(BoldTheme.Fonts.mono(11))
-    .tracking(0.9)
-    .foregroundColor(BoldTheme.Colors.textFaint)
     .padding(.horizontal, 20)
     .padding(.vertical, 10)
     .background(BoldTheme.Colors.bgPage)
