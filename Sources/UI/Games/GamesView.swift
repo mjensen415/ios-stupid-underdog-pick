@@ -89,15 +89,20 @@ final class GamesViewModel: ObservableObject {
   /// NFL lines are effectively guaranteed to post (just not synced yet at
   /// any given moment) -- NFL keeps showing every game, with GameRowView's
   /// muted "LINE TBD" treatment covering that brief gap. CFB is different:
-  /// a real chunk of each week's slate genuinely won't have a line for
-  /// days, so per explicit product call, those CFB games are hidden
-  /// entirely rather than shown disabled. Locked/finished games stay
-  /// visible either way -- this only hides upcoming CFB games nobody could
-  /// pick yet regardless.
+  /// most of a week's slate is small-school matchups (Div II, Div III,
+  /// NAIA) that never get a market line at all, at any point -- confirmed
+  /// against real Week 1 data, 358 of 456 CFB games never had a spread,
+  /// 116 of those were already final with still no line ever posted.
+  /// Originally these stayed visible once locked/final (so a week's full
+  /// slate of results stayed visible after the fact), but that just
+  /// produced a wall of unpickable "--" final-score rows with no way to
+  /// ever tell a dog from a favorite -- hide a CFB game once its kickoff
+  /// has passed if it never got a line; still show it pre-kickoff since a
+  /// line can still post before then.
   var visibleGames: [Game] {
     guard sport == "cfb" else { return games }
     return games.filter { g in
-      g.derivedFavoriteTeamId != nil || g.picksLocked == true || g.status == "final"
+      g.derivedFavoriteTeamId != nil || (g.picksLocked != true && g.status != "final")
     }
   }
 

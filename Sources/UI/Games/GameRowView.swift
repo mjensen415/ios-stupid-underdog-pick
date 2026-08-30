@@ -56,6 +56,21 @@ struct GameRowView: View {
   private var rightScore: Int? {
     isHomeFavorite ? game.awayPoints : game.homePoints
   }
+  // Left is always FAV, right is always DOG (see leftTeamName/rightTeamName
+  // above) -- bold/dim whichever side is actually ahead so live and final
+  // scores read at a glance instead of needing the subtraction done by eye.
+  private var favAhead: Bool {
+    guard showScore, let l = leftScore, let r = rightScore else { return false }
+    return l > r
+  }
+  private var dogAhead: Bool {
+    guard showScore, let l = leftScore, let r = rightScore else { return false }
+    return r > l
+  }
+  // Outright win only, matching the real scoring rule -- covering the
+  // spread doesn't count, so this is exactly "did the underdog win the
+  // game," no spread math needed.
+  private var dogWonOutright: Bool { isFinal && dogAhead }
 
   // Games span multiple days within a single week, so time alone isn't
   // enough to tell them apart at a glance -- weekday + date on one line,
@@ -71,13 +86,17 @@ struct GameRowView: View {
 
   var body: some View {
     HStack(spacing: 12) {
-      teamBlock(name: leftTeamName, logo: logoFor(leftTeamId), score: leftScore)
+      teamBlock(name: leftTeamName, logo: logoFor(leftTeamId), score: leftScore, isAhead: favAhead)
 
       VStack(spacing: 4) {
         if isLive {
           LivePulseBadge()
         } else if isFinal {
-          Text("FINAL").font(BoldTheme.Fonts.mono(11, weight: .semibold)).foregroundColor(BoldTheme.Colors.textFaint)
+          if dogWonOutright {
+            Text("UPSET").font(BoldTheme.Fonts.mono(11, weight: .bold)).foregroundColor(BoldTheme.Colors.goldDeep)
+          } else {
+            Text("FINAL").font(BoldTheme.Fonts.mono(11, weight: .semibold)).foregroundColor(BoldTheme.Colors.textFaint)
+          }
         } else {
           Text(kickoffText).font(BoldTheme.Fonts.mono(12)).foregroundColor(BoldTheme.Colors.textFaint).multilineTextAlignment(.center)
         }
@@ -92,7 +111,7 @@ struct GameRowView: View {
       .frame(maxWidth: .infinity)
 
       ZStack(alignment: .topTrailing) {
-        teamBlock(name: rightTeamName, logo: logoFor(rightTeamId), score: rightScore)
+        teamBlock(name: rightTeamName, logo: logoFor(rightTeamId), score: rightScore, isAhead: dogAhead)
         if isSelected {
           Image(systemName: "checkmark.circle.fill")
             .imageScale(.medium)
@@ -130,7 +149,7 @@ struct GameRowView: View {
   }
 
   @ViewBuilder
-  private func teamBlock(name: String, logo: URL?, score: Int? = nil) -> some View {
+  private func teamBlock(name: String, logo: URL?, score: Int? = nil, isAhead: Bool = false) -> some View {
     VStack(spacing: 6) {
       AsyncImage(url: logo) { phase in
         switch phase {
@@ -146,8 +165,9 @@ struct GameRowView: View {
         .multilineTextAlignment(.center)
       if let score {
         Text(verbatim: "\(score)")
-          .font(BoldTheme.Fonts.mono(12))
-          .foregroundColor(BoldTheme.Colors.textDim)
+          .font(BoldTheme.Fonts.mono(12, weight: isAhead ? .bold : .regular))
+          .foregroundColor(isAhead ? BoldTheme.Colors.goldDeep : BoldTheme.Colors.textDim)
+          .opacity(isAhead ? 1 : 0.7)
       }
     }
     .frame(width: 96)

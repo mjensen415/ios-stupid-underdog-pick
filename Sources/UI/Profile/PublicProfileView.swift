@@ -16,6 +16,7 @@ struct PublicProfileView: View {
   @State private var careerTotals: CareerTotals?
   @State private var seasonTotals: [TotalsLeaderboardRow] = []
   @State private var streak: Int = 0
+  @State private var pickHistory: [PickHistoryRow] = []
   @State private var loadError: String?
   @State private var isLoading = true
 
@@ -112,6 +113,51 @@ struct PublicProfileView: View {
           Label("Trophy Case", systemImage: "trophy.fill")
         }
         .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
+
+        Section {
+          if pickHistory.isEmpty {
+            Text("No locked picks yet -- picks show up here once the game they're for has started.")
+              .font(BoldTheme.Fonts.body(12))
+              .foregroundColor(BoldTheme.Colors.textFaint)
+          } else {
+            ForEach(pickHistory) { row in
+              HStack(spacing: 10) {
+                Text(verbatim: "W\(row.week)")
+                  .font(BoldTheme.Fonts.mono(11))
+                  .foregroundColor(BoldTheme.Colors.textFaint)
+                  .frame(width: 28, alignment: .leading)
+                VStack(alignment: .leading, spacing: 1) {
+                  Text(row.pickedTeam?.shortName ?? row.pickedTeam?.name ?? "Unknown")
+                    .font(BoldTheme.Fonts.body(13, weight: .semibold))
+                    .foregroundColor(BoldTheme.Colors.text)
+                  Text(verbatim: "vs \(row.opponent?.shortName ?? row.opponent?.name ?? "Unknown")")
+                    .font(BoldTheme.Fonts.mono(11))
+                    .foregroundColor(BoldTheme.Colors.textFaint)
+                }
+                Spacer()
+                if row.isFinal {
+                  if row.won {
+                    Text(verbatim: "+\(Int(row.awardedPoints))")
+                      .font(BoldTheme.Fonts.mono(12, weight: .bold))
+                      .foregroundColor(BoldTheme.Colors.goldDeep)
+                  } else {
+                    Text("NO WIN")
+                      .font(BoldTheme.Fonts.mono(11))
+                      .foregroundColor(BoldTheme.Colors.textFaint)
+                  }
+                } else {
+                  Text("LIVE")
+                    .font(BoldTheme.Fonts.mono(11, weight: .semibold))
+                    .foregroundColor(Color(hex: 0xC6402A))
+                }
+              }
+              .padding(.vertical, 4)
+            }
+          }
+        } header: {
+          Label("Pick History", systemImage: "checklist")
+        }
+        .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
       } else if let loadError {
         Section {
           Text(loadError).foregroundColor(.red)
@@ -171,15 +217,21 @@ struct PublicProfileView: View {
 
       async let career = try? LeaderboardService(client: client).fetchMyCareerTotals(userId: userId)
       async let seasons = try? LeaderboardService(client: client).fetchMySeasonTotals(userId: userId)
+      async let ctx = try? ContextService(client: client).getCurrentContext()
       async let streakResult: Int? = {
         guard let ctx = try? await ContextService(client: client).getCurrentContext() else { return nil }
         return try? await LeaderboardService(client: client).fetchStreak(userId: userId, season: ctx.season)
       }()
-      let (careerResult, seasonsResult, streakValue) = await (career, seasons, streakResult)
+      let (careerResult, seasonsResult, streakValue, ctxValue) = await (career, seasons, streakResult, ctx)
+      var picksResult: [PickHistoryRow] = []
+      if let ctxValue {
+        picksResult = (try? await LeaderboardService(client: client).fetchPicksHistory(userId: userId, season: ctxValue.season)) ?? []
+      }
       await MainActor.run {
         careerTotals = careerResult ?? nil
         seasonTotals = seasonsResult ?? []
         streak = streakValue ?? 0
+        pickHistory = picksResult
       }
     } catch {
       await MainActor.run { loadError = "Couldn't load this player's profile." }

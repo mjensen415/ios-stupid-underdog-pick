@@ -162,8 +162,73 @@ struct MyRank: Decodable {
   }
 }
 
+struct PickHistoryTeamRef: Decodable {
+  let id: UUID
+  let name: String
+  let shortName: String?
+  let logoUrl: String?
+
+  enum CodingKeys: String, CodingKey {
+    case id, name
+    case shortName = "short_name"
+    case logoUrl = "logo_url"
+  }
+}
+
+/// One row per (locked-or-started) pick, for a profile screen's Pick
+/// History section -- backed by get_user_picks_history, a SECURITY DEFINER
+/// RPC that mirrors get_weekly_leaderboard's own picks_expanded predicate
+/// (picks_locked = true OR status <> 'scheduled'). picks table RLS
+/// (user_id = auth.uid(), no exception) still blocks a direct read of
+/// someone else's row entirely -- this is the one deliberate, narrow hole
+/// punched through for exactly this: what did they pick, once it's no
+/// longer a scouting risk to know.
+struct PickHistoryRow: Decodable, Identifiable {
+  var id: UUID { gameId }
+  let gameId: UUID
+  let week: Int
+  let startTime: Date
+  let pickedTeamId: UUID
+  let homeTeamId: UUID
+  let awayTeamId: UUID
+  let awardedPoints: Double
+  let isFinal: Bool
+  let winnerTeamId: UUID?
+  let pickedTeam: PickHistoryTeamRef?
+  let homeTeam: PickHistoryTeamRef?
+  let awayTeam: PickHistoryTeamRef?
+
+  enum CodingKeys: String, CodingKey {
+    case gameId = "game_id"
+    case week
+    case startTime = "start_time"
+    case pickedTeamId = "picked_team_id"
+    case homeTeamId = "home_team_id"
+    case awayTeamId = "away_team_id"
+    case awardedPoints = "awarded_points"
+    case isFinal = "is_final"
+    case winnerTeamId = "winner_team_id"
+    case pickedTeam = "picked_team"
+    case homeTeam = "home_team"
+    case awayTeam = "away_team"
+  }
+
+  var won: Bool { isFinal && awardedPoints > 0 }
+  var opponent: PickHistoryTeamRef? { pickedTeamId == homeTeamId ? awayTeam : homeTeam }
+}
+
 struct LeaderboardService {
   let client: SupabaseClient
+
+  func fetchPicksHistory(userId: UUID, season: Int, sport: String = "cfb") async throws -> [PickHistoryRow] {
+    struct Params: Encodable { let p_user_id: UUID; let p_season: Int; let p_sport: String }
+    let res = try await client
+      .rpc("get_user_picks_history", params: Params(p_user_id: userId, p_season: season, p_sport: sport))
+      .execute()
+    let decoder = JSONDecoder()
+    decoder.dateDecodingStrategy = .iso8601withFallback
+    return try decoder.decode([PickHistoryRow].self, from: res.data)
+  }
 
   /// All-time career record -- summed client-side across every season row,
   /// since leaderboard_totals has one row per (user_id, season), not a
