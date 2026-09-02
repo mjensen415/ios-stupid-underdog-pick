@@ -465,49 +465,68 @@ struct GamesView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(BoldTheme.Colors.bgPage)
     } else {
-      List {
-        ForEach(dayGroups) { day in
-          Section {
-            ForEach(day.games) { g in
-              GameRowView(
-                game: g,
-                logoFor: { id in viewModel.logoURL(for: id) },
-                isSelected: viewModel.selectedGameId == g.id,
-                isFirstInDay: g.id == day.games.first?.id,
-                isLastInDay: g.id == day.games.last?.id
-              )
-              .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                if viewModel.selectedGameId == g.id {
-                  Button("Clear pick") {
-                    Task { await viewModel.clearPickForWeek() }
-                  }.tint(.gray)
-                } else {
-                  Button(viewModel.swipeActionLabel(for: g)) {
-                    Task { await viewModel.pickUnderdog(for: g) }
+      ScrollViewReader { proxy in
+        List {
+          ForEach(dayGroups) { day in
+            Section {
+              ForEach(day.games) { g in
+                GameRowView(
+                  game: g,
+                  logoFor: { id in viewModel.logoURL(for: id) },
+                  isSelected: viewModel.selectedGameId == g.id,
+                  isFirstInDay: g.id == day.games.first?.id,
+                  isLastInDay: g.id == day.games.last?.id
+                )
+                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                  if viewModel.selectedGameId == g.id {
+                    Button("Clear pick") {
+                      Task { await viewModel.clearPickForWeek() }
+                    }.tint(.gray)
+                  } else {
+                    Button(viewModel.swipeActionLabel(for: g)) {
+                      Task { await viewModel.pickUnderdog(for: g) }
+                    }
+                    // swipeActions buttons always render white label text with
+                    // .tint() only coloring the background -- goldDeep (not the
+                    // bright brand gold) is what gives that white text real
+                    // contrast here.
+                    .tint(viewModel.canPick(g) ? BoldTheme.Colors.goldDeep : .gray)
+                    .disabled(!viewModel.canPick(g))
                   }
-                  // swipeActions buttons always render white label text with
-                  // .tint() only coloring the background -- goldDeep (not the
-                  // bright brand gold) is what gives that white text real
-                  // contrast here.
-                  .tint(viewModel.canPick(g) ? BoldTheme.Colors.goldDeep : .gray)
-                  .disabled(!viewModel.canPick(g))
                 }
               }
+            } header: {
+              columnHeader(dateLabel: day.dateLabel)
+            } footer: {
+              // Visible gap between one day's card and the next -- otherwise
+              // adjoining cards' rounded bottom/top corners would touch with
+              // no breathing room, reading as one broken shape instead of two.
+              Color.clear.frame(height: 16).listRowInsets(EdgeInsets())
             }
-          } header: {
-            columnHeader(dateLabel: day.dateLabel)
-          } footer: {
-            // Visible gap between one day's card and the next -- otherwise
-            // adjoining cards' rounded bottom/top corners would touch with
-            // no breathing room, reading as one broken shape instead of two.
-            Color.clear.frame(height: 16).listRowInsets(EdgeInsets())
+            .id(day.id)
           }
         }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .background(BoldTheme.Colors.bgPage)
+        // A week spans both already-played and upcoming days -- opening on
+        // the earliest day means scrolling past everything already final
+        // just to reach today's or the next live game. Jump straight to
+        // the first day that's today or later; if the whole week's in the
+        // past (last week's tab), land on the most recent day instead of
+        // the oldest.
+        .task(id: targetDayId) {
+          guard let targetDayId else { return }
+          proxy.scrollTo(targetDayId, anchor: .top)
+        }
       }
-      .listStyle(.plain)
-      .scrollContentBackground(.hidden)
-      .background(BoldTheme.Colors.bgPage)
     }
+  }
+
+  private var targetDayId: String? {
+    let todayStart = Calendar.current.startOfDay(for: Date())
+    return dayGroups.first(where: { ($0.games.first?.startTime ?? .distantPast) >= todayStart })?.id
+      ?? dayGroups.last?.id
   }
 
   // Games in one week span multiple calendar days -- grouping into one

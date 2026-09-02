@@ -101,8 +101,12 @@ struct GameRowView: View {
   }
 
   var body: some View {
-    HStack(spacing: 12) {
-      teamBlock(name: leftTeamName, logo: logoFor(leftTeamId), score: leftScore, isAhead: favAhead)
+    HStack(spacing: 8) {
+      teamBlock(name: leftTeamName, logo: logoFor(leftTeamId))
+
+      if showScore {
+        scoreText(leftScore, isAhead: favAhead)
+      }
 
       VStack(spacing: 4) {
         if isLive {
@@ -128,8 +132,12 @@ struct GameRowView: View {
       }
       .frame(maxWidth: .infinity)
 
+      if showScore {
+        scoreText(rightScore, isAhead: dogAhead)
+      }
+
       ZStack(alignment: .topTrailing) {
-        teamBlock(name: rightTeamName, logo: logoFor(rightTeamId), score: rightScore, isAhead: dogAhead)
+        teamBlock(name: rightTeamName, logo: logoFor(rightTeamId))
         if isSelected {
           Image(systemName: "checkmark.circle.fill")
             .imageScale(.medium)
@@ -167,7 +175,7 @@ struct GameRowView: View {
   }
 
   @ViewBuilder
-  private func teamBlock(name: String, logo: URL?, score: Int? = nil, isAhead: Bool = false) -> some View {
+  private func teamBlock(name: String, logo: URL?) -> some View {
     VStack(spacing: 6) {
       RetryingAsyncImage(url: logo) { img in
         img.resizable().scaledToFit()
@@ -180,14 +188,21 @@ struct GameRowView: View {
         .foregroundColor(BoldTheme.Colors.text)
         .lineLimit(2)
         .multilineTextAlignment(.center)
-      if let score {
-        Text(verbatim: "\(score)")
-          .font(BoldTheme.Fonts.mono(12, weight: isAhead ? .bold : .regular))
-          .foregroundColor(isAhead ? BoldTheme.Colors.goldDeep : BoldTheme.Colors.textDim)
-          .opacity(isAhead ? 1 : 0.7)
-      }
     }
-    .frame(width: 96)
+    .frame(width: 84)
+  }
+
+  // <favorite><score><line><score><underdog> -- scores sit between each
+  // team and the spread instead of under the team name, so the row reads
+  // left-to-right as one continuous line score rather than two separate
+  // team-plus-number groupings either side of an unrelated middle column.
+  @ViewBuilder
+  private func scoreText(_ score: Int?, isAhead: Bool) -> some View {
+    Text(score.map(String.init) ?? "–")
+      .font(BoldTheme.Fonts.display(20))
+      .foregroundColor(isAhead ? BoldTheme.Colors.goldDeep : BoldTheme.Colors.textDim)
+      .opacity(isAhead ? 1 : 0.6)
+      .frame(width: 28)
   }
 }
 
