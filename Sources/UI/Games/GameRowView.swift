@@ -169,11 +169,10 @@ struct GameRowView: View {
   @ViewBuilder
   private func teamBlock(name: String, logo: URL?, score: Int? = nil, isAhead: Bool = false) -> some View {
     VStack(spacing: 6) {
-      AsyncImage(url: logo) { phase in
-        switch phase {
-        case .success(let img): img.resizable().scaledToFit()
-        default: Image(systemName: "football").resizable().scaledToFit().opacity(0.3).foregroundColor(BoldTheme.Colors.textFaint)
-        }
+      RetryingAsyncImage(url: logo) { img in
+        img.resizable().scaledToFit()
+      } placeholder: {
+        Image(systemName: "football").resizable().scaledToFit().opacity(0.3).foregroundColor(BoldTheme.Colors.textFaint)
       }
       .frame(width: 28, height: 28)
       Text(name)

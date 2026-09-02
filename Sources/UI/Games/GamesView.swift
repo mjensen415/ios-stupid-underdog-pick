@@ -269,14 +269,12 @@ struct GamesView: View {
           .fill(BoldTheme.Colors.gold)
           .frame(width: 40, height: 40)
           .overlay(
-            AsyncImage(url: viewModel.logoURL(for: g.derivedUnderdogTeamId)) { phase in
-              switch phase {
-              case .success(let img): img.resizable().scaledToFit().padding(5)
-              default:
-                Image(systemName: "checkmark")
-                  .font(.system(size: 16, weight: .bold))
-                  .foregroundColor(BoldTheme.Colors.text)
-              }
+            RetryingAsyncImage(url: viewModel.logoURL(for: g.derivedUnderdogTeamId)) { img in
+              img.resizable().scaledToFit().padding(5)
+            } placeholder: {
+              Image(systemName: "checkmark")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundColor(BoldTheme.Colors.text)
             }
           )
           .clipShape(Circle())
