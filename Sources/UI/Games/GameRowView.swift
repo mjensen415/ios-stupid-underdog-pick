@@ -32,6 +32,22 @@ struct GameRowView: View {
   private var isFinal: Bool { game.status == "final" }
   private var showScore: Bool { (isLive || isFinal) && game.homePoints != nil && game.awayPoints != nil }
 
+  // Mirrors GamesViewModel.canPick's own three checks exactly (picksLocked,
+  // startTime, hasLine) -- previously only the no-line case dimmed the row,
+  // so a game that had a real line but was simply locked or over still
+  // looked fully "live" until you swiped and found a disabled, unlabeled
+  // button. Selected rows stay full-opacity regardless (that's the pick).
+  private var isPickable: Bool {
+    hasLine && game.picksLocked != true && game.startTime >= Date()
+  }
+  // picksLocked can go true shortly before kickoff, before status has
+  // caught up to "in_progress" -- without this, a locked-but-not-yet-live
+  // game still showed a plain kickoff time, giving no on-row signal (short
+  // of swiping) that picking has actually closed.
+  private var isLockedNotYetLive: Bool {
+    game.picksLocked == true && !isLive && !isFinal
+  }
+
   // Favorite/underdog decides left-vs-right; home/away is a separate axis
   // (the home team can land on either side depending on who's favored) --
   // whichever slot is showing the home team gets the "@" prefix, standard
@@ -97,6 +113,8 @@ struct GameRowView: View {
           } else {
             Text("FINAL").font(BoldTheme.Fonts.mono(11, weight: .semibold)).foregroundColor(BoldTheme.Colors.textFaint)
           }
+        } else if isLockedNotYetLive {
+          Text("LOCKED").font(BoldTheme.Fonts.mono(11, weight: .semibold)).foregroundColor(BoldTheme.Colors.textFaint)
         } else {
           Text(kickoffText).font(BoldTheme.Fonts.mono(12)).foregroundColor(BoldTheme.Colors.textFaint).multilineTextAlignment(.center)
         }
@@ -120,7 +138,7 @@ struct GameRowView: View {
         }
       }
     }
-    .opacity(hasLine || isSelected ? 1 : 0.55)
+    .opacity(isPickable || isSelected ? 1 : 0.55)
     .padding(.vertical, 14)
     .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
     .listRowSeparatorTint(BoldTheme.Colors.border)

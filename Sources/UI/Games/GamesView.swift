@@ -133,6 +133,18 @@ final class GamesViewModel: ObservableObject {
     return fav != nil
   }
 
+  // The swipe button previously always read "Pick this upset," even fully
+  // greyed out and disabled on a game nobody could act on anymore -- no
+  // indication of *why*. Order matters: check live/final before picksLocked,
+  // since a live or finished game is also picksLocked, and "Game Live"/
+  // "Game Over" is the more useful answer than the generic "Locked."
+  func swipeActionLabel(for g: Game) -> String {
+    if canPick(g) { return "Pick this upset" }
+    if g.status == "in_progress" { return "Game Live" }
+    if g.status == "final" { return "Game Over" }
+    return "Locked"
+  }
+
   func pickUnderdog(for g: Game) async {
     #if DEBUG
     print("[pickUnderdog] BUTTON FIRED for \(g.awayTeam ?? "?") @ \(g.homeTeam ?? "?"), canPick=\(canPick(g))")
@@ -424,7 +436,7 @@ struct GamesView: View {
                     Task { await viewModel.clearPickForWeek() }
                   }.tint(.gray)
                 } else {
-                  Button("Pick this upset") {
+                  Button(viewModel.swipeActionLabel(for: g)) {
                     Task { await viewModel.pickUnderdog(for: g) }
                   }
                   // swipeActions buttons always render white label text with
