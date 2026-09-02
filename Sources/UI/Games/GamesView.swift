@@ -206,6 +206,7 @@ struct GamesView: View {
   @StateObject var viewModel: GamesViewModel
   @EnvironmentObject var appState: AppState
   @State private var shareImage: Image?
+  @State private var searchQuery: String = ""
 
   // Picking here is a swipe-left gesture on the row (see .swipeActions
   // below) with no other on-screen affordance -- feedback showed people
@@ -360,6 +361,46 @@ struct GamesView: View {
     }
   }
 
+  private var searchField: some View {
+    HStack(spacing: 8) {
+      Image(systemName: "magnifyingglass")
+        .foregroundColor(BoldTheme.Colors.textFaint)
+        .font(.system(size: 14, weight: .medium))
+      TextField("Search teams", text: $searchQuery)
+        .font(BoldTheme.Fonts.body(14))
+        .foregroundColor(BoldTheme.Colors.text)
+        .autocorrectionDisabled(true)
+        .textInputAutocapitalization(.words)
+      if !searchQuery.isEmpty {
+        Button {
+          searchQuery = ""
+        } label: {
+          Image(systemName: "xmark.circle.fill")
+            .foregroundColor(BoldTheme.Colors.textFaint)
+        }
+      }
+    }
+    .padding(.horizontal, 12)
+    .padding(.vertical, 9)
+    .background(Color(hex: 0x16241B).opacity(0.07))
+    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
+    .cornerRadius(10)
+    .padding(.horizontal, 20)
+    .padding(.bottom, 10)
+  }
+
+  // Matches either team's full or short name -- a search for "OSU" alone
+  // wouldn't hit anything useful given how inconsistently team short names
+  // are populated, so this sticks to substring matching on the names
+  // actually shown on the row.
+  private var filteredGames: [Game] {
+    let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !query.isEmpty else { return viewModel.visibleGames }
+    return viewModel.visibleGames.filter { g in
+      [g.homeTeam, g.awayTeam].compactMap { $0 }.contains { $0.localizedCaseInsensitiveContains(query) }
+    }
+  }
+
   private var sportToggle: some View {
     HStack(spacing: 4) {
       ForEach(["cfb", "nfl"], id: \.self) { s in
@@ -413,6 +454,13 @@ struct GamesView: View {
       // pending a line -- distinct from the "nothing scheduled" case
       // above so this doesn't read as a bug.
       Text("Lines haven't posted for this week yet. Check back soon.")
+        .foregroundColor(BoldTheme.Colors.textDim)
+        .multilineTextAlignment(.center)
+        .padding(.horizontal, 32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(BoldTheme.Colors.bgPage)
+    } else if filteredGames.isEmpty {
+      Text(verbatim: "No games match “\(searchQuery).”")
         .foregroundColor(BoldTheme.Colors.textDim)
         .multilineTextAlignment(.center)
         .padding(.horizontal, 32)
@@ -481,7 +529,7 @@ struct GamesView: View {
     let dayFormatter = DateFormatter()
     dayFormatter.dateFormat = "EEEE, MMM d"
 
-    for g in viewModel.visibleGames {
+    for g in filteredGames {
       let key = Calendar.current.startOfDay(for: g.startTime).description
       if byDay[key] == nil { order.append(key); byDay[key] = [] }
       byDay[key]?.append(g)
@@ -522,6 +570,7 @@ struct GamesView: View {
       VStack(spacing: 0) {
         header
         sportToggle
+        searchField
         swipeHintBanner
         pickedBanner
           .transition(.opacity.combined(with: .move(edge: .top)))
