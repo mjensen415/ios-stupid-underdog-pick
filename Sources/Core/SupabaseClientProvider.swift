@@ -68,6 +68,17 @@ final class SupabaseClientProvider {
   private static func networkSessionConfiguration() -> URLSessionConfiguration {
     let config = URLSessionConfiguration.default
     config.protocolClasses = [NetworkRetryURLProtocol.self] + (config.protocolClasses ?? [])
+    // .default honors HTTP caching (URLCache.shared + whatever cache-control
+    // PostgREST/any CDN in front of it sends) -- for live game data, a
+    // cached response is a correctness bug, not an optimization: a game
+    // that finished after the first fetch would silently keep reading as
+    // "scheduled, no score" from cache indefinitely, no matter how often
+    // the screen reloads. This isn't hypothetical -- confirmed against real
+    // data: the games table has the correct final score and no-line status
+    // for a game the app was still showing as unplayed. Every request to
+    // Supabase should always hit the network.
+    config.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+    config.urlCache = nil
     return config
   }
 

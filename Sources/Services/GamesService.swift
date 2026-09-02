@@ -10,7 +10,7 @@ struct GamesService {
     let res = try await client
       .from("v_games_named")
       .select("""
-        id, season, week, home_name, away_name, home_team_id, away_team_id, favorite_team_id, start_time, betting_line, latest_spread, picks_locked, sport
+        id, season, week, status, home_name, away_name, home_team_id, away_team_id, favorite_team_id, start_time, betting_line, latest_spread, picks_locked, home_points, away_points, sport
       """)
       .eq("season", value: season)
       .eq("week", value: week)
