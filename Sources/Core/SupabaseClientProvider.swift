@@ -48,7 +48,27 @@ final class SupabaseClientProvider {
     print("[Config] Source KEY=\(keySrc?.rawValue ?? "NONE") present=\(!key.isEmpty)")
     #endif
 
-    return SupabaseClient(supabaseURL: url, supabaseKey: key)
+    return SupabaseClient(
+      supabaseURL: url,
+      supabaseKey: key,
+      options: SupabaseClientOptions(global: .init(session: URLSession(configuration: networkSessionConfiguration())))
+    )
+  }
+
+  /// Some networks intermittently reset the QUIC (HTTP/3) connection
+  /// URLSession opens by default -- NSURLErrorNetworkConnectionLost (-1005),
+  /// "The network connection was lost" -- even though the same connection
+  /// succeeds most of the time on the same network (confirmed via live
+  /// traffic: sign-in and games/picks fetches all completed fine over QUIC
+  /// moments after one had failed with -1005). There's no public API to
+  /// disable HTTP/3 on iOS (a private KVC key exists but wasn't recognized
+  /// on this SDK, so it changed nothing), so NetworkRetryURLProtocol
+  /// transparently retries the specific error classes that mean "probably
+  /// just a bad connection attempt, try again" instead.
+  private static func networkSessionConfiguration() -> URLSessionConfiguration {
+    let config = URLSessionConfiguration.default
+    config.protocolClasses = [NetworkRetryURLProtocol.self] + (config.protocolClasses ?? [])
+    return config
   }
 
   /// Try ENV → Info.plist → UserDefaults override
