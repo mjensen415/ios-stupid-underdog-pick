@@ -44,6 +44,10 @@ struct PickemsStandingsView: View {
   let season: Int?
   let week: Int?
   let lastGame: PickemsGameRow?
+  // When set, standings are scoped to this one group directly -- no
+  // membership fetch, no group picker, no "no groups yet" empty state.
+  // Used when this view is embedded on a specific group's own detail page.
+  let fixedGroupId: UUID?
 
   @Environment(\.supabaseClient) private var client
   @State private var myGroups: [MyGroup]?
@@ -52,6 +56,15 @@ struct PickemsStandingsView: View {
   @State private var rows: [GroupPickemsRow] = []
   @State private var isLoading = false
 
+  init(season: Int?, week: Int?, lastGame: PickemsGameRow?, fixedGroupId: UUID? = nil) {
+    self.season = season
+    self.week = week
+    self.lastGame = lastGame
+    self.fixedGroupId = fixedGroupId
+    self._selectedGroupId = State(initialValue: fixedGroupId)
+    self._myGroups = State(initialValue: fixedGroupId != nil ? [] : nil)
+  }
+
   private var lastGameActualTotal: Int? {
     guard let lastGame, lastGame.isFinal, let h = lastGame.homePoints, let a = lastGame.awayPoints else { return nil }
     return h + a
@@ -59,12 +72,12 @@ struct PickemsStandingsView: View {
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
-      if myGroups == nil {
+      if fixedGroupId == nil && myGroups == nil {
         Text("Loading…").font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Colors.textFaint).padding(.top, 40)
-      } else if myGroups?.isEmpty == true {
+      } else if fixedGroupId == nil && myGroups?.isEmpty == true {
         emptyState
       } else {
-        if (myGroups?.count ?? 0) > 1 { groupPicker }
+        if fixedGroupId == nil, (myGroups?.count ?? 0) > 1 { groupPicker }
         scopeToggle
         if scope == .week, let lastGame {
           Text("Tiebreaker: combined score, \(lastGame.awayName ?? "") @ \(lastGame.homeName ?? "")\(lastGameActualTotal.map { " — final: \($0)" } ?? "")")
@@ -190,6 +203,7 @@ struct PickemsStandingsView: View {
   }
 
   private func loadGroups() async {
+    guard fixedGroupId == nil else { return }
     guard let client else { return }
     do {
       // Only groups actually playing Pickems -- an underdog-only group's

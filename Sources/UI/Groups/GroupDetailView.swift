@@ -9,9 +9,10 @@ fileprivate struct GroupRow: Decodable {
   let is_private: Bool
   let description: String?
   let sport: GroupSport
+  let game_type: GroupGameType
 }
 
-fileprivate enum DetailTab: Hashable { case leaderboard, members, settings }
+fileprivate enum DetailTab: Hashable { case leaderboard, pickems, members, settings }
 fileprivate enum LeaderboardScope: Hashable { case week, season }
 
 @MainActor
@@ -27,6 +28,12 @@ final class GroupDetailViewModel: ObservableObject {
   @Published var season = 2025
   @Published var week = 1
   @Published var toastMessage: String?
+  // NFL season/week + this week's last game, only fetched for groups that
+  // actually play Pickems -- feeds the embedded PickemsStandingsView's
+  // tiebreaker line.
+  @Published var pickemsSeason: Int?
+  @Published var pickemsWeek: Int?
+  @Published var pickemsLastGame: PickemsGameRow?
   // Only meaningful (and only shown) when group.sport == .both -- a
   // single-sport group's board always uses its own sport regardless of
   // this value, see effectiveLeaderboardSport.
@@ -63,11 +70,11 @@ final class GroupDetailViewModel: ObservableObject {
       // (gives role); fall back to a direct public-group lookup otherwise.
       let mine = try await GroupsService(client: client).fetchMyGroups()
       if let match = mine.first(where: { $0.slug == slug }) {
-        group = GroupRow(id: match.group_id, name: match.name, slug: match.slug, avatar_url: match.avatar_url, is_private: match.is_private, description: match.description, sport: match.sport)
+        group = GroupRow(id: match.group_id, name: match.name, slug: match.slug, avatar_url: match.avatar_url, is_private: match.is_private, description: match.description, sport: match.sport, game_type: match.game_type)
         myRole = match.my_role
         memberCount = match.member_count
       } else {
-        let res = try await client.from("groups").select("id, name, slug, avatar_url, is_private, description, sport").eq("slug", value: slug).single().execute()
+        let res = try await client.from("groups").select("id, name, slug, avatar_url, is_private, description, sport, game_type").eq("slug", value: slug).single().execute()
         let row = try JSONDecoder().decode(GroupRow.self, from: res.data)
         if row.is_private {
           group = nil
@@ -79,9 +86,10 @@ final class GroupDetailViewModel: ObservableObject {
         }
       }
 
-      if group != nil {
+      if let group {
         await loadMembers()
-        await loadLeaderboard(scope: .week)
+        if group.game_type != .pickems { await loadLeaderboard(scope: .week) }
+        if group.game_type != .underdog { await loadPickemsContext() }
       }
     } catch {
       errorText = error.localizedDescription
@@ -95,6 +103,19 @@ final class GroupDetailViewModel: ObservableObject {
       members = result.members
     } catch {
       errorText = error.localizedDescription
+    }
+  }
+
+  func loadPickemsContext() async {
+    guard let client else { return }
+    do {
+      let ctx = try await ContextService(client: client).getCurrentContext(sport: "nfl")
+      pickemsSeason = ctx.season
+      pickemsWeek = ctx.week
+      let games = try await PickemsService(client: client).fetchGames(season: ctx.season, week: ctx.week)
+      pickemsLastGame = games.max(by: { $0.startTime < $1.startTime })
+    } catch {
+      // Tiebreaker line just won't show -- non-fatal, standings still load.
     }
   }
 
@@ -160,7 +181,7 @@ final class GroupDetailViewModel: ObservableObject {
     guard let client, let group else { return false }
     do {
       let result = try await GroupsService(client: client).updateGroup(groupId: group.id, name: name, description: description, avatarUrl: nil, isPrivate: isPrivate)
-      self.group = GroupRow(id: group.id, name: name, slug: result.slug, avatar_url: group.avatar_url, is_private: isPrivate, description: description, sport: group.sport)
+      self.group = GroupRow(id: group.id, name: name, slug: result.slug, avatar_url: group.avatar_url, is_private: isPrivate, description: description, sport: group.sport, game_type: group.game_type)
       return true
     } catch {
       errorText = error.localizedDescription
@@ -182,8 +203,14 @@ struct GroupDetailView: View {
     _viewModel = StateObject(wrappedValue: GroupDetailViewModel(slug: slug))
   }
 
+  // A pickems-only group has no underdog picks to show, so that tab is
+  // hidden rather than left showing a permanently-empty leaderboard; a
+  // both-mode group gets both. Mirrors web's GroupDetail.tsx.
   private var tabOptions: [(label: String, value: DetailTab)] {
-    var opts: [(label: String, value: DetailTab)] = [("Leaderboard", .leaderboard), ("Members", .members)]
+    var opts: [(label: String, value: DetailTab)] = []
+    if viewModel.group?.game_type != .pickems { opts.append(("Leaderboard", .leaderboard)) }
+    if viewModel.group?.game_type == .pickems || viewModel.group?.game_type == .both { opts.append(("Pickems", .pickems)) }
+    opts.append(("Members", .members))
     if viewModel.isAdmin { opts.append(("Settings", .settings)) }
     return opts
   }
@@ -220,6 +247,9 @@ struct GroupDetailView: View {
         viewModel.configure(client: client)
         await viewModel.loadInitial()
       }
+    }
+    .onChange(of: viewModel.group?.game_type) { _, newValue in
+      if newValue == .pickems && tab == .leaderboard { tab = .pickems }
     }
   }
 
@@ -263,6 +293,7 @@ struct GroupDetailView: View {
 
         switch tab {
         case .leaderboard: leaderboardTab
+        case .pickems: pickemsTab
         case .members: membersTab
         case .settings: settingsTab
         }
@@ -377,6 +408,17 @@ struct GroupDetailView: View {
         }
       }
     }
+  }
+
+  // MARK: - Pickems tab
+
+  private var pickemsTab: some View {
+    PickemsStandingsView(
+      season: viewModel.pickemsSeason,
+      week: viewModel.pickemsWeek,
+      lastGame: viewModel.pickemsLastGame,
+      fixedGroupId: viewModel.group?.id
+    )
   }
 
   // MARK: - Members tab
