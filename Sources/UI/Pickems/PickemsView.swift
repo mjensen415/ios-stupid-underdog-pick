@@ -184,7 +184,7 @@ struct PickemsView: View {
               Button {
                 viewModel.week = w
               } label: {
-                Text("Week \(formatWeekLabel(w))")
+                Text("Week \(w)")
                   .font(BoldTheme.Fonts.body(12.5, weight: .bold))
                   .padding(.horizontal, 16).padding(.vertical, 7)
                   .background(active ? BoldTheme.Colors.gold : BoldTheme.Colors.track)
