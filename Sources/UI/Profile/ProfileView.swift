@@ -332,7 +332,7 @@ struct ProfileView: View {
       await MainActor.run {
         errorMessage = nil
         if let p = profile {
-          profile = ProfileRow(id: p.id, user_id: p.user_id, display_name: displayName, avatar_url: p.avatar_url, has_onboarded: p.has_onboarded, favorite_team_id: p.favorite_team_id, email: p.email)
+          profile = ProfileRow(id: p.id, user_id: p.user_id, display_name: displayName, avatar_url: p.avatar_url, has_onboarded: p.has_onboarded, favorite_team_id: p.favorite_team_id, game_interests: p.game_interests, pickems_intro_dismissed: p.pickems_intro_dismissed, email: p.email)
         }
       }
     } catch {
@@ -388,7 +388,7 @@ struct ProfileView: View {
       let url = try await ProfilesService(client: client).uploadAvatar(data: data, fileExtension: "jpg")
       try await ProfilesService(client: client).updateProfile(avatarUrl: url)
       await MainActor.run {
-        profile = ProfileRow(id: p.id, user_id: p.user_id, display_name: p.display_name, avatar_url: url, has_onboarded: p.has_onboarded, favorite_team_id: p.favorite_team_id, email: p.email)
+        profile = ProfileRow(id: p.id, user_id: p.user_id, display_name: p.display_name, avatar_url: url, has_onboarded: p.has_onboarded, favorite_team_id: p.favorite_team_id, game_interests: p.game_interests, pickems_intro_dismissed: p.pickems_intro_dismissed, email: p.email)
       }
     } catch {
       await MainActor.run { errorMessage = "Couldn't upload photo. Try again." }

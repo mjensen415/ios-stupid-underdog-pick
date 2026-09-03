@@ -1,15 +1,41 @@
 import SwiftUI
 import Supabase
 
-// One-time, skippable first-run flow: favorite team -> first pick -> group.
-// Shown by RootView as a full-screen cover when profiles.has_onboarded is
-// false, dismissed (and never shown again) once any exit path completes.
+private enum OnboardGameKey: String, CaseIterable {
+  case cfbUnderdog = "cfb_underdog"
+  case proballUnderdog = "proball_underdog"
+  case pickems
+
+  var label: String {
+    switch self {
+    case .cfbUnderdog: return "Underdog Pick — CFB"
+    case .proballUnderdog: return "Underdog Pick — Pro Ball"
+    case .pickems: return "Pro Ball Pickems"
+    }
+  }
+  var sublabel: String {
+    switch self {
+    case .cfbUnderdog: return "Free"
+    case .proballUnderdog: return "Entry fee"
+    case .pickems: return "Free to start"
+    }
+  }
+}
+
+private enum OnboardStep { case games, team, pick, groups }
+
+// One-time, skippable first-run flow: what do you want to play? -> favorite
+// team -> first pick -> group. Which of the last three show, and what they
+// say, depends on the game(s) picked in step one. Shown by RootView as a
+// full-screen cover when profiles.has_onboarded is false, dismissed (and
+// never shown again) once any exit path completes.
 struct OnboardingFlowView: View {
   let client: SupabaseClient
   @EnvironmentObject var appState: AppState
   @Binding var isPresented: Bool
 
-  @State private var step = 1
+  @State private var selections: Set<OnboardGameKey> = []
+  @State private var stepIndex = 0
   @State private var teams: [Team] = []
   @State private var search = ""
   @State private var activeConference: String?
@@ -20,6 +46,22 @@ struct OnboardingFlowView: View {
   @State private var saving = false
 
   private var haptic: UISelectionFeedbackGenerator { UISelectionFeedbackGenerator() }
+
+  private var showTeamStep: Bool { selections.contains(.cfbUnderdog) }
+  private var showPickStep: Bool { selections.contains(.cfbUnderdog) || selections.contains(.proballUnderdog) }
+  private var pickemsSelected: Bool { selections.contains(.pickems) }
+  private var underdogSelected: Bool { selections.contains(.cfbUnderdog) || selections.contains(.proballUnderdog) }
+  private var pickSport: String { selections.contains(.cfbUnderdog) ? "cfb" : "nfl" }
+
+  private var activeSteps: [OnboardStep] {
+    var steps: [OnboardStep] = [.games]
+    if showTeamStep { steps.append(.team) }
+    if showPickStep { steps.append(.pick) }
+    steps.append(.groups)
+    return steps
+  }
+  private var currentStep: OnboardStep { activeSteps[safe: stepIndex] ?? .games }
+  private func advance() { stepIndex = min(stepIndex + 1, activeSteps.count - 1) }
 
   // Mirrors web's CONFERENCE_ORDER (src/hooks/useCfbNews.ts) so the
   // drill-down reads the same on both platforms -- Power 4 + notable
@@ -48,10 +90,10 @@ struct OnboardingFlowView: View {
       VStack(spacing: 20) {
         HStack {
           HStack(spacing: 6) {
-            ForEach(1...3, id: \.self) { s in
+            ForEach(activeSteps.indices, id: \.self) { i in
               Capsule()
-                .fill(s <= step ? BoldTheme.Colors.green : BoldTheme.Colors.border)
-                .frame(width: s == step ? 24 : 8, height: 6)
+                .fill(i <= stepIndex ? BoldTheme.Colors.green : BoldTheme.Colors.border)
+                .frame(width: i == stepIndex ? 24 : 8, height: 6)
             }
           }
           Spacer()
@@ -70,10 +112,11 @@ struct OnboardingFlowView: View {
         .padding(.top, 20)
 
         BoldTheme.GlassCard(strong: true, radius: 16, padding: 20) {
-          switch step {
-          case 1: teamStep
-          case 2: pickStep
-          default: groupStep
+          switch currentStep {
+          case .games: gamesStep
+          case .team: teamStep
+          case .pick: pickStep
+          case .groups: groupStep
           }
         }
         .padding(.horizontal, 20)
@@ -82,17 +125,21 @@ struct OnboardingFlowView: View {
       }
     }
     .task {
+      teams = (try? await loadTeams()) ?? []
+    }
+    // Fetches lazily once the pick step is actually reached (not on initial
+    // appear), since pickSport depends on step one's selections which
+    // aren't known yet when this view first mounts. Re-runs if stepIndex
+    // changes -- id-keyed so it only ever does real work when currentStep
+    // is .pick.
+    .task(id: stepIndex) {
+      guard currentStep == .pick else { return }
       do {
-        let ctx = try await ContextService(client: client).getCurrentContext()
+        let ctx = try await ContextService(client: client).getCurrentContext(sport: pickSport)
         season = ctx.season
         week = ctx.week
-        if let s = season, let w = week {
-          existingPick = try? await PicksService(client: client).myPick(season: s, week: w)
-        }
-        teams = try await loadTeams()
-      } catch {
-        teams = (try? await loadTeams()) ?? []
-      }
+        existingPick = try? await PicksService(client: client).myPick(season: ctx.season, week: ctx.week, sport: pickSport)
+      } catch {}
     }
   }
 
@@ -107,9 +154,61 @@ struct OnboardingFlowView: View {
     return try JSONDecoder().decode([Team].self, from: res.data)
   }
 
+  @ViewBuilder private var gamesStep: some View {
+    VStack(alignment: .leading, spacing: 12) {
+      Text("STEP \(stepIndex + 1) OF \(activeSteps.count)").font(BoldTheme.Fonts.mono(11, weight: .semibold)).foregroundColor(BoldTheme.Colors.green)
+      Text("What do you want to play?").font(BoldTheme.Fonts.display(24)).foregroundColor(BoldTheme.Colors.text)
+      Text("Pick one or more — we'll set the rest of this up around it.")
+        .font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
+
+      VStack(spacing: 8) {
+        ForEach(OnboardGameKey.allCases, id: \.self) { key in
+          let active = selections.contains(key)
+          Button {
+            haptic.selectionChanged()
+            if active { selections.remove(key) } else { selections.insert(key) }
+          } label: {
+            HStack {
+              VStack(alignment: .leading, spacing: 2) {
+                Text(key.label).font(BoldTheme.Fonts.body(14, weight: .semibold)).foregroundColor(BoldTheme.Colors.text)
+                Text(key.sublabel).font(BoldTheme.Fonts.mono(11)).foregroundColor(BoldTheme.Colors.textFaint)
+              }
+              Spacer()
+              if active {
+                Image(systemName: "checkmark").foregroundColor(BoldTheme.Colors.green)
+              }
+            }
+            .padding(14)
+            .background(active ? BoldTheme.Colors.green.opacity(0.1) : Color.white.opacity(0.5))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(active ? BoldTheme.Colors.green : BoldTheme.Colors.border, lineWidth: 1))
+            .cornerRadius(10)
+          }
+        }
+      }
+
+      Button {
+        selections = Set(OnboardGameKey.allCases)
+      } label: {
+        Text("Not sure yet — show me everything")
+          .font(BoldTheme.Fonts.body(12, weight: .semibold))
+          .foregroundColor(BoldTheme.Colors.green)
+      }
+      .padding(.top, 2)
+
+      Button {
+        advance()
+      } label: {
+        Text("Continue").frame(maxWidth: .infinity)
+      }
+      .buttonStyle(GoldButtonStyle())
+      .disabled(selections.isEmpty)
+      .opacity(selections.isEmpty ? 0.5 : 1)
+    }
+  }
+
   @ViewBuilder private var teamStep: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Text("STEP 1 OF 3").font(BoldTheme.Fonts.mono(11, weight: .semibold)).foregroundColor(BoldTheme.Colors.green)
+      Text("STEP \(stepIndex + 1) OF \(activeSteps.count)").font(BoldTheme.Fonts.mono(11, weight: .semibold)).foregroundColor(BoldTheme.Colors.green)
       Text("Got a team you follow?").font(BoldTheme.Fonts.display(24)).foregroundColor(BoldTheme.Colors.text)
       Text("We'll use it to flag when they're a live dog. Totally optional.")
         .font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
@@ -126,7 +225,7 @@ struct OnboardingFlowView: View {
       teamPickerList
 
       Button {
-        step = 2
+        advance()
       } label: {
         Text("Continue").frame(maxWidth: .infinity)
       }
@@ -217,7 +316,7 @@ struct OnboardingFlowView: View {
 
   @ViewBuilder private var pickStep: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Text("STEP 2 OF 3").font(BoldTheme.Fonts.mono(11, weight: .semibold)).foregroundColor(BoldTheme.Colors.green)
+      Text("STEP \(stepIndex + 1) OF \(activeSteps.count)").font(BoldTheme.Fonts.mono(11, weight: .semibold)).foregroundColor(BoldTheme.Colors.green)
       Text("Make your first pick").font(BoldTheme.Fonts.display(24)).foregroundColor(BoldTheme.Colors.text)
 
       if existingPick != nil {
@@ -230,7 +329,7 @@ struct OnboardingFlowView: View {
         .background(BoldTheme.Colors.green.opacity(0.1))
         .cornerRadius(8)
 
-        Button { step = 3 } label: {
+        Button { advance() } label: {
           Text("Continue").frame(maxWidth: .infinity)
         }
         .buttonStyle(GoldButtonStyle())
@@ -241,6 +340,7 @@ struct OnboardingFlowView: View {
         Button {
           Task {
             await finish()
+            appState.requestedSport = pickSport
             appState.requestedTab = 1 // Games tab
           }
         } label: {
@@ -248,7 +348,7 @@ struct OnboardingFlowView: View {
         }
         .buttonStyle(GoldButtonStyle())
 
-        Button { step = 3 } label: {
+        Button { advance() } label: {
           Text("I'll pick later").font(BoldTheme.Fonts.body(12)).foregroundColor(BoldTheme.Colors.textFaint)
         }
         .frame(maxWidth: .infinity)
@@ -258,20 +358,34 @@ struct OnboardingFlowView: View {
 
   @ViewBuilder private var groupStep: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Text("STEP 3 OF 3").font(BoldTheme.Fonts.mono(11, weight: .semibold)).foregroundColor(BoldTheme.Colors.green)
-      Text("SUP is better with rivals").font(BoldTheme.Fonts.display(24)).foregroundColor(BoldTheme.Colors.text)
-      Text("Start a group and invite the people you actually want to beat — or join one with a code.")
+      Text("STEP \(stepIndex + 1) OF \(activeSteps.count)").font(BoldTheme.Fonts.mono(11, weight: .semibold)).foregroundColor(BoldTheme.Colors.green)
+      Text(pickemsSelected && !underdogSelected ? "Pickems is better with rivals" : "SUP is better with rivals")
+        .font(BoldTheme.Fonts.display(24)).foregroundColor(BoldTheme.Colors.text)
+      Text(groupStepBody)
         .font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
 
-      Button {
-        Task {
-          await finish()
-          appState.requestedTab = 4 // Groups tab
+      if underdogSelected {
+        Button {
+          Task {
+            await finish()
+            appState.requestedTab = 4 // Groups tab
+          }
+        } label: {
+          HStack { Image(systemName: "person.2.fill"); Text(pickemsSelected ? "Underdog Pick groups" : "Start or join a group") }.frame(maxWidth: .infinity)
         }
-      } label: {
-        HStack { Image(systemName: "person.2.fill"); Text("Start or join a group") }.frame(maxWidth: .infinity)
+        .buttonStyle(GoldButtonStyle())
       }
-      .buttonStyle(GoldButtonStyle())
+      if pickemsSelected {
+        Button {
+          Task {
+            await finish()
+            appState.requestedPickems = true
+          }
+        } label: {
+          HStack { Image(systemName: "person.2.fill"); Text(underdogSelected ? "Pickems groups" : "Start or join a group") }.frame(maxWidth: .infinity)
+        }
+        .buttonStyle(underdogSelected ? AnyButtonStyle(SecondaryButtonStyle()) : AnyButtonStyle(GoldButtonStyle()))
+      }
 
       Button {
         Task { await finish() }
@@ -282,10 +396,19 @@ struct OnboardingFlowView: View {
     }
   }
 
+  private var groupStepBody: String {
+    if pickemsSelected && underdogSelected {
+      return "Both games are played in groups. Start or join one for each — or just one to start."
+    } else if pickemsSelected {
+      return "Pickems is played in groups. Create one and invite friends, or join one that's already playing."
+    }
+    return "Start a group and invite the people you actually want to beat — or join one with a code."
+  }
+
   private func finish() async {
     guard !saving else { return }
     saving = true
-    try? await ProfilesService(client: client).completeOnboarding()
+    try? await ProfilesService(client: client).completeOnboarding(gameInterests: selections.map { $0.rawValue })
     // Ask for push permission once, right as onboarding wraps -- after the
     // user has already seen real value (team, pick, or group), not at cold
     // launch. Existing users who upgrade past this build never see
@@ -296,6 +419,11 @@ struct OnboardingFlowView: View {
   }
 }
 
+private extension Array {
+  subscript(safe index: Int) -> Element? {
+    indices.contains(index) ? self[index] : nil
+  }
+}
 
 private struct GoldButtonStyle: ButtonStyle {
   func makeBody(configuration: Configuration) -> some View {
@@ -306,5 +434,31 @@ private struct GoldButtonStyle: ButtonStyle {
       .foregroundColor(BoldTheme.Colors.text)
       .cornerRadius(8)
       .scaleEffect(configuration.isPressed ? 0.97 : 1)
+  }
+}
+
+private struct SecondaryButtonStyle: ButtonStyle {
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .font(BoldTheme.Fonts.body(14, weight: .semibold))
+      .padding(.vertical, 13)
+      .background(Color.white.opacity(0.7))
+      .foregroundColor(BoldTheme.Colors.text)
+      .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
+      .cornerRadius(8)
+      .scaleEffect(configuration.isPressed ? 0.97 : 1)
+  }
+}
+
+// Lets groupStep pick between GoldButtonStyle and SecondaryButtonStyle at
+// runtime -- ButtonStyle's `some View` return type can't be branched on
+// directly without type-erasing it first.
+private struct AnyButtonStyle: ButtonStyle {
+  private let _makeBody: (Configuration) -> AnyView
+  init<S: ButtonStyle>(_ style: S) {
+    _makeBody = { AnyView(style.makeBody(configuration: $0)) }
+  }
+  func makeBody(configuration: Configuration) -> some View {
+    _makeBody(configuration)
   }
 }

@@ -19,6 +19,11 @@ final class AppState: ObservableObject {
   /// lands on whichever sport was selected on Home instead of always
   /// resetting to CFB. GamesView consumes and resets it, same pattern.
   @Published var requestedSport: String?
+  /// Set by onboarding's group step (Pickems path) to push HomeView into
+  /// PickemsView once Home appears -- same request/consume pattern as
+  /// requestedTab, needed separately since Pickems isn't one of
+  /// MainTabView's fixed tabs, it's a push from within the Home tab.
+  @Published var requestedPickems = false
 }
 
 private struct SupabaseClientKey: EnvironmentKey {

@@ -8,6 +8,8 @@ struct ProfileRow: Decodable {
   let avatar_url: String?
   let has_onboarded: Bool
   let favorite_team_id: UUID?
+  let game_interests: [String]
+  let pickems_intro_dismissed: Bool
   // Not a DB column -- profiles has no email column at all (email lives on
   // auth.users, which clients can't query directly). Filled in from the
   // already-authenticated session below, not decoded from the row.
@@ -20,6 +22,8 @@ struct ProfileRow: Decodable {
     case avatar_url
     case has_onboarded
     case favorite_team_id
+    case game_interests
+    case pickems_intro_dismissed
   }
 }
 
@@ -36,7 +40,7 @@ struct ProfilesService {
     let user = try await client.auth.session.user
     let res = try await client
       .from("profiles")
-      .select("id, user_id, display_name, avatar_url, has_onboarded, favorite_team_id")
+      .select("id, user_id, display_name, avatar_url, has_onboarded, favorite_team_id, game_interests, pickems_intro_dismissed")
       .eq("user_id", value: user.id)
       .limit(1)
       .execute()
@@ -54,7 +58,7 @@ struct ProfilesService {
   func fetchProfile(userId: UUID) async throws -> ProfileRow? {
     let res = try await client
       .from("profiles")
-      .select("id, user_id, display_name, avatar_url, has_onboarded, favorite_team_id")
+      .select("id, user_id, display_name, avatar_url, has_onboarded, favorite_team_id, game_interests, pickems_intro_dismissed")
       .eq("user_id", value: userId)
       .limit(1)
       .execute()
@@ -93,15 +97,31 @@ struct ProfilesService {
       .execute()
   }
 
-  /// Marks the one-time first-run flow (team -> first pick -> group) done,
-  /// whether completed or explicitly skipped -- RootView never shows it
-  /// again once this is true.
-  func completeOnboarding() async throws {
-    struct Update: Encodable { let has_onboarded: Bool }
+  /// Marks the one-time first-run flow (what do you play? -> team -> first
+  /// pick -> group) done, whether completed or explicitly skipped --
+  /// RootView never shows it again once this is true. Also records the
+  /// step-one game selections and marks the legacy Pickems re-intro banner
+  /// moot, since onboarding just asked directly -- no need to also nag on
+  /// Home.
+  func completeOnboarding(gameInterests: [String]) async throws {
+    struct Update: Encodable { let has_onboarded: Bool; let game_interests: [String]; let pickems_intro_dismissed: Bool }
     let userId = try await client.auth.session.user.id
     _ = try await client
       .from("profiles")
-      .update(Update(has_onboarded: true))
+      .update(Update(has_onboarded: true, game_interests: gameInterests, pickems_intro_dismissed: true))
+      .eq("user_id", value: userId)
+      .execute()
+  }
+
+  /// Dismisses the one-time Home banner shown to accounts that onboarded
+  /// before Pickems existed (has_onboarded was already true, so the new
+  /// onboarding step never ran for them).
+  func dismissPickemsIntro() async throws {
+    struct Update: Encodable { let pickems_intro_dismissed: Bool }
+    let userId = try await client.auth.session.user.id
+    _ = try await client
+      .from("profiles")
+      .update(Update(pickems_intro_dismissed: true))
       .eq("user_id", value: userId)
       .execute()
   }

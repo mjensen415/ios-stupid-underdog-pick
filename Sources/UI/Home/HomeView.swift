@@ -21,6 +21,19 @@ final class HomeViewModel: ObservableObject {
   @Published var recap: [RecapHit] = []
   @Published var streak: Int = 0
 
+  // Your Contests -- both sports' context/pick/kickoff independent of
+  // whichever one the sportToggle currently shows, since a contest row can
+  // be active for either (or both) regardless of what's on screen below.
+  @Published var cfbContext: CurrentContext?
+  @Published var nflContext: CurrentContext?
+  @Published var myPickCfb: Pick?
+  @Published var myPickNfl: Pick?
+  @Published var firstKickoffCfb: Date?
+  @Published var firstKickoffNfl: Date?
+  @Published var cfbOffseason = false
+  @Published var nflOffseason = false
+  @Published var profile: ProfileRow?
+
   private var client: SupabaseClient?
 
   func configure(client: SupabaseClient) {
@@ -68,6 +81,43 @@ final class HomeViewModel: ObservableObject {
     discoverGroups = await discoverTask ?? []
     recap = await recapTask
     streak = await streakTask ?? 0
+
+    profile = try? await ProfilesService(client: client).fetchMyProfile()
+
+    let cfbCtx = try? await ContextService(client: client).getCurrentContext(sport: "cfb")
+    let nflCtx = try? await ContextService(client: client).getCurrentContext(sport: "nfl")
+    cfbContext = cfbCtx
+    nflContext = nflCtx
+    if let cfbCtx {
+      async let cfbPickTask = try? PicksService(client: client).myPick(season: cfbCtx.season, week: cfbCtx.week, sport: "cfb")
+      async let cfbKickoffTask = fetchFirstKickoff(client: client, season: cfbCtx.season, week: cfbCtx.week, sport: "cfb")
+      async let cfbOffseasonTask = checkOffseason(client: client, season: cfbCtx.season, sport: "cfb")
+      myPickCfb = await cfbPickTask ?? nil
+      firstKickoffCfb = await cfbKickoffTask
+      cfbOffseason = await cfbOffseasonTask
+    }
+    if let nflCtx {
+      async let nflPickTask = try? PicksService(client: client).myPick(season: nflCtx.season, week: nflCtx.week, sport: "nfl")
+      async let nflKickoffTask = fetchFirstKickoff(client: client, season: nflCtx.season, week: nflCtx.week, sport: "nfl")
+      async let nflOffseasonTask = checkOffseason(client: client, season: nflCtx.season, sport: "nfl")
+      myPickNfl = await nflPickTask ?? nil
+      firstKickoffNfl = await nflKickoffTask
+      nflOffseason = await nflOffseasonTask
+    }
+  }
+
+  private func checkOffseason(client: SupabaseClient, season: Int, sport: String) async -> Bool {
+    struct CountRow: Decodable { let id: UUID }
+    guard let res = try? await client
+      .from("games")
+      .select("id")
+      .eq("season", value: season)
+      .eq("sport", value: sport)
+      .limit(1)
+      .execute()
+    else { return true }
+    let games = (try? JSONDecoder().decode([CountRow].self, from: res.data)) ?? []
+    return games.isEmpty
   }
 
   private func fetchFirstKickoff(client: SupabaseClient, season: Int, week: Int, sport: String) async -> Date? {
@@ -125,11 +175,38 @@ struct HomeView: View {
   @State private var showPickems = false
   @State private var shareURL: URL?
   @State private var showShareSheet = false
+  @State private var dismissingIntro = false
 
   // groups-create-invite is admin-only server-side (assertIsGroupAdmin) --
   // only owner/admin rows can actually generate a link.
   private var inviteableGroups: [MyGroup] {
     viewModel.myGroups.filter { $0.my_role == .owner || $0.my_role == .admin }
+  }
+
+  // A contest counts as "yours" if you're in an eligible group for it, or
+  // (for a brand-new account with no groups yet) if onboarding's "what do
+  // you want to play" step recorded interest in it. Underdog Pick has no
+  // group requirement to make a pick at all, so group membership is a
+  // signal here, not a gate. Mirrors web's Home.tsx exactly.
+  private var gameInterests: [String] { viewModel.profile?.game_interests ?? [] }
+  private var underdogCfbActive: Bool {
+    viewModel.myGroups.contains { $0.game_type != .pickems && ($0.sport == .cfb || $0.sport == .both) }
+      || gameInterests.contains("cfb_underdog")
+  }
+  private var underdogProBallActive: Bool {
+    viewModel.myGroups.contains { $0.game_type != .pickems && ($0.sport == .nfl || $0.sport == .both) }
+      || gameInterests.contains("proball_underdog")
+  }
+  private var pickemsActive: Bool {
+    viewModel.myGroups.contains { $0.game_type == .pickems || $0.game_type == .both }
+      || gameInterests.contains("pickems")
+  }
+  private var hasAnyContest: Bool { underdogCfbActive || underdogProBallActive || pickemsActive }
+  private var showExploreUnderdog: Bool { !underdogCfbActive && !underdogProBallActive }
+  private var showExplorePickems: Bool { !pickemsActive }
+  private var showPickemsIntroBanner: Bool {
+    guard let profile = viewModel.profile else { return false }
+    return profile.has_onboarded && !profile.pickems_intro_dismissed && !pickemsActive
   }
 
   private var initials: String {
@@ -148,8 +225,7 @@ struct HomeView: View {
             topRow
             sportToggle
             quickActionsRow
-            pickStatusCard
-            pickemsEntryCard
+            contestsSection
             groupsSection
             discoverSection
             recapSection
@@ -179,6 +255,11 @@ struct HomeView: View {
       }
       .navigationDestination(isPresented: $showPickems) {
         PickemsView()
+      }
+      .onChange(of: appState.requestedPickems) { _, requested in
+        guard requested else { return }
+        showPickems = true
+        appState.requestedPickems = false
       }
       .sheet(isPresented: $showCreateGroup) {
         CreateGroupView {
@@ -326,29 +407,81 @@ struct HomeView: View {
     .padding(.bottom, 20)
   }
 
-  private var pickStatusCard: some View {
+  // ── Your Contests -- one row per game this account is actually playing,
+  // so someone in only one game never has to wade through the others to
+  // find their pick. Mirrors web's Home.tsx exactly. ──────────────────────
+  private var contestsSection: some View {
     VStack(alignment: .leading, spacing: 10) {
-      Text("THIS WEEK").font(BoldTheme.Fonts.mono(10, weight: .semibold)).foregroundColor(BoldTheme.Colors.textFaint)
+      if showPickemsIntroBanner {
+        PickemsIntroBanner(dismissing: dismissingIntro) {
+          Task { await dismissPickemsIntro() }
+          showPickems = true
+        } onDismiss: {
+          Task { await dismissPickemsIntro() }
+        }
+      }
 
-      BoldTheme.GlassCard(strong: true, radius: 18, padding: 16) {
-        VStack(alignment: .leading, spacing: 10) {
-          HStack {
-            Text(verbatim: "GLOBAL · \(sport.rawValue.uppercased())").font(BoldTheme.Fonts.mono(10, weight: .semibold)).foregroundColor(BoldTheme.Colors.green)
-            Spacer()
-            if let rank = viewModel.myRank {
-              Text(verbatim: "#\(rank.rank) of \(rank.totalPlayers)")
-                .font(BoldTheme.Fonts.mono(11))
-                .foregroundColor(BoldTheme.Colors.textDim)
+      Text(hasAnyContest ? "YOUR CONTESTS" : "GET STARTED")
+        .font(BoldTheme.Fonts.mono(10, weight: .semibold))
+        .foregroundColor(BoldTheme.Colors.textFaint)
+
+      if hasAnyContest {
+        VStack(spacing: 10) {
+          if underdogCfbActive {
+            ContestRow(
+              title: "Underdog Pick — CFB",
+              sublabel: viewModel.cfbOffseason ? "Offseason" : "Week \(formatWeekLabel(viewModel.cfbContext?.week ?? 0)) · \(viewModel.cfbContext?.season ?? 0)",
+              isOffseason: viewModel.cfbOffseason,
+              picked: viewModel.myPickCfb != nil,
+              countdown: countdownText(myPick: viewModel.myPickCfb, kickoff: viewModel.firstKickoffCfb)
+            ) {
+              appState.requestedSport = "cfb"
+              appState.requestedTab = 1
             }
           }
+          if underdogProBallActive {
+            ContestRow(
+              title: "Underdog Pick — Pro Ball",
+              sublabel: viewModel.nflOffseason ? "Offseason" : "Week \(formatWeekLabel(viewModel.nflContext?.week ?? 0)) · \(viewModel.nflContext?.season ?? 0)",
+              isOffseason: viewModel.nflOffseason,
+              picked: viewModel.myPickNfl != nil,
+              countdown: countdownText(myPick: viewModel.myPickNfl, kickoff: viewModel.firstKickoffNfl)
+            ) {
+              appState.requestedSport = "nfl"
+              appState.requestedTab = 1
+            }
+          }
+          if pickemsActive {
+            ContestRow(
+              title: "Pro Ball Pickems",
+              sublabel: viewModel.nflOffseason ? "Offseason" : "Week \(viewModel.nflContext?.week ?? 0) · \(viewModel.nflContext?.season ?? 0)",
+              isOffseason: viewModel.nflOffseason,
+              picked: false,
+              countdown: nil
+            ) {
+              showPickems = true
+            }
+          }
+        }
+      }
 
-          Text(statusHeadline)
-            .font(BoldTheme.Fonts.display(24))
-            .foregroundColor(BoldTheme.Colors.text)
-
-          if !viewModel.isOffseason {
-            statusPill
-            pickButton
+      if showExploreUnderdog || showExplorePickems {
+        if hasAnyContest {
+          Text("EXPLORE OTHER GAMES")
+            .font(BoldTheme.Fonts.mono(10, weight: .semibold))
+            .foregroundColor(BoldTheme.Colors.textFaint)
+            .padding(.top, 4)
+        }
+        VStack(spacing: 10) {
+          if showExploreUnderdog {
+            GameCardView(game: .underdog, compact: true) {
+              appState.requestedTab = 1
+            }
+          }
+          if showExplorePickems {
+            GameCardView(game: .pickems, compact: true) {
+              showPickems = true
+            }
           }
         }
       }
@@ -356,34 +489,8 @@ struct HomeView: View {
     .padding(.bottom, 22)
   }
 
-  private var statusHeadline: String {
-    if viewModel.isOffseason { return "SEASON HASN'T STARTED" }
-    return viewModel.myPick != nil ? "YOU'RE IN THIS WEEK" : "MAKE YOUR PICK"
-  }
-
-  @ViewBuilder
-  private var statusPill: some View {
-    if viewModel.myPick != nil {
-      Text("Picked ✓")
-        .font(BoldTheme.Fonts.body(11.5, weight: .bold))
-        .foregroundColor(BoldTheme.Colors.green)
-        .padding(.horizontal, 10).padding(.vertical, 4)
-        .background(BoldTheme.Colors.green.opacity(0.13))
-        .overlay(Capsule().strokeBorder(BoldTheme.Colors.green.opacity(0.28)))
-        .clipShape(Capsule())
-    } else if let countdown = countdownText {
-      Text(verbatim: "Locks in \(countdown)")
-        .font(BoldTheme.Fonts.body(11.5, weight: .bold))
-        .foregroundColor(Color(hex: 0xA6402A))
-        .padding(.horizontal, 10).padding(.vertical, 4)
-        .background(Color(hex: 0xC6402A).opacity(0.13))
-        .overlay(Capsule().strokeBorder(Color(hex: 0xC6402A).opacity(0.28)))
-        .clipShape(Capsule())
-    }
-  }
-
-  private var countdownText: String? {
-    guard viewModel.myPick == nil, let kickoff = viewModel.firstKickoff else { return nil }
+  private func countdownText(myPick: Pick?, kickoff: Date?) -> String? {
+    guard myPick == nil, let kickoff else { return nil }
     let diff = kickoff.timeIntervalSinceNow
     guard diff > 0 else { return "Locked" }
     let hours = Int(diff / 3600)
@@ -392,61 +499,12 @@ struct HomeView: View {
     return "\(hours)h \(minutes)m"
   }
 
-  private var pickButton: some View {
-    Button {
-      appState.requestedSport = sport.rawValue
-      appState.requestedTab = 1 // Games tab
-    } label: {
-      ZStack {
-        if viewModel.myPick == nil {
-          BoldTheme.HatchOverlay()
-        }
-        Text(viewModel.myPick != nil ? "VIEW PICK" : "MAKE YOUR PICK")
-          .font(BoldTheme.Fonts.display(17))
-          .foregroundColor(BoldTheme.Colors.text)
-      }
-      .frame(maxWidth: .infinity)
-      .frame(height: 42)
-      .background(
-        viewModel.myPick != nil
-          ? AnyView(Color.white.opacity(0.85))
-          : AnyView(LinearGradient(colors: [Color(hex: 0xFFDD5C), Color(hex: 0xFFD23A)], startPoint: .top, endPoint: .bottom))
-      )
-      .overlay(
-        RoundedRectangle(cornerRadius: 12)
-          .strokeBorder(viewModel.myPick != nil ? BoldTheme.Colors.border : Color.clear, lineWidth: 1)
-      )
-      .clipShape(RoundedRectangle(cornerRadius: 12))
-      .shadow(color: viewModel.myPick != nil ? .clear : Color(hex: 0xFFD23A).opacity(0.35), radius: 10, y: 5)
-    }
-  }
-
-  private var pickemsEntryCard: some View {
-    Button {
-      showPickems = true
-    } label: {
-      BoldTheme.GlassCard(strong: true, radius: 16, padding: 16) {
-        HStack(spacing: 12) {
-          VStack(alignment: .leading, spacing: 2) {
-            Text("NFL · NEW")
-              .font(BoldTheme.Fonts.mono(9.5, weight: .semibold))
-              .tracking(1.0)
-              .foregroundColor(BoldTheme.Colors.green)
-            Text("PRO BALL PICKEMS")
-              .font(BoldTheme.Fonts.display(20))
-              .foregroundColor(BoldTheme.Colors.text)
-            Text("Pick every game's winner. Play with your group.")
-              .font(BoldTheme.Fonts.body(12))
-              .foregroundColor(BoldTheme.Colors.textDim)
-          }
-          Spacer()
-          Image(systemName: "chevron.right")
-            .foregroundColor(BoldTheme.Colors.textFaint)
-        }
-      }
-    }
-    .buttonStyle(.plain)
-    .padding(.bottom, 20)
+  private func dismissPickemsIntro() async {
+    guard let client, !dismissingIntro else { return }
+    dismissingIntro = true
+    try? await ProfilesService(client: client).dismissPickemsIntro()
+    viewModel.profile = try? await ProfilesService(client: client).fetchMyProfile()
+    dismissingIntro = false
   }
 
   private var groupsSection: some View {
@@ -580,6 +638,160 @@ struct HomeView: View {
             .padding(.horizontal, 8)
           }
         }
+      }
+    }
+  }
+}
+
+// ── Your Contests row ────────────────────────────────────────────────────
+private struct ContestRow: View {
+  let title: String
+  let sublabel: String
+  let isOffseason: Bool
+  let picked: Bool
+  let countdown: String?
+  let action: () -> Void
+
+  var body: some View {
+    Button(action: action) {
+      BoldTheme.GlassCard(strong: true, radius: 16, padding: 14) {
+        HStack(spacing: 12) {
+          VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(BoldTheme.Fonts.body(14.5, weight: .heavy)).foregroundColor(BoldTheme.Colors.text)
+            Text(sublabel).font(BoldTheme.Fonts.mono(10.5)).foregroundColor(BoldTheme.Colors.textDim)
+          }
+          Spacer()
+          statusView
+        }
+      }
+    }
+    .buttonStyle(.plain)
+  }
+
+  @ViewBuilder private var statusView: some View {
+    if isOffseason {
+      Text("Offseason")
+        .font(BoldTheme.Fonts.body(11.5, weight: .bold))
+        .foregroundColor(BoldTheme.Colors.textDim)
+        .padding(.horizontal, 10).padding(.vertical, 4)
+        .background(BoldTheme.Colors.track)
+        .clipShape(Capsule())
+    } else if picked {
+      Text("Picked ✓")
+        .font(BoldTheme.Fonts.body(11.5, weight: .bold))
+        .foregroundColor(BoldTheme.Colors.green)
+        .padding(.horizontal, 10).padding(.vertical, 4)
+        .background(BoldTheme.Colors.green.opacity(0.13))
+        .overlay(Capsule().strokeBorder(BoldTheme.Colors.green.opacity(0.28)))
+        .clipShape(Capsule())
+    } else if let countdown {
+      Text(verbatim: countdown == "Locked" ? "Locked" : "Locks in \(countdown)")
+        .font(BoldTheme.Fonts.body(11.5, weight: .bold))
+        .foregroundColor(Color(hex: 0xA6402A))
+        .padding(.horizontal, 10).padding(.vertical, 4)
+        .background(Color(hex: 0xC6402A).opacity(0.13))
+        .overlay(Capsule().strokeBorder(Color(hex: 0xC6402A).opacity(0.28)))
+        .clipShape(Capsule())
+        .fixedSize()
+    } else {
+      Text("Make Pick →").font(BoldTheme.Fonts.display(15)).foregroundColor(BoldTheme.Colors.goldDeep)
+    }
+  }
+}
+
+// ── "Which game" card -- landing-style card reused for Explore. ─────────
+enum GameCardKey { case underdog, pickems }
+
+private struct GameCardView: View {
+  let game: GameCardKey
+  var compact: Bool = false
+  let action: () -> Void
+
+  private var eyebrow: String { game == .underdog ? "UNDERDOG PICK" : "PRO BALL PICKEMS" }
+  private var headline: String { game == .underdog ? "PICK THE DOG. BANK THE POINTS." : "PICK EVERY WINNER. NO SPREADS." }
+  private var body_: String {
+    game == .underdog
+      ? "One pick every week. Take the underdog — if they win outright, you bank the spread."
+      : "Straight-up picks on every NFL game, every week. Play in a group, chase the leaderboard."
+  }
+  private var badges: [String] { game == .underdog ? ["CFB · Free", "Pro Ball · Entry fee"] : ["NFL · Free to start"] }
+  private var cta: String { game == .underdog ? "Play Underdog Pick" : "Play Pickems" }
+
+  var body: some View {
+    Button(action: action) {
+      BoldTheme.GlassCard(strong: true, radius: 18, padding: compact ? 16 : 22) {
+        VStack(alignment: .leading, spacing: compact ? 8 : 10) {
+          Text(eyebrow).font(BoldTheme.Fonts.mono(10, weight: .bold)).foregroundColor(BoldTheme.Colors.green)
+          Text(headline).font(BoldTheme.Fonts.display(compact ? 19 : 26)).foregroundColor(BoldTheme.Colors.text)
+          if !compact {
+            Text(body_).font(BoldTheme.Fonts.body(13.5)).foregroundColor(BoldTheme.Colors.textDim)
+          }
+          HStack(spacing: 6) {
+            ForEach(badges, id: \.self) { b in
+              Text(b)
+                .font(BoldTheme.Fonts.mono(10, weight: .semibold))
+                .foregroundColor(BoldTheme.Colors.textDim)
+                .padding(.horizontal, 9).padding(.vertical, 3)
+                .background(BoldTheme.Colors.track)
+                .overlay(Capsule().strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
+                .clipShape(Capsule())
+            }
+          }
+          ZStack {
+            BoldTheme.HatchOverlay()
+            Text(verbatim: "\(cta) →").font(BoldTheme.Fonts.body(13, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
+          }
+          .padding(.horizontal, 16).padding(.vertical, 9)
+          .background(LinearGradient(colors: [Color(hex: 0xFFDD5C), Color(hex: 0xFFD23A)], startPoint: .top, endPoint: .bottom))
+          .clipShape(RoundedRectangle(cornerRadius: 10))
+          .fixedSize()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+      }
+    }
+    .buttonStyle(.plain)
+  }
+}
+
+// ── One-time re-intro banner for accounts that onboarded before Pickems
+// existed (has_onboarded was already true, so the new onboarding step
+// never runs for them). ──────────────────────────────────────────────────
+private struct PickemsIntroBanner: View {
+  let dismissing: Bool
+  let onCheckItOut: () -> Void
+  let onDismiss: () -> Void
+
+  var body: some View {
+    BoldTheme.GlassCard(strong: true, radius: 16, padding: 16) {
+      VStack(alignment: .leading, spacing: 6) {
+        HStack {
+          Text("NEW").font(BoldTheme.Fonts.mono(10, weight: .bold)).foregroundColor(BoldTheme.Colors.green)
+          Spacer()
+          Button(action: onDismiss) {
+            Image(systemName: "xmark")
+              .font(.system(size: 11, weight: .semibold))
+              .foregroundColor(BoldTheme.Colors.textDim)
+              .frame(width: 26, height: 26)
+              .background(Color.black.opacity(0.05))
+              .clipShape(Circle())
+          }
+          .disabled(dismissing)
+        }
+        Text("PRO BALL PICKEMS IS HERE").font(BoldTheme.Fonts.display(20)).foregroundColor(BoldTheme.Colors.text)
+        Text("Pick every NFL game's winner each week — no spreads, just wins. Play in a group, chase the leaderboard.")
+          .font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
+        Button(action: onCheckItOut) {
+          ZStack {
+            BoldTheme.HatchOverlay()
+            Text("Check it out →").font(BoldTheme.Fonts.body(13, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
+          }
+          .padding(.horizontal, 16).padding(.vertical, 9)
+          .background(LinearGradient(colors: [Color(hex: 0xFFDD5C), Color(hex: 0xFFD23A)], startPoint: .top, endPoint: .bottom))
+          .clipShape(RoundedRectangle(cornerRadius: 10))
+          .fixedSize()
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 4)
       }
     }
   }
