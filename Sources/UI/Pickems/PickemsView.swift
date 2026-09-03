@@ -7,7 +7,6 @@ final class PickemsViewModel: ObservableObject {
   @Published var week: Int?
   @Published var availableWeeks: [Int] = []
   @Published var games: [PickemsGameRow] = []
-  @Published var shortNames: [UUID: String] = [:]
   @Published var myPicks: [UUID: UUID] = [:]
   @Published var tiebreakerGuess: String = ""
   @Published var savedGuess: Int?
@@ -32,10 +31,7 @@ final class PickemsViewModel: ObservableObject {
       season = ctx.season
       week = ctx.week
       let svc = PickemsService(client: client)
-      async let weeksTask = svc.fetchDistinctWeeks(season: ctx.season)
-      async let namesTask = svc.fetchTeamShortNames()
-      availableWeeks = try await weeksTask
-      shortNames = try await namesTask
+      availableWeeks = try await svc.fetchDistinctWeeks(season: ctx.season)
       await loadWeek()
     } catch {
       errorText = error.localizedDescription
@@ -290,9 +286,7 @@ struct PickemsView: View {
           }
           PickemsGameRowView(
             game: game,
-            myPick: viewModel.myPicks[game.id],
-            homeColors: teamColors(viewModel.shortNames[game.homeTeamId]),
-            awayColors: teamColors(viewModel.shortNames[game.awayTeamId])
+            myPick: viewModel.myPicks[game.id]
           ) { teamId in
             Task { await viewModel.pickTeam(game, teamId: teamId) }
           }
@@ -321,8 +315,6 @@ struct PickemsView: View {
 private struct PickemsGameRowView: View {
   let game: PickemsGameRow
   let myPick: UUID?
-  let homeColors: TeamColorPair
-  let awayColors: TeamColorPair
   let onPick: (UUID) -> Void
 
   var body: some View {
@@ -337,8 +329,8 @@ private struct PickemsGameRowView: View {
           .foregroundColor(game.isLive ? Color(hex: 0xC6402A) : BoldTheme.Colors.textFaint)
       }
       HStack(spacing: 10) {
-        teamButton(teamId: game.awayTeamId, name: game.awayName, logo: game.awayLogoUrl, colors: awayColors, points: game.awayPoints)
-        teamButton(teamId: game.homeTeamId, name: game.homeName, logo: game.homeLogoUrl, colors: homeColors, points: game.homePoints)
+        teamButton(teamId: game.awayTeamId, name: game.awayName, logo: game.awayLogoUrl, points: game.awayPoints)
+        teamButton(teamId: game.homeTeamId, name: game.homeName, logo: game.homeLogoUrl, points: game.homePoints)
       }
       if game.isFinal, let myPick {
         let correct = myPick == game.winnerTeamId
@@ -354,14 +346,19 @@ private struct PickemsGameRowView: View {
   }
 
   @ViewBuilder
-  private func teamButton(teamId: UUID, name: String?, logo: String?, colors: TeamColorPair, points: Int?) -> some View {
+  private func teamButton(teamId: UUID, name: String?, logo: String?, points: Int?) -> some View {
     let picked = myPick == teamId
     let isWinner = game.isFinal && game.winnerTeamId == teamId
     Button {
       onPick(teamId)
     } label: {
       HStack(spacing: 9) {
-        TeamHelmet(logoUrl: logo, primaryColor: colors.primary, secondaryColor: colors.secondary, size: 30)
+        RetryingAsyncImage(url: logo.flatMap { URL(string: $0) }) { img in
+          img.resizable().scaledToFit()
+        } placeholder: {
+          Image(systemName: "football").resizable().scaledToFit().opacity(0.3).foregroundColor(BoldTheme.Colors.textFaint)
+        }
+        .frame(width: 30, height: 30)
         Text((name ?? "").uppercased())
           .font(BoldTheme.Fonts.body(12.5, weight: picked ? .bold : .semibold))
           .foregroundColor(picked ? BoldTheme.Colors.text : BoldTheme.Colors.textDim)

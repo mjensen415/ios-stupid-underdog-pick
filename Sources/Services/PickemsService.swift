@@ -52,11 +52,6 @@ private struct PickemsTiebreakerRow: Decodable {
   let guessed_total_points: Int
 }
 
-private struct TeamShortNameRow: Decodable {
-  let id: UUID
-  let short_name: String
-}
-
 private struct WeekRow: Decodable {
   let week: Int
 }
@@ -116,12 +111,6 @@ struct PickemsService {
       .execute()
     let rows = try JSONDecoder().decode([WeekRow].self, from: res.data)
     return Array(Set(rows.map { $0.week })).sorted()
-  }
-
-  func fetchTeamShortNames(sport: String = "nfl") async throws -> [UUID: String] {
-    let res = try await client.from("teams").select("id, short_name").eq("sport", value: sport).execute()
-    let rows = try JSONDecoder().decode([TeamShortNameRow].self, from: res.data)
-    return Dictionary(uniqueKeysWithValues: rows.map { ($0.id, $0.short_name) })
   }
 
   func fetchMyPicks(userId: UUID, gameIds: [UUID]) async throws -> [UUID: UUID] {
