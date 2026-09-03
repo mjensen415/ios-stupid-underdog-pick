@@ -2,12 +2,17 @@ import SwiftUI
 import Supabase
 
 struct SeasonLeaderboardView: View {
+  let sport: String
+  let groupSlug: String?
+
   @EnvironmentObject var appState: AppState
-  @State private var rows: [SeasonLeaderboardRow] = []
+  @State private var rows: [LeaderboardDisplayRow] = []
   @State private var availableSeasons: [Int] = []
   @State private var selectedSeason: Int?
   @State private var isLoading = false
   @State private var errorMessage: String?
+
+  private var sportGroupKey: String { "\(sport)|\(groupSlug ?? "")" }
 
   var body: some View {
     List {
@@ -39,18 +44,25 @@ struct SeasonLeaderboardView: View {
         .listRowSeparator(.hidden)
       }
 
-      if !rows.isEmpty {
+      if rows.isEmpty {
+        if !isLoading {
+          Text("No season data available")
+            .foregroundColor(BoldTheme.Colors.textDim)
+            .listRowBackground(BoldTheme.Colors.bgPage)
+            .listRowSeparator(.hidden)
+        }
+      } else {
         LeaderboardHeaderRow()
-      }
-      ForEach(rows) { row in
-        LeaderboardRow(
-          rank: rows.firstIndex(where: { $0.id == row.id }).map { $0 + 1 } ?? 0,
-          userId: row.userId,
-          name: row.displayName ?? "Player",
-          record: "\(row.totalWins ?? 0)W-\(row.totalLosses ?? 0)L",
-          points: String(format: "%.1f", row.seasonPoints ?? 0),
-          isLast: row.id == rows.last?.id
-        )
+        ForEach(rows) { row in
+          LeaderboardRow(
+            rank: rows.firstIndex(where: { $0.id == row.id }).map { $0 + 1 } ?? 0,
+            userId: row.userId,
+            name: row.name,
+            record: row.record,
+            points: String(format: "%.1f", row.points),
+            isLast: row.id == rows.last?.id
+          )
+        }
       }
     }
     .listStyle(.plain)
@@ -64,9 +76,9 @@ struct SeasonLeaderboardView: View {
           .padding(.top)
       }
     }
-    .overlay { if isLoading { ProgressView().tint(BoldTheme.Colors.gold) } }
+    .overlay { if isLoading && rows.isEmpty { ProgressView().tint(BoldTheme.Colors.gold) } }
     .refreshable { await loadSeason() }
-    .task { await loadInitial() }
+    .task(id: sportGroupKey) { await loadInitial() }
   }
 
   private func loadInitial() async {
@@ -74,7 +86,7 @@ struct SeasonLeaderboardView: View {
     defer { isLoading = false }
     guard let client = (await MainActor.run { appState.client }) else { return }
     do {
-      let ctx = try await ContextService(client: client).getCurrentContext()
+      let ctx = try await ContextService(client: client).getCurrentContext(sport: sport)
 
       struct SeasonRow: Decodable { let season: Int }
       let res = try await client
@@ -101,8 +113,19 @@ struct SeasonLeaderboardView: View {
     defer { isLoading = false }
     guard let client = (await MainActor.run { appState.client }) else { return }
     do {
-      let list = try await LeaderboardService(client: client).fetchSeasonLeaderboard(season: season)
-      rows = list
+      if let groupSlug {
+        let result = try await GroupsService(client: client).fetchGroupLeaderboard(
+          slug: groupSlug, scope: "season", season: season, week: nil, sport: sport
+        )
+        rows = result.leaderboard.map {
+          LeaderboardDisplayRow(id: $0.user_id, userId: $0.user_id, name: $0.display_name ?? "Unknown", record: "\($0.wins)W-\($0.losses)L", points: $0.points)
+        }
+      } else {
+        let list = try await LeaderboardService(client: client).fetchSeasonLeaderboard(season: season, sport: sport)
+        rows = list.map {
+          LeaderboardDisplayRow(id: $0.userId, userId: $0.userId, name: $0.displayName ?? "Unknown", record: "\($0.totalWins ?? 0)W-\($0.totalLosses ?? 0)L", points: $0.seasonPoints ?? 0)
+        }
+      }
       errorMessage = nil
     } catch {
       errorMessage = "Can't reach the server. Pull to retry."

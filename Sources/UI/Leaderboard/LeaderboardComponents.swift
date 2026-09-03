@@ -4,6 +4,26 @@ import SwiftUI
 // divided rows (mirrors winner-circle-dev's Leaderboard.tsx / the Splash
 // Sports reference the design direction is modeled on), not boxed cards.
 
+// Global (every eligible player) vs one specific group's own standings --
+// mirrors web's Leaderboard.tsx boardScope state exactly.
+enum LeaderboardBoardScope: Hashable {
+  case global
+  case group
+}
+
+/// Unified row shape both WeeklyLeaderboardView and SeasonLeaderboardView
+/// render into a LeaderboardRow, whether the data came from the global
+/// get_weekly_leaderboard/get_season_leaderboard RPCs or from one group's
+/// groups-leaderboard edge function -- callers just map either source into
+/// this before handing rows to the list.
+struct LeaderboardDisplayRow: Identifiable {
+  let id: UUID
+  let userId: UUID
+  let name: String
+  let record: String
+  let points: Double
+}
+
 struct LeaderboardHeaderRow: View {
   var body: some View {
     HStack {
