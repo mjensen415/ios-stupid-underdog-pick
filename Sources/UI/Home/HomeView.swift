@@ -122,6 +122,7 @@ struct HomeView: View {
   @State private var showJoinGroup = false
   @State private var showInvitePicker = false
   @State private var pushGroupSlug: String?
+  @State private var showPickems = false
   @State private var shareURL: URL?
   @State private var showShareSheet = false
 
@@ -148,6 +149,7 @@ struct HomeView: View {
             sportToggle
             quickActionsRow
             pickStatusCard
+            pickemsEntryCard
             groupsSection
             discoverSection
             recapSection
@@ -174,6 +176,9 @@ struct HomeView: View {
       }
       .navigationDestination(item: $pushGroupSlug) { slug in
         GroupDetailView(slug: slug)
+      }
+      .navigationDestination(isPresented: $showPickems) {
+        PickemsView()
       }
       .sheet(isPresented: $showCreateGroup) {
         CreateGroupView {
@@ -414,6 +419,34 @@ struct HomeView: View {
       .clipShape(RoundedRectangle(cornerRadius: 12))
       .shadow(color: viewModel.myPick != nil ? .clear : Color(hex: 0xFFD23A).opacity(0.35), radius: 10, y: 5)
     }
+  }
+
+  private var pickemsEntryCard: some View {
+    Button {
+      showPickems = true
+    } label: {
+      BoldTheme.GlassCard(strong: true, radius: 16, padding: 16) {
+        HStack(spacing: 12) {
+          VStack(alignment: .leading, spacing: 2) {
+            Text("NFL · NEW")
+              .font(BoldTheme.Fonts.mono(9.5, weight: .semibold))
+              .tracking(1.0)
+              .foregroundColor(BoldTheme.Colors.green)
+            Text("PRO BALL PICKEMS")
+              .font(BoldTheme.Fonts.display(20))
+              .foregroundColor(BoldTheme.Colors.text)
+            Text("Pick every game's winner. Play with your group.")
+              .font(BoldTheme.Fonts.body(12))
+              .foregroundColor(BoldTheme.Colors.textDim)
+          }
+          Spacer()
+          Image(systemName: "chevron.right")
+            .foregroundColor(BoldTheme.Colors.textFaint)
+        }
+      }
+    }
+    .buttonStyle(.plain)
+    .padding(.bottom, 20)
   }
 
   private var groupsSection: some View {
