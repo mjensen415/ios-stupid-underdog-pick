@@ -192,7 +192,10 @@ struct PickemsStandingsView: View {
   private func loadGroups() async {
     guard let client else { return }
     do {
+      // Only groups actually playing Pickems -- an underdog-only group's
+      // Pickems board would just always be empty, so it's not a real option.
       let groups = try await GroupsService(client: client).fetchMyGroups()
+        .filter { $0.game_type == .pickems || $0.game_type == .both }
       myGroups = groups
       if selectedGroupId == nil {
         selectedGroupId = groups.first?.group_id

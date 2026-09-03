@@ -116,32 +116,44 @@ struct PickemsView: View {
   @EnvironmentObject var appState: AppState
   @StateObject private var viewModel = PickemsViewModel()
   @State private var tab: Tab = .pick
+  @State private var myGroups: [MyGroup]?
 
   private enum Tab { case pick, standings }
+
+  private var hasEligibleGroup: Bool {
+    (myGroups ?? []).contains { $0.game_type == .pickems || $0.game_type == .both }
+  }
 
   var body: some View {
     NavigationStack {
       ZStack {
         BoldTheme.Colors.bgPage.ignoresSafeArea()
-        ScrollView {
-          VStack(alignment: .leading, spacing: 0) {
-            header
-            weekPills
-            tabToggle
+        if myGroups == nil {
+          Color.clear
+        } else if !hasEligibleGroup {
+          PickemsWelcomeView { await loadMyGroups() }
+        } else {
+          ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+              header
+              weekPills
+              tabToggle
 
-            if tab == .standings {
-              PickemsStandingsView(season: viewModel.season, week: viewModel.week, lastGame: viewModel.lastGame)
-            } else {
-              tiebreakerCard
-              gamesList
-              footerSummary
+              if tab == .standings {
+                PickemsStandingsView(season: viewModel.season, week: viewModel.week, lastGame: viewModel.lastGame)
+              } else {
+                tiebreakerCard
+                gamesList
+                footerSummary
+              }
             }
+            .padding(18)
           }
-          .padding(18)
         }
       }
       .navigationBarHidden(true)
       .task {
+        await loadMyGroups()
         if let client {
           viewModel.configure(client: client, userId: appState.session?.user.id)
           await viewModel.loadInitial()
@@ -308,6 +320,15 @@ struct PickemsView: View {
       .background(BoldTheme.Colors.track)
       .clipShape(RoundedRectangle(cornerRadius: 12))
       .padding(.top, 16)
+    }
+  }
+
+  private func loadMyGroups() async {
+    guard let client else { return }
+    do {
+      myGroups = try await GroupsService(client: client).fetchMyGroups()
+    } catch {
+      myGroups = []
     }
   }
 }

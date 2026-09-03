@@ -17,6 +17,14 @@ enum GroupSport: String, Codable, Equatable, Hashable, CaseIterable {
   case cfb, nfl, both
 }
 
+// Which game(s) a group plays -- orthogonal to sport (which only scopes
+// the underdog-pick game's CFB/NFL/Both setting). Every group created
+// before Pickems existed is 'underdog'; a 'pickems' group's sport is
+// always forced to .nfl server-side since Pickems has no CFB variant.
+enum GroupGameType: String, Codable, Equatable, Hashable, CaseIterable {
+  case underdog, pickems, both
+}
+
 struct MyGroup: Codable, Identifiable, Equatable {
   let group_id: UUID
   let name: String
@@ -25,6 +33,7 @@ struct MyGroup: Codable, Identifiable, Equatable {
   let is_private: Bool
   let description: String?
   let sport: GroupSport
+  let game_type: GroupGameType
   let member_count: Int
   let my_role: GroupRole
   let joined_at: String?
@@ -121,6 +130,7 @@ struct CreateGroupResult: Codable {
   let groupId: UUID
   let slug: String
   let sport: GroupSport
+  let gameType: GroupGameType
 }
 
 struct InviteEmailResult: Codable, Identifiable {

@@ -50,9 +50,9 @@ struct GroupsService {
 
   // MARK: - Group CRUD
 
-  func createGroup(name: String, description: String?, isPrivate: Bool, sport: GroupSport) async throws -> CreateGroupResult {
-    struct Body: Encodable { let name: String; let description: String?; let isPrivate: Bool; let sport: String }
-    return try await invoke("groups-create", body: Body(name: name, description: description, isPrivate: isPrivate, sport: sport.rawValue))
+  func createGroup(name: String, description: String?, isPrivate: Bool, sport: GroupSport, gameType: GroupGameType = .underdog) async throws -> CreateGroupResult {
+    struct Body: Encodable { let name: String; let description: String?; let isPrivate: Bool; let sport: String; let gameType: String }
+    return try await invoke("groups-create", body: Body(name: name, description: description, isPrivate: isPrivate, sport: sport.rawValue, gameType: gameType.rawValue))
   }
 
   func updateGroup(groupId: UUID, name: String?, description: String?, avatarUrl: String?, isPrivate: Bool?) async throws -> UpdateGroupResult {
