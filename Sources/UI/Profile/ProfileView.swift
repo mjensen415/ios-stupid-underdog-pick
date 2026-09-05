@@ -162,6 +162,14 @@ struct ProfileView: View {
               Text("View Full Pick History")
                 .foregroundColor(BoldTheme.Colors.goldDeep)
             }
+
+            // Leaderboard dropped off the tab bar (5-tab limit -- see
+            // MainTabView) in favor of a real Groups tab and this Settings
+            // tab, so it needs a way in from somewhere else.
+            NavigationLink(destination: LeaderboardView()) {
+              Text("View Leaderboard")
+                .foregroundColor(BoldTheme.Colors.goldDeep)
+            }
           } header: {
             Label("Trophy Case", systemImage: "trophy.fill")
           }

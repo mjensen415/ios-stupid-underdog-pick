@@ -176,6 +176,7 @@ struct HomeView: View {
   @State private var shareURL: URL?
   @State private var showShareSheet = false
   @State private var dismissingIntro = false
+  @State private var showProfile = false
 
   // groups-create-invite is admin-only server-side (assertIsGroupAdmin) --
   // only owner/admin rows can actually generate a link.
@@ -369,17 +370,29 @@ struct HomeView: View {
 
       Spacer()
 
-      Circle()
-        .fill(BoldTheme.Colors.text)
-        .frame(width: 34, height: 34)
-        .overlay(
-          Text(initials)
-            .font(BoldTheme.Fonts.display(13))
-            .foregroundColor(BoldTheme.Colors.gold)
-        )
-        .overlay(Circle().strokeBorder(Color.white.opacity(0.7), lineWidth: 2))
+      Button {
+        showProfile = true
+      } label: {
+        Circle()
+          .fill(BoldTheme.Colors.text)
+          .frame(width: 34, height: 34)
+          .overlay(
+            Text(initials)
+              .font(BoldTheme.Fonts.display(13))
+              .foregroundColor(BoldTheme.Colors.gold)
+          )
+          .overlay(Circle().strokeBorder(Color.white.opacity(0.7), lineWidth: 2))
+      }
+      .accessibilityLabel("Profile")
     }
     .padding(.bottom, 16)
+    // Presented as a sheet rather than a NavigationLink push -- ProfileView
+    // has its own internal NavigationStack (it's also a standalone tab
+    // root), and nesting that inside Home's NavigationStack would double
+    // up the nav bar.
+    .sheet(isPresented: $showProfile) {
+      ProfileView()
+    }
   }
 
   private var sportToggle: some View {

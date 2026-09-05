@@ -29,10 +29,6 @@ struct MainTabView: View {
         .tabItem { Label("Games", systemImage: "sportscourt") }
         .tag(1)
 
-      LeaderboardView()
-        .tabItem { Label("Leaders", systemImage: "list.number") }
-        .tag(2)
-
       MyPicksView()
         .tabItem { Label("My Pick", systemImage: "checkmark.seal") }
         .tag(3)
@@ -42,7 +38,7 @@ struct MainTabView: View {
         .tag(4)
 
       ProfileView()
-        .tabItem { Label("Profile", systemImage: "person.crop.circle") }
+        .tabItem { Label("Settings", systemImage: "gearshape") }
         .tag(5)
     }
     .tint(BoldTheme.Colors.goldDeep)
