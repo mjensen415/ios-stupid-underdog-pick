@@ -727,7 +727,7 @@ private struct GameCardView: View {
       ? "One pick every week. Take the underdog — if they win outright, you bank the spread."
       : "Straight-up picks on every NFL game, every week. Play in a group, chase the leaderboard."
   }
-  private var badges: [String] { game == .underdog ? ["CFB · Free", "Pro Ball · Entry fee"] : ["NFL · Free to start"] }
+  private var badges: [String] { game == .underdog ? ["CFB · Free", "Pro Ball · Free"] : ["NFL · Free"] }
   private var cta: String { game == .underdog ? "Play Underdog Pick" : "Play Pickems" }
 
   var body: some View {

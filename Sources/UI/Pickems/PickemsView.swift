@@ -14,6 +14,9 @@ final class PickemsViewModel: ObservableObject {
   @Published var pickingGameId: UUID?
   @Published var savingTiebreaker = false
   @Published var errorText: String?
+  @Published var managedProfiles: [ManagedProfile] = []
+  @Published var actingAs: ManagedProfile?
+  @Published var savingChild = false
 
   private var client: SupabaseClient?
   private var userId: UUID?
@@ -21,6 +24,38 @@ final class PickemsViewModel: ObservableObject {
   func configure(client: SupabaseClient, userId: UUID?) {
     self.client = client
     self.userId = userId
+  }
+
+  func loadManagedProfiles() async {
+    guard let client else { return }
+    do {
+      managedProfiles = try await PickemsService(client: client).fetchManagedProfiles()
+    } catch {
+      errorText = error.localizedDescription
+    }
+  }
+
+  func addManagedProfile(name: String) async {
+    guard let client, let userId, !name.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+    savingChild = true
+    defer { savingChild = false }
+    do {
+      try await PickemsService(client: client).addManagedProfile(ownerUserId: userId, displayName: name.trimmingCharacters(in: .whitespaces))
+      await loadManagedProfiles()
+    } catch {
+      errorText = error.localizedDescription
+    }
+  }
+
+  func removeManagedProfile(_ profile: ManagedProfile) async {
+    guard let client else { return }
+    do {
+      try await PickemsService(client: client).removeManagedProfile(id: profile.id)
+      if actingAs?.id == profile.id { actingAs = nil }
+      await loadManagedProfiles()
+    } catch {
+      errorText = error.localizedDescription
+    }
   }
 
   func loadInitial() async {
@@ -47,8 +82,8 @@ final class PickemsViewModel: ObservableObject {
       let svc = PickemsService(client: client)
       games = try await svc.fetchGames(season: season, week: week)
       if let userId {
-        myPicks = try await svc.fetchMyPicks(userId: userId, gameIds: games.map { $0.id })
-        let guess = try await svc.fetchTiebreaker(userId: userId, season: season, week: week)
+        myPicks = try await svc.fetchMyPicks(userId: userId, gameIds: games.map { $0.id }, actingAsProfileId: actingAs?.id)
+        let guess = try await svc.fetchTiebreaker(userId: userId, season: season, week: week, actingAsProfileId: actingAs?.id)
         savedGuess = guess
         tiebreakerGuess = guess.map { String($0) } ?? ""
       }
@@ -75,7 +110,7 @@ final class PickemsViewModel: ObservableObject {
     pickingGameId = game.id
     defer { pickingGameId = nil }
     do {
-      try await PickemsService(client: client).submitPick(gameId: game.id, pickedTeamId: teamId)
+      try await PickemsService(client: client).submitPick(gameId: game.id, pickedTeamId: teamId, actingAsProfileId: actingAs?.id)
     } catch {
       myPicks[game.id] = prev
       errorText = error.localizedDescription
@@ -91,7 +126,7 @@ final class PickemsViewModel: ObservableObject {
     savingTiebreaker = true
     defer { savingTiebreaker = false }
     do {
-      try await PickemsService(client: client).submitTiebreaker(season: season, week: week, guess: value)
+      try await PickemsService(client: client).submitTiebreaker(season: season, week: week, guess: value, actingAsProfileId: actingAs?.id)
       savedGuess = value
     } catch {
       errorText = error.localizedDescription
@@ -117,6 +152,9 @@ struct PickemsView: View {
   @StateObject private var viewModel = PickemsViewModel()
   @State private var tab: Tab = .pick
   @State private var myGroups: [MyGroup]?
+  @State private var showActorPicker = false
+  @State private var showManageProfiles = false
+  @State private var newChildName = ""
 
   private enum Tab { case pick, standings }
 
@@ -136,6 +174,7 @@ struct PickemsView: View {
           ScrollView {
             VStack(alignment: .leading, spacing: 0) {
               header
+              if tab == .pick { actorPicker }
               weekPills
               tabToggle
 
@@ -157,9 +196,11 @@ struct PickemsView: View {
         if let client {
           viewModel.configure(client: client, userId: appState.session?.user.id)
           await viewModel.loadInitial()
+          await viewModel.loadManagedProfiles()
         }
       }
       .onChange(of: viewModel.week) { _, _ in Task { await viewModel.loadWeek() } }
+      .onChange(of: viewModel.actingAs) { _, _ in Task { await viewModel.loadWeek() } }
       .alert("Something went wrong", isPresented: Binding(
         get: { viewModel.errorText != nil },
         set: { if !$0 { viewModel.errorText = nil } }
@@ -167,6 +208,85 @@ struct PickemsView: View {
         Button("OK") { viewModel.errorText = nil }
       } message: {
         Text(viewModel.errorText ?? "")
+      }
+      .confirmationDialog("Picking as", isPresented: $showActorPicker, titleVisibility: .visible) {
+        Button("You") { viewModel.actingAs = nil }
+        ForEach(viewModel.managedProfiles) { profile in
+          Button(profile.displayName) { viewModel.actingAs = profile }
+        }
+        Button("Manage Profiles…") { showManageProfiles = true }
+        Button("Cancel", role: .cancel) {}
+      }
+      .sheet(isPresented: $showManageProfiles) {
+        manageProfilesSheet
+      }
+    }
+  }
+
+  private var actorPicker: some View {
+    Button {
+      showActorPicker = true
+    } label: {
+      HStack(spacing: 6) {
+        Text("Picking as")
+          .font(BoldTheme.Fonts.body(11, weight: .semibold))
+          .foregroundColor(BoldTheme.Colors.textFaint)
+        Text(viewModel.actingAs?.displayName ?? "You")
+          .font(BoldTheme.Fonts.body(12.5, weight: .bold))
+          .foregroundColor(BoldTheme.Colors.text)
+        Image(systemName: "chevron.down")
+          .font(.system(size: 10, weight: .bold))
+          .foregroundColor(BoldTheme.Colors.textFaint)
+      }
+      .padding(.horizontal, 12).padding(.vertical, 7)
+      .background(BoldTheme.Colors.track)
+      .clipShape(Capsule())
+    }
+    .buttonStyle(.plain)
+    .padding(.top, 14)
+  }
+
+  private var manageProfilesSheet: some View {
+    NavigationStack {
+      List {
+        Section {
+          ForEach(viewModel.managedProfiles) { profile in
+            HStack {
+              Text(profile.displayName).font(BoldTheme.Fonts.body(14, weight: .semibold))
+              Spacer()
+              Button("Remove") {
+                Task { await viewModel.removeManagedProfile(profile) }
+              }
+              .font(BoldTheme.Fonts.body(12, weight: .bold))
+              .foregroundColor(Color(hex: 0xA6402A))
+            }
+          }
+        } header: {
+          Text("Child Profiles")
+        } footer: {
+          Text("Add a child profile to pick on their behalf. They'll show up as their own entry in your groups' standings.")
+        }
+        Section {
+          HStack {
+            TextField("Child's name", text: $newChildName)
+            Button {
+              Task {
+                await viewModel.addManagedProfile(name: newChildName)
+                newChildName = ""
+              }
+            } label: {
+              Text("Add").font(BoldTheme.Fonts.body(13, weight: .bold))
+            }
+            .disabled(viewModel.savingChild || newChildName.trimmingCharacters(in: .whitespaces).isEmpty)
+          }
+        }
+      }
+      .navigationTitle("Manage Profiles")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .confirmationAction) {
+          Button("Done") { showManageProfiles = false }
+        }
       }
     }
   }

@@ -46,14 +46,28 @@ struct PickemsGameRow: Decodable, Identifiable {
 private struct PickemsPickRow: Decodable {
   let game_id: UUID
   let picked_team_id: UUID
+  let acting_as_profile_id: UUID?
 }
 
 private struct PickemsTiebreakerRow: Decodable {
   let guessed_total_points: Int
+  let acting_as_profile_id: UUID?
 }
 
 private struct WeekRow: Decodable {
   let week: Int
+}
+
+struct ManagedProfile: Decodable, Identifiable, Equatable {
+  let id: UUID
+  let displayName: String
+  let isActive: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case id
+    case displayName = "display_name"
+    case isActive = "is_active"
+  }
 }
 
 struct GroupPickemsRow: Decodable, Identifiable {
@@ -113,34 +127,38 @@ struct PickemsService {
     return Array(Set(rows.map { $0.week })).sorted()
   }
 
-  func fetchMyPicks(userId: UUID, gameIds: [UUID]) async throws -> [UUID: UUID] {
+  // Fetches every row for this user (own + all children) and filters by
+  // actor client-side, rather than relying on a server-side IS NULL filter
+  // whose exact postgrest-swift call signature isn't worth guessing at.
+  func fetchMyPicks(userId: UUID, gameIds: [UUID], actingAsProfileId: UUID? = nil) async throws -> [UUID: UUID] {
     guard !gameIds.isEmpty else { return [:] }
     let res = try await client
       .from("pickems_picks")
-      .select("game_id, picked_team_id")
+      .select("game_id, picked_team_id, acting_as_profile_id")
       .eq("user_id", value: userId)
       .in("game_id", values: gameIds)
       .execute()
     let rows = try JSONDecoder().decode([PickemsPickRow].self, from: res.data)
+      .filter { $0.acting_as_profile_id == actingAsProfileId }
     return Dictionary(uniqueKeysWithValues: rows.map { ($0.game_id, $0.picked_team_id) })
   }
 
-  func fetchTiebreaker(userId: UUID, season: Int, week: Int, sport: String = "nfl") async throws -> Int? {
+  func fetchTiebreaker(userId: UUID, season: Int, week: Int, sport: String = "nfl", actingAsProfileId: UUID? = nil) async throws -> Int? {
     let res = try await client
       .from("pickems_tiebreakers")
-      .select("guessed_total_points")
+      .select("guessed_total_points, acting_as_profile_id")
       .eq("user_id", value: userId)
       .eq("season", value: season)
       .eq("week", value: week)
       .eq("sport", value: sport)
-      .limit(1)
       .execute()
-    return try JSONDecoder().decode([PickemsTiebreakerRow].self, from: res.data).first?.guessed_total_points
+    return try JSONDecoder().decode([PickemsTiebreakerRow].self, from: res.data)
+      .first { $0.acting_as_profile_id == actingAsProfileId }?.guessed_total_points
   }
 
-  func submitPick(gameId: UUID, pickedTeamId: UUID) async throws {
-    struct Params: Encodable { let p_game_id: UUID; let p_picked_team_id: UUID }
-    _ = try await client.rpc("submit_pickems_pick", params: Params(p_game_id: gameId, p_picked_team_id: pickedTeamId)).execute()
+  func submitPick(gameId: UUID, pickedTeamId: UUID, actingAsProfileId: UUID? = nil) async throws {
+    struct Params: Encodable { let p_game_id: UUID; let p_picked_team_id: UUID; let p_acting_as_profile_id: UUID? }
+    _ = try await client.rpc("submit_pickems_pick", params: Params(p_game_id: gameId, p_picked_team_id: pickedTeamId, p_acting_as_profile_id: actingAsProfileId)).execute()
   }
 
   func clearPick(gameId: UUID) async throws {
@@ -148,9 +166,29 @@ struct PickemsService {
     _ = try await client.rpc("clear_pickems_pick", params: Params(p_game_id: gameId)).execute()
   }
 
-  func submitTiebreaker(season: Int, week: Int, sport: String = "nfl", guess: Int) async throws {
-    struct Params: Encodable { let p_season: Int; let p_week: Int; let p_sport: String; let p_guessed_total_points: Int }
-    _ = try await client.rpc("submit_pickems_tiebreaker", params: Params(p_season: season, p_week: week, p_sport: sport, p_guessed_total_points: guess)).execute()
+  func submitTiebreaker(season: Int, week: Int, sport: String = "nfl", guess: Int, actingAsProfileId: UUID? = nil) async throws {
+    struct Params: Encodable { let p_season: Int; let p_week: Int; let p_sport: String; let p_guessed_total_points: Int; let p_acting_as_profile_id: UUID? }
+    _ = try await client.rpc("submit_pickems_tiebreaker", params: Params(p_season: season, p_week: week, p_sport: sport, p_guessed_total_points: guess, p_acting_as_profile_id: actingAsProfileId)).execute()
+  }
+
+  func fetchManagedProfiles() async throws -> [ManagedProfile] {
+    let res = try await client
+      .from("managed_profiles")
+      .select("id, display_name, is_active")
+      .eq("is_active", value: true)
+      .order("created_at", ascending: true)
+      .execute()
+    return try JSONDecoder().decode([ManagedProfile].self, from: res.data)
+  }
+
+  func addManagedProfile(ownerUserId: UUID, displayName: String) async throws {
+    struct Insert: Encodable { let owner_user_id: UUID; let display_name: String }
+    _ = try await client.from("managed_profiles").insert(Insert(owner_user_id: ownerUserId, display_name: displayName)).execute()
+  }
+
+  func removeManagedProfile(id: UUID) async throws {
+    struct Update: Encodable { let is_active: Bool }
+    _ = try await client.from("managed_profiles").update(Update(is_active: false)).eq("id", value: id).execute()
   }
 
   func fetchGroupLeaderboard(groupId: UUID, season: Int, sport: String = "nfl", week: Int?) async throws -> [GroupPickemsRow] {

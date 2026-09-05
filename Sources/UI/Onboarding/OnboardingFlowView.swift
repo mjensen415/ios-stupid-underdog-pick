@@ -16,8 +16,8 @@ private enum OnboardGameKey: String, CaseIterable {
   var sublabel: String {
     switch self {
     case .cfbUnderdog: return "Free"
-    case .proballUnderdog: return "Entry fee"
-    case .pickems: return "Free to start"
+    case .proballUnderdog: return "Free"
+    case .pickems: return "Free"
     }
   }
 }
