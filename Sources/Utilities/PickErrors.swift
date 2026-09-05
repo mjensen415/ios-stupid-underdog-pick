@@ -8,5 +8,8 @@ func friendlyPickErrorMessage(_ error: Error) -> String {
   if raw.contains("WEEK_0_1_PICK_ALREADY_LOCKED") {
     return "Your Week 0/1 pick already locked in -- you can't switch weeks once that game has started."
   }
+  if raw.contains("PICKS_LOCKED_AFTER_KICKOFF") {
+    return "That game has already started -- your pick is locked in."
+  }
   return raw
 }

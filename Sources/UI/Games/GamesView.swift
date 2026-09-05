@@ -191,7 +191,7 @@ final class GamesViewModel: ObservableObject {
       flashToast("Pick cleared")
     } catch {
       selectedGameId = previous
-      flashToast("Couldn’t clear: \(error.localizedDescription)")
+      flashToast("Couldn’t clear: \(friendlyPickErrorMessage(error))")
     }
   }
 }
@@ -479,9 +479,17 @@ struct GamesView: View {
                 )
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                   if viewModel.selectedGameId == g.id {
-                    Button("Clear pick") {
-                      Task { await viewModel.clearPickForWeek() }
-                    }.tint(.gray)
+                    // Once the picked game has locked (kickoff passed, or
+                    // it's live/final), the pick is final -- the server
+                    // rejects a clear anyway (see clear_weekly_pick's
+                    // PICKS_LOCKED_AFTER_KICKOFF guard), so don't show a
+                    // swipe action that can only ever fail. Mirrors web's
+                    // BoldGreenBanner CHANGE-button treatment.
+                    if viewModel.canPick(g) {
+                      Button("Clear pick") {
+                        Task { await viewModel.clearPickForWeek() }
+                      }.tint(.gray)
+                    }
                   } else {
                     Button(viewModel.swipeActionLabel(for: g)) {
                       Task { await viewModel.pickUnderdog(for: g) }
