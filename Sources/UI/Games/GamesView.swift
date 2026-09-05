@@ -93,17 +93,13 @@ final class GamesViewModel: ObservableObject {
   /// NAIA) that never get a market line at all, at any point -- confirmed
   /// against real Week 1 data, 358 of 456 CFB games never had a spread,
   /// 116 of those were already final with still no line ever posted.
-  /// Originally these stayed visible once locked/final (so a week's full
-  /// slate of results stayed visible after the fact), but that just
-  /// produced a wall of unpickable "--" final-score rows with no way to
-  /// ever tell a dog from a favorite -- hide a CFB game once its kickoff
-  /// has passed if it never got a line; still show it pre-kickoff since a
-  /// line can still post before then.
+  /// Zero-line CFB games are hidden entirely now (pre- or post-kickoff) --
+  /// matches web's IndexBold.tsx, which found the old "still show it
+  /// pre-kickoff, a line might post" exception was itself leaking
+  /// unpickable "--" rows into the list before kickoff too.
   var visibleGames: [Game] {
     guard sport == "cfb" else { return games }
-    return games.filter { g in
-      g.derivedFavoriteTeamId != nil || (g.picksLocked != true && g.status != "final")
-    }
+    return games.filter { g in g.derivedFavoriteTeamId != nil }
   }
 
   func canPick(_ g: Game) -> Bool {
@@ -139,7 +135,13 @@ final class GamesViewModel: ObservableObject {
   // since a live or finished game is also picksLocked, and "Game Live"/
   // "Game Over" is the more useful answer than the generic "Locked."
   func swipeActionLabel(for g: Game) -> String {
-    if canPick(g) { return "Pick this upset" }
+    if canPick(g) {
+      // Mirrors web's PICK -> CHANGE relabel: your existing pick only
+      // locks at its own kickoff, so any other still-open game stays a
+      // real option (and a real swipe action) until then -- just says
+      // what swiping actually does now.
+      return selectedGameId != nil && selectedGameId != g.id ? "Change to this upset" : "Pick this upset"
+    }
     if g.status == "in_progress" { return "Game Live" }
     if g.status == "final" { return "Game Over" }
     return "Locked"
