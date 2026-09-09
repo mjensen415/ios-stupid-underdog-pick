@@ -413,12 +413,28 @@ struct GroupDetailView: View {
   // MARK: - Pickems tab
 
   private var pickemsTab: some View {
-    PickemsStandingsView(
-      season: viewModel.pickemsSeason,
-      week: viewModel.pickemsWeek,
-      lastGame: viewModel.pickemsLastGame,
-      fixedGroupId: viewModel.group?.id
-    )
+    // This tab used to show standings with no way to actually get to the
+    // pick-making screen (PickemsView) -- same gap as the web app's group
+    // page, and the concrete cause of "didn't know how to find where to
+    // make their picks" from a real user's invite-link session.
+    VStack(alignment: .leading, spacing: 16) {
+      NavigationLink(destination: PickemsView()) {
+        Text("Make Your Picks")
+          .font(BoldTheme.Fonts.body(15, weight: .semibold))
+          .frame(maxWidth: .infinity)
+          .padding(.vertical, 12)
+      }
+      .background(BoldTheme.Colors.gold)
+      .foregroundColor(BoldTheme.Colors.text)
+      .cornerRadius(10)
+
+      PickemsStandingsView(
+        season: viewModel.pickemsSeason,
+        week: viewModel.pickemsWeek,
+        lastGame: viewModel.pickemsLastGame,
+        fixedGroupId: viewModel.group?.id
+      )
+    }
   }
 
   // MARK: - Members tab
