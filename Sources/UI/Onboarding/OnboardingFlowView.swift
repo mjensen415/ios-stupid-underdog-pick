@@ -340,8 +340,7 @@ struct OnboardingFlowView: View {
         Button {
           Task {
             await finish()
-            appState.requestedSport = pickSport
-            appState.requestedTab = 1 // Games tab
+            appState.goToUnderdog(sport: pickSport)
           }
         } label: {
           Text("Take me to this week's dogs").frame(maxWidth: .infinity)
@@ -368,6 +367,7 @@ struct OnboardingFlowView: View {
         Button {
           Task {
             await finish()
+            appState.currentGame = pickSport == "nfl" ? .nfl : .cfb
             appState.requestedTab = 4 // Groups tab
           }
         } label: {
@@ -379,7 +379,7 @@ struct OnboardingFlowView: View {
         Button {
           Task {
             await finish()
-            appState.requestedPickems = true
+            appState.goToPickems()
           }
         } label: {
           HStack { Image(systemName: "person.2.fill"); Text(underdogSelected ? "Pickems groups" : "Start or join a group") }.frame(maxWidth: .infinity)

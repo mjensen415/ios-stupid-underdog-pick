@@ -19,7 +19,7 @@ struct DeepLinkHandler {
     print("[DeepLink] received URL:", url.absoluteString)
     #endif
 
-    if let token = groupJoinToken(from: url) {
+    if let token = Self.groupJoinToken(from: url) {
       appState.pendingGroupJoinToken = token
       return
     }
@@ -42,7 +42,9 @@ struct DeepLinkHandler {
 
   /// Matches "/groups/join/{token}" on either a universal-link https URL
   /// or a sup://underdog/groups/join/{token} custom-scheme fallback.
-  private func groupJoinToken(from url: URL) -> String? {
+  /// Static (doesn't touch self) so RootView's pasteboard-handoff check can
+  /// reuse the exact same parsing instead of duplicating it.
+  static func groupJoinToken(from url: URL) -> String? {
     let parts = url.pathComponents.filter { $0 != "/" }
     guard let joinIndex = parts.firstIndex(of: "join"),
           parts[safe: joinIndex - 1] == "groups",

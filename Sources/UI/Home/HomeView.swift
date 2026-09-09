@@ -177,6 +177,7 @@ struct HomeView: View {
   @State private var showShareSheet = false
   @State private var dismissingIntro = false
   @State private var showProfile = false
+  @State private var showSwitchGame = false
 
   // groups-create-invite is admin-only server-side (assertIsGroupAdmin) --
   // only owner/admin rows can actually generate a link.
@@ -210,6 +211,60 @@ struct HomeView: View {
     return profile.has_onboarded && !profile.pickems_intro_dismissed && !pickemsActive
   }
 
+  // Options for the "Switch Game" sheet -- always all three contests
+  // (unlike contestsSection, which only shows ones you're already active
+  // in), since this is the explicit "take me somewhere else" tool.
+  private var switchGameOptions: [SwitchGameOption] {
+    func countdownStatus(myPick: Pick?, kickoff: Date?, offseason: Bool) -> (String?, Color) {
+      if offseason { return ("Offseason", BoldTheme.Colors.textDim) }
+      if myPick != nil { return ("Picked", BoldTheme.Colors.green) }
+      guard let kickoff else { return (nil, BoldTheme.Colors.textDim) }
+      let diff = kickoff.timeIntervalSinceNow
+      if diff <= 0 { return ("Locked", Color(hex: 0xA6402A)) }
+      return ("Make a pick", BoldTheme.Colors.goldDeep)
+    }
+
+    let (cfbStatus, cfbColor) = countdownStatus(myPick: viewModel.myPickCfb, kickoff: viewModel.firstKickoffCfb, offseason: viewModel.cfbOffseason)
+    let (nflStatus, nflColor) = countdownStatus(myPick: viewModel.myPickNfl, kickoff: viewModel.firstKickoffNfl, offseason: viewModel.nflOffseason)
+
+    return [
+      SwitchGameOption(
+        id: "cfb",
+        title: "Underdog Pick — CFB",
+        subtitle: viewModel.cfbOffseason ? "Offseason" : "Week \(formatWeekLabel(viewModel.cfbContext?.week ?? 0)) · \(viewModel.cfbContext?.season ?? 0)",
+        statusText: underdogCfbActive ? cfbStatus : "Explore",
+        statusColor: underdogCfbActive ? cfbColor : BoldTheme.Colors.goldDeep,
+        accent: BoldTheme.Colors.goldDeep,
+        isCurrent: sport == .cfb
+      ) {
+        appState.goToUnderdog(sport: "cfb")
+      },
+      SwitchGameOption(
+        id: "nfl",
+        title: "Underdog Pick — Pro Ball",
+        subtitle: viewModel.nflOffseason ? "Offseason" : "Week \(formatWeekLabel(viewModel.nflContext?.week ?? 0)) · \(viewModel.nflContext?.season ?? 0)",
+        statusText: underdogProBallActive ? nflStatus : "Explore",
+        statusColor: underdogProBallActive ? nflColor : BoldTheme.Colors.goldDeep,
+        accent: BoldTheme.Colors.goldDeep,
+        isCurrent: sport == .nfl
+      ) {
+        appState.goToUnderdog(sport: "nfl")
+      },
+      SwitchGameOption(
+        id: "pickems",
+        title: "Pro Ball Pickems",
+        subtitle: "Pick every winner — no spreads",
+        statusText: pickemsActive ? "Your groups" : "Explore",
+        statusColor: BoldTheme.Colors.pickemsAccentDeep,
+        accent: BoldTheme.Colors.pickemsAccent,
+        isCurrent: false
+      ) {
+        appState.currentGame = .pickems
+        showPickems = true
+      },
+    ]
+  }
+
   private var initials: String {
     let email = appState.session?.user.email ?? "??"
     return String(email.prefix(2)).uppercased()
@@ -224,7 +279,7 @@ struct HomeView: View {
         ScrollView {
           VStack(alignment: .leading, spacing: 0) {
             topRow
-            sportToggle
+            switchGameButton
             quickActionsRow
             contestsSection
             groupsSection
@@ -235,6 +290,9 @@ struct HomeView: View {
         }
       }
       .navigationBarHidden(true)
+      .sheet(isPresented: $showSwitchGame) {
+        SwitchGameSheet(options: switchGameOptions)
+      }
       .task {
         if let client, let userId = appState.session?.user.id {
           viewModel.configure(client: client)
@@ -259,6 +317,7 @@ struct HomeView: View {
       }
       .onChange(of: appState.requestedPickems) { _, requested in
         guard requested else { return }
+        appState.currentGame = .pickems
         showPickems = true
         appState.requestedPickems = false
       }
@@ -395,28 +454,31 @@ struct HomeView: View {
     }
   }
 
-  private var sportToggle: some View {
-    HStack(spacing: 4) {
-      ForEach([Sport.cfb, Sport.nfl], id: \.self) { s in
-        let active = s == sport
-        Button {
-          sport = s
-        } label: {
-          Text(s == .cfb ? "🏈 CFB" : "🏈 PRO BALL")
-            .font(BoldTheme.Fonts.body(13, weight: .bold))
-            .foregroundColor(active ? BoldTheme.Colors.text : BoldTheme.Colors.textDim)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 9)
-            .background(active ? Color.white : Color.clear)
-            .cornerRadius(10)
-            .shadow(color: active ? Color(hex: 0x142A1C).opacity(0.14) : .clear, radius: 6, y: 3)
-        }
+  // Replaces the old CFB/Pro Ball pill toggle -- it only flipped this
+  // page's own header label and re-scoped a couple of widgets below, which
+  // was easy to mistake for "does nothing" since contestsSection already
+  // shows every active contest at once regardless of the toggle. This is an
+  // explicit, one-tap jump into whichever contest you actually want.
+  private var switchGameButton: some View {
+    Button { showSwitchGame = true } label: {
+      HStack(spacing: 8) {
+        Image(systemName: "arrow.left.arrow.right")
+          .font(.system(size: 12, weight: .bold))
+        Text("Switch Game")
+          .font(BoldTheme.Fonts.body(13, weight: .bold))
+        Spacer()
+        Image(systemName: "chevron.right")
+          .font(.system(size: 11, weight: .semibold))
+          .foregroundColor(BoldTheme.Colors.textFaint)
       }
+      .foregroundColor(BoldTheme.Colors.text)
+      .padding(.horizontal, 14)
+      .padding(.vertical, 11)
+      .background(Color.white.opacity(0.6))
+      .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
+      .cornerRadius(13)
     }
-    .padding(4)
-    .background(Color(hex: 0x16241B).opacity(0.07))
-    .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
-    .cornerRadius(13)
+    .buttonStyle(.plain)
     .padding(.bottom, 20)
   }
 
@@ -428,6 +490,7 @@ struct HomeView: View {
       if showPickemsIntroBanner {
         PickemsIntroBanner(dismissing: dismissingIntro) {
           Task { await dismissPickemsIntro() }
+          appState.currentGame = .pickems
           showPickems = true
         } onDismiss: {
           Task { await dismissPickemsIntro() }
@@ -448,8 +511,7 @@ struct HomeView: View {
               picked: viewModel.myPickCfb != nil,
               countdown: countdownText(myPick: viewModel.myPickCfb, kickoff: viewModel.firstKickoffCfb)
             ) {
-              appState.requestedSport = "cfb"
-              appState.requestedTab = 1
+              appState.goToUnderdog(sport: "cfb")
             }
           }
           if underdogProBallActive {
@@ -460,8 +522,7 @@ struct HomeView: View {
               picked: viewModel.myPickNfl != nil,
               countdown: countdownText(myPick: viewModel.myPickNfl, kickoff: viewModel.firstKickoffNfl)
             ) {
-              appState.requestedSport = "nfl"
-              appState.requestedTab = 1
+              appState.goToUnderdog(sport: "nfl")
             }
           }
           if pickemsActive {
@@ -472,6 +533,7 @@ struct HomeView: View {
               picked: false,
               countdown: nil
             ) {
+              appState.currentGame = .pickems
               showPickems = true
             }
           }
@@ -493,6 +555,7 @@ struct HomeView: View {
           }
           if showExplorePickems {
             GameCardView(game: .pickems, compact: true) {
+              appState.currentGame = .pickems
               showPickems = true
             }
           }

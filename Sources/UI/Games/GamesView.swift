@@ -209,6 +209,50 @@ struct GamesView: View {
   @EnvironmentObject var appState: AppState
   @State private var shareImage: Image?
   @State private var searchQuery: String = ""
+  @State private var showSwitchGame = false
+
+  private var switchGameOptions: [SwitchGameOption] {
+    [
+      SwitchGameOption(
+        id: "cfb",
+        title: "Underdog Pick — CFB",
+        subtitle: "Pick the underdog to win outright",
+        statusText: nil,
+        statusColor: BoldTheme.Colors.goldDeep,
+        accent: BoldTheme.Colors.goldDeep,
+        isCurrent: viewModel.sport == "cfb"
+      ) {
+        appState.currentGame = .cfb
+        Task { await viewModel.switchSport(to: "cfb") }
+      },
+      SwitchGameOption(
+        id: "nfl",
+        title: "Underdog Pick — Pro Ball",
+        subtitle: "Pick the underdog to win outright",
+        statusText: nil,
+        statusColor: BoldTheme.Colors.goldDeep,
+        accent: BoldTheme.Colors.goldDeep,
+        isCurrent: viewModel.sport == "nfl"
+      ) {
+        appState.currentGame = .nfl
+        Task { await viewModel.switchSport(to: "nfl") }
+      },
+      SwitchGameOption(
+        id: "pickems",
+        title: "Pro Ball Pickems",
+        subtitle: "Pick every winner — no spreads",
+        statusText: nil,
+        statusColor: BoldTheme.Colors.pickemsAccentDeep,
+        accent: BoldTheme.Colors.pickemsAccent,
+        isCurrent: false
+      ) {
+        // Pickems isn't part of this tab -- hand off to Home, which owns
+        // the NavigationStack Pickems gets pushed onto (same pattern Home's
+        // own "Make Your Pick" hand-off uses in reverse).
+        appState.goToPickems(tab: 0)
+      },
+    ]
+  }
 
   // Picking here is a swipe-left gesture on the row (see .swipeActions
   // below) with no other on-screen affordance -- feedback showed people
@@ -401,30 +445,36 @@ struct GamesView: View {
     }
   }
 
-  private var sportToggle: some View {
-    HStack(spacing: 4) {
-      ForEach(["cfb", "nfl"], id: \.self) { s in
-        let active = s == viewModel.sport
-        Button {
-          Task { await viewModel.switchSport(to: s) }
-        } label: {
-          Text(s == "cfb" ? "🏈 CFB" : "🏈 PRO BALL")
-            .font(BoldTheme.Fonts.body(13, weight: .bold))
-            .foregroundColor(active ? BoldTheme.Colors.text : BoldTheme.Colors.textDim)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 9)
-            .background(active ? Color.white : Color.clear)
-            .cornerRadius(10)
-            .shadow(color: active ? Color(hex: 0x142A1C).opacity(0.14) : .clear, radius: 6, y: 3)
-        }
+  // Same "Switch Game" sheet Home uses, in place of the old inline CFB/Pro
+  // Ball pill -- see HomeView.switchGameButton for the full rationale.
+  private var switchGameButton: some View {
+    Button { showSwitchGame = true } label: {
+      HStack(spacing: 8) {
+        Image(systemName: "arrow.left.arrow.right")
+          .font(.system(size: 12, weight: .bold))
+        Text(viewModel.sport == "cfb" ? "CFB" : "PRO BALL")
+          .font(BoldTheme.Fonts.body(13, weight: .bold))
+        Spacer()
+        Text("Switch")
+          .font(BoldTheme.Fonts.body(12, weight: .semibold))
+          .foregroundColor(BoldTheme.Colors.textDim)
+        Image(systemName: "chevron.right")
+          .font(.system(size: 11, weight: .semibold))
+          .foregroundColor(BoldTheme.Colors.textFaint)
       }
+      .foregroundColor(BoldTheme.Colors.text)
+      .padding(.horizontal, 14)
+      .padding(.vertical, 9)
+      .background(Color.white.opacity(0.6))
+      .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
+      .cornerRadius(13)
     }
-    .padding(4)
-    .background(Color(hex: 0x16241B).opacity(0.07))
-    .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
-    .cornerRadius(13)
+    .buttonStyle(.plain)
     .padding(.horizontal, 20)
     .padding(.bottom, 10)
+    .sheet(isPresented: $showSwitchGame) {
+      SwitchGameSheet(options: switchGameOptions)
+    }
   }
 
   @ViewBuilder private var content: some View {
@@ -596,7 +646,7 @@ struct GamesView: View {
     ZStack {
       VStack(spacing: 0) {
         header
-        sportToggle
+        switchGameButton
         searchField
         swipeHintBanner
         pickedBanner
@@ -630,6 +680,7 @@ struct GamesView: View {
       if let requested = appState.requestedSport {
         viewModel.sport = requested
         appState.requestedSport = nil
+        appState.currentGame = requested == "nfl" ? .nfl : .cfb
       }
       await viewModel.loadInitial()
     }
@@ -640,6 +691,7 @@ struct GamesView: View {
     .onChange(of: appState.requestedSport) { _, requested in
       guard let requested else { return }
       appState.requestedSport = nil
+      appState.currentGame = requested == "nfl" ? .nfl : .cfb
       Task { await viewModel.switchSport(to: requested) }
     }
   }

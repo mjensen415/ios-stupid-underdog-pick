@@ -100,7 +100,13 @@ struct JoinGroupView: View {
     defer { isSubmitting = false }
     do {
       if mode == .code {
-        let result = try await GroupsService(client: client).joinByToken(inviteToken: inviteCode.trimmingCharacters(in: .whitespaces))
+        // Accept a pasted full invite link (https://stupidunderdogpick.com/
+        // groups/join/<token>), not just a bare token -- someone who saved
+        // or was sent the link itself would otherwise paste the whole URL
+        // here and get a confusing "invite not found" instead of joining.
+        let raw = inviteCode.trimmingCharacters(in: .whitespaces)
+        let token = URL(string: raw).flatMap(DeepLinkHandler.groupJoinToken(from:)) ?? raw
+        let result = try await GroupsService(client: client).joinByToken(inviteToken: token)
         await onJoined()
         dismiss()
         _ = result

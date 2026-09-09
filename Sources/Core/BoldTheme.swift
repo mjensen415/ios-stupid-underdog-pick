@@ -20,6 +20,13 @@ enum BoldTheme {
     static let surface    = Color(hex: 0x16241B).opacity(0.04)
     static let track      = Color(hex: 0xEDEAE0) // light wall -- logo-fallback circles, muted chips
 
+    // Pickems accent -- straight-up-winner-picks is a genuinely different
+    // contest from Underdog Pick's spread-based mechanic, so it gets its
+    // own hue (deep teal) rather than sharing gold/green everywhere. Matches
+    // the approved "Pro Ball Pickems Redesign" mockup direction.
+    static let pickemsAccent     = Color(hex: 0x0C6E8C)
+    static let pickemsAccentDeep = Color(hex: 0x073E4F)
+
     // Frost glass-surface recipe -- fill + border pair, used with .background(.ultraThinMaterial)-style blur.
     static let glass       = Color.white.opacity(0.55) // big panels / sheets
     static let glassStrong = Color.white.opacity(0.78) // cards / rows -- more opaque

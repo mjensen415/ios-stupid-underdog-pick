@@ -24,6 +24,39 @@ final class AppState: ObservableObject {
   /// requestedTab, needed separately since Pickems isn't one of
   /// MainTabView's fixed tabs, it's a push from within the Home tab.
   @Published var requestedPickems = false
+
+  /// Which contest the user last chose via the "Switch Game" sheet (or a
+  /// Home/Games entry point that implies one) -- CFB Underdog, Pro Ball
+  /// Underdog, and Pickems are separate contests with separate groups, so
+  /// Groups needs to know which one is "current" to show the right list,
+  /// and to keep showing it if the user leaves and comes back. Persisted
+  /// (not just a one-shot request/consume flag like requestedTab) since
+  /// Groups can be visited long after the switch happened.
+  @Published var currentGame: CurrentGame = .cfb
+
+  /// Route to whichever Underdog Pick sport, updating currentGame so Groups
+  /// reflects it. Single place every CFB/Pro Ball entry point should funnel
+  /// through instead of setting requestedSport/requestedTab directly.
+  func goToUnderdog(sport: String, tab: Int = 1) {
+    currentGame = sport == "nfl" ? .nfl : .cfb
+    requestedSport = sport
+    requestedTab = tab
+  }
+
+  /// Route to Pickems, updating currentGame so Groups reflects it. Single
+  /// place every Pickems entry point should funnel through instead of
+  /// setting requestedPickems directly.
+  func goToPickems(tab: Int? = nil) {
+    currentGame = .pickems
+    if let tab { requestedTab = tab }
+    requestedPickems = true
+  }
+}
+
+enum CurrentGame: String {
+  case cfb
+  case nfl
+  case pickems
 }
 
 private struct SupabaseClientKey: EnvironmentKey {
