@@ -85,6 +85,10 @@ struct PickemsStandingsView: View {
             .foregroundColor(BoldTheme.Colors.textFaint)
         }
         standingsList
+
+        if scope == .week, let groupId = selectedGroupId, let season, let week {
+          WeekPicksRevealView(groupId: groupId, season: season, week: week)
+        }
       }
     }
     .padding(.top, 16)

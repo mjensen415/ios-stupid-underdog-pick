@@ -22,6 +22,10 @@ struct LeaderboardDisplayRow: Identifiable {
   let name: String
   let record: String
   let points: Double
+  // Only populated for a group-scoped week view (see
+  // WeeklyLeaderboardViewModel.fetchRows) -- nil means either not
+  // applicable (season view, global view) or not yet locked/no pick.
+  var pickLabel: String? = nil
 }
 
 struct LeaderboardHeaderRow: View {
@@ -54,6 +58,7 @@ struct LeaderboardRow: View {
   let name: String
   let record: String
   let points: String
+  var pickLabel: String? = nil
   // Last row in the ranked list -- rounds the bottom corners to close out
   // the card that LeaderboardHeaderRow opens at the top.
   var isLast: Bool = false
@@ -73,6 +78,11 @@ struct LeaderboardRow: View {
           Text(record)
             .font(BoldTheme.Fonts.mono(11))
             .foregroundColor(BoldTheme.Colors.textFaint)
+          if let pickLabel {
+            Text(pickLabel)
+              .font(BoldTheme.Fonts.body(11))
+              .foregroundColor(BoldTheme.Colors.textDim)
+          }
         }
 
         Spacer()

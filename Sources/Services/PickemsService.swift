@@ -95,6 +95,25 @@ struct GroupPickemsRow: Decodable, Identifiable {
   }
 }
 
+// Row from get_group_pickems_picks -- picked_team_id is null both when the
+// member hasn't picked and when they have but the game hasn't locked yet
+// (the RPC nulls it out server-side); is_locked disambiguates the two.
+struct GroupPickRow: Decodable {
+  let userId: UUID
+  let displayName: String
+  let gameId: UUID?
+  let pickedTeamId: UUID?
+  let isLocked: Bool
+
+  enum CodingKeys: String, CodingKey {
+    case userId = "user_id"
+    case displayName = "display_name"
+    case gameId = "game_id"
+    case pickedTeamId = "picked_team_id"
+    case isLocked = "is_locked"
+  }
+}
+
 struct PickemsService {
   let client: SupabaseClient
 
@@ -189,6 +208,14 @@ struct PickemsService {
   func removeManagedProfile(id: UUID) async throws {
     struct Update: Encodable { let is_active: Bool }
     _ = try await client.from("managed_profiles").update(Update(is_active: false)).eq("id", value: id).execute()
+  }
+
+  func fetchGroupPicks(groupId: UUID, season: Int, week: Int, sport: String = "nfl") async throws -> [GroupPickRow] {
+    struct Params: Encodable { let p_group_id: UUID; let p_season: Int; let p_week: Int; let p_sport: String }
+    let res = try await client
+      .rpc("get_group_pickems_picks", params: Params(p_group_id: groupId, p_season: season, p_week: week, p_sport: sport))
+      .execute()
+    return try JSONDecoder().decode([GroupPickRow].self, from: res.data)
   }
 
   func fetchGroupLeaderboard(groupId: UUID, season: Int, sport: String = "nfl", week: Int?) async throws -> [GroupPickemsRow] {

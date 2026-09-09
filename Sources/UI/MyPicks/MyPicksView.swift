@@ -60,6 +60,9 @@ struct MyPicksView: View {
       .padding(.horizontal, 20).padding(.vertical, 14)
       .background(BoldTheme.Colors.bgPage)
 
+      ThisWeekPicksView()
+        .background(BoldTheme.Colors.bgPage)
+
       content
     }
     .background(BoldTheme.Colors.bgPage.ignoresSafeArea())

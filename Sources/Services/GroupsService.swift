@@ -162,6 +162,18 @@ struct GroupsService {
     return try await invoke("groups-leaderboard", method: .get, query: query)
   }
 
+  // picks is self-only via RLS (user_id = auth.uid()), so group members
+  // could never see each other's Underdog pick even after it locked --
+  // get_group_underdog_picks (SECURITY DEFINER) reveals it once the pick's
+  // game has. Mirrors web's get_group_underdog_picks usage in GroupDetail.tsx.
+  func fetchGroupUnderdogPicks(groupId: UUID, season: Int, week: Int, sport: String = "cfb") async throws -> [GroupPickRow] {
+    struct Params: Encodable { let p_group_id: UUID; let p_season: Int; let p_week: Int; let p_sport: String }
+    let res = try await client
+      .rpc("get_group_underdog_picks", params: Params(p_group_id: groupId, p_season: season, p_week: week, p_sport: sport))
+      .execute()
+    return try JSONDecoder().decode([GroupPickRow].self, from: res.data)
+  }
+
   // MARK: - Invites
 
   func createInvite(groupId: UUID, maxUses: Int?, expiresAt: String?, emails: [String]? = nil) async throws -> CreateInviteResult {

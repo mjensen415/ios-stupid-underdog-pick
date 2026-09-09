@@ -53,11 +53,13 @@ final class WeeklyLeaderboardViewModel: ObservableObject {
     guard let season, let week else { return }
     do {
       if let groupSlug {
-        let result = try await GroupsService(client: client).fetchGroupLeaderboard(
+        let service = GroupsService(client: client)
+        let result = try await service.fetchGroupLeaderboard(
           slug: groupSlug, scope: "week", season: season, week: week, sport: sport
         )
+        let pickLabels = await fetchPickLabels(client: client, groupId: result.group_id, season: season, week: week, sport: sport)
         rows = result.leaderboard.map {
-          LeaderboardDisplayRow(id: $0.user_id, userId: $0.user_id, name: $0.display_name ?? "Unknown", record: "\($0.wins)W-\($0.losses)L", points: $0.points)
+          LeaderboardDisplayRow(id: $0.user_id, userId: $0.user_id, name: $0.display_name ?? "Unknown", record: "\($0.wins)W-\($0.losses)L", points: $0.points, pickLabel: pickLabels[$0.user_id])
         }
       } else {
         let list = try await LeaderboardService(client: client).fetchWeek(season: season, week: week, sport: sport)
@@ -74,6 +76,28 @@ final class WeeklyLeaderboardViewModel: ObservableObject {
       #if DEBUG
       print("[WeeklyLeaderboard][ERR]", error.localizedDescription)
       #endif
+    }
+  }
+
+  // "🔒 Picked" once a member has a pick but its game hasn't locked yet
+  // (distinct from no pick at all, which stays nil); the actual team name
+  // once it has. Best-effort -- a failure here shouldn't block the
+  // leaderboard itself from rendering.
+  private func fetchPickLabels(client: SupabaseClient, groupId: UUID, season: Int, week: Int, sport: String) async -> [UUID: String] {
+    do {
+      let picks = try await GroupsService(client: client).fetchGroupUnderdogPicks(groupId: groupId, season: season, week: week, sport: sport)
+      let games = try await GamesService(client: client).fetch(season: season, week: week, sport: sport)
+      let gamesById = Dictionary(uniqueKeysWithValues: games.map { ($0.id, $0) })
+      var labels: [UUID: String] = [:]
+      for p in picks {
+        guard let gameId = p.gameId else { labels[p.userId] = "No pick yet"; continue }
+        guard p.isLocked else { labels[p.userId] = "🔒 Picked"; continue }
+        guard let teamId = p.pickedTeamId, let game = gamesById[gameId] else { labels[p.userId] = "No pick yet"; continue }
+        labels[p.userId] = teamId == game.homeTeamId ? (game.homeTeam ?? "") : (game.awayTeam ?? "")
+      }
+      return labels
+    } catch {
+      return [:]
     }
   }
 }
@@ -121,6 +145,7 @@ struct WeeklyLeaderboardView: View {
                 name: row.name,
                 record: row.record,
                 points: String(format: "%.1f", row.points),
+                pickLabel: row.pickLabel,
                 isLast: index == viewModel.rows.count - 1
               )
             }

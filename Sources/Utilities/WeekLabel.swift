@@ -1,9 +1,9 @@
 import Foundation
 
-/// Week 0 and Week 1 both display as "0/1" everywhere in the app.
-/// Frontend display only -- mirrors src/lib/weekLabel.ts on web. The two
-/// remain distinct week numbers in the data (games, picks, leaderboard);
-/// only the rendered label changes.
+/// Pro Ball never actually has a week 0 (confirmed via SQL -- no week=0
+/// rows exist in `games` for sport=nfl), so the old "0/1" merge display
+/// was a leftover from a week-0 concept that never shipped. Mirrors
+/// src/lib/weekLabel.ts on web -- plain passthrough.
 func formatWeekLabel(_ week: Int) -> String {
-  (week == 0 || week == 1) ? "0/1" : String(week)
+  String(week)
 }
