@@ -246,10 +246,11 @@ struct GamesView: View {
         accent: BoldTheme.Colors.pickemsAccent,
         isCurrent: false
       ) {
-        // Pickems isn't part of this tab -- hand off to Home, which owns
-        // the NavigationStack Pickems gets pushed onto (same pattern Home's
-        // own "Make Your Pick" hand-off uses in reverse).
-        appState.goToPickems(tab: 0)
+        // This tab's own slot in MainTabView now renders PickemsView
+        // whenever currentGame is .pickems, so this swap happens in place
+        // -- no tab hop needed, goToPickems's requestedTab=1 is a no-op
+        // since we're already there.
+        appState.goToPickems()
       },
     ]
   }

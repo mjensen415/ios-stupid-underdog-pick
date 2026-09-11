@@ -172,7 +172,6 @@ struct HomeView: View {
   @State private var showJoinGroup = false
   @State private var showInvitePicker = false
   @State private var pushGroupSlug: String?
-  @State private var showPickems = false
   @State private var shareURL: URL?
   @State private var showShareSheet = false
   @State private var dismissingIntro = false
@@ -259,8 +258,7 @@ struct HomeView: View {
         accent: BoldTheme.Colors.pickemsAccent,
         isCurrent: false
       ) {
-        appState.currentGame = .pickems
-        showPickems = true
+        appState.goToPickems()
       },
     ]
   }
@@ -311,15 +309,6 @@ struct HomeView: View {
       }
       .navigationDestination(item: $pushGroupSlug) { slug in
         GroupDetailView(slug: slug)
-      }
-      .navigationDestination(isPresented: $showPickems) {
-        PickemsView()
-      }
-      .onChange(of: appState.requestedPickems) { _, requested in
-        guard requested else { return }
-        appState.currentGame = .pickems
-        showPickems = true
-        appState.requestedPickems = false
       }
       .sheet(isPresented: $showCreateGroup) {
         CreateGroupView {
@@ -490,8 +479,7 @@ struct HomeView: View {
       if showPickemsIntroBanner {
         PickemsIntroBanner(dismissing: dismissingIntro) {
           Task { await dismissPickemsIntro() }
-          appState.currentGame = .pickems
-          showPickems = true
+          appState.goToPickems()
         } onDismiss: {
           Task { await dismissPickemsIntro() }
         }
@@ -533,8 +521,7 @@ struct HomeView: View {
               picked: false,
               countdown: nil
             ) {
-              appState.currentGame = .pickems
-              showPickems = true
+              appState.goToPickems()
             }
           }
         }
@@ -555,8 +542,7 @@ struct HomeView: View {
           }
           if showExplorePickems {
             GameCardView(game: .pickems, compact: true) {
-              appState.currentGame = .pickems
-              showPickems = true
+              appState.goToPickems()
             }
           }
         }

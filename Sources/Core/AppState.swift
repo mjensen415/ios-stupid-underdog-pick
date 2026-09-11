@@ -19,11 +19,6 @@ final class AppState: ObservableObject {
   /// lands on whichever sport was selected on Home instead of always
   /// resetting to CFB. GamesView consumes and resets it, same pattern.
   @Published var requestedSport: String?
-  /// Set by onboarding's group step (Pickems path) to push HomeView into
-  /// PickemsView once Home appears -- same request/consume pattern as
-  /// requestedTab, needed separately since Pickems isn't one of
-  /// MainTabView's fixed tabs, it's a push from within the Home tab.
-  @Published var requestedPickems = false
 
   /// Which contest the user last chose via the "Switch Game" sheet (or a
   /// Home/Games entry point that implies one) -- CFB Underdog, Pro Ball
@@ -43,13 +38,15 @@ final class AppState: ObservableObject {
     requestedTab = tab
   }
 
-  /// Route to Pickems, updating currentGame so Groups reflects it. Single
-  /// place every Pickems entry point should funnel through instead of
-  /// setting requestedPickems directly.
-  func goToPickems(tab: Int? = nil) {
+  /// Route to Pickems, updating currentGame so Groups reflects it, and
+  /// requesting the Games tab -- MainTabView's Games slot now renders
+  /// PickemsView whenever currentGame is .pickems, the same way it renders
+  /// GamesView for .cfb/.nfl, so this is the single place every Pickems
+  /// entry point should funnel through instead of juggling a separate
+  /// push flag. Harmless no-op if already on the Games tab.
+  func goToPickems() {
     currentGame = .pickems
-    if let tab { requestedTab = tab }
-    requestedPickems = true
+    requestedTab = 1
   }
 }
 

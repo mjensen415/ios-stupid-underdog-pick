@@ -26,7 +26,7 @@ struct MainTabView: View {
         .tag(0)
 
       GamesTab()
-        .tabItem { Label("Games", systemImage: "sportscourt") }
+        .tabItem { Label(appState.currentGame == .pickems ? "Pick" : "Games", systemImage: "sportscourt") }
         .tag(1)
 
       MyPicksView()
@@ -50,10 +50,18 @@ struct MainTabView: View {
   }
 }
 
+// CFB Underdog, Pro Ball Underdog, and Pickems are separate contests --
+// this tab's slot follows appState.currentGame the same way web's
+// second-tier nav resolves "Games"/"Pick" to /games or /pickems, so
+// Pickems is a genuine peer reachable right from the tab bar instead of
+// only through Home's "Switch Game" sheet or a banner.
 private struct GamesTab: View {
+  @EnvironmentObject private var appState: AppState
   @Environment(\.supabaseClient) private var client
   var body: some View {
-    if let client {
+    if appState.currentGame == .pickems {
+      PickemsView()
+    } else if let client {
       GamesView(viewModel: .init(client: client))
     } else {
       Text("Missing client")
