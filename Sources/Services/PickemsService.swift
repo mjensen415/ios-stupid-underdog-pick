@@ -114,6 +114,20 @@ struct GroupPickRow: Decodable {
   }
 }
 
+struct PickemsPickPctRow: Decodable {
+  let gameId: UUID
+  let pickedTeamId: UUID
+  let pickCount: Int
+  let totalPicks: Int
+
+  enum CodingKeys: String, CodingKey {
+    case gameId = "game_id"
+    case pickedTeamId = "picked_team_id"
+    case pickCount = "pick_count"
+    case totalPicks = "total_picks"
+  }
+}
+
 struct PickemsService {
   let client: SupabaseClient
 
@@ -208,6 +222,17 @@ struct PickemsService {
   func removeManagedProfile(id: UUID) async throws {
     struct Update: Encodable { let is_active: Bool }
     _ = try await client.from("managed_profiles").update(Update(is_active: false)).eq("id", value: id).execute()
+  }
+
+  // Group-scoped "% picked" per team, per game -- context while picking,
+  // not a public crowd number like ESPN's (a Pickems group here is a
+  // handful of family/friends, not a public pool).
+  func fetchGroupPickPcts(groupId: UUID, season: Int, week: Int, sport: String = "nfl") async throws -> [PickemsPickPctRow] {
+    struct Params: Encodable { let p_group_id: UUID; let p_season: Int; let p_week: Int; let p_sport: String }
+    let res = try await client
+      .rpc("get_group_pickems_pick_pcts", params: Params(p_group_id: groupId, p_season: season, p_week: week, p_sport: sport))
+      .execute()
+    return try JSONDecoder().decode([PickemsPickPctRow].self, from: res.data)
   }
 
   func fetchGroupPicks(groupId: UUID, season: Int, week: Int, sport: String = "nfl") async throws -> [GroupPickRow] {

@@ -17,6 +17,8 @@ final class PickemsViewModel: ObservableObject {
   @Published var managedProfiles: [ManagedProfile] = []
   @Published var actingAs: ManagedProfile?
   @Published var savingChild = false
+  @Published var myStanding: (correct: Int, total: Int, rank: Int)?
+  @Published var pickPcts: [UUID: [UUID: (count: Int, total: Int)]] = [:]
 
   private var client: SupabaseClient?
   private var userId: UUID?
@@ -117,6 +119,38 @@ final class PickemsViewModel: ObservableObject {
     }
   }
 
+  // At-a-glance record/rank/pts for the header strip.
+  func loadStanding(groupId: UUID) async {
+    guard let client, let season, let week, let userId else { myStanding = nil; return }
+    do {
+      let rows = try await PickemsService(client: client).fetchGroupLeaderboard(groupId: groupId, season: season, sport: "nfl", week: week)
+      let ranked = rankRows(rows, scope: .week, actualTotal: nil)
+      let mineId = actingAs?.id ?? userId
+      if let mine = ranked.first(where: { $0.row.userId == mineId }) {
+        myStanding = (mine.row.weekCorrect, mine.row.weekTotalPicks, mine.rank)
+      } else {
+        myStanding = nil
+      }
+    } catch {
+      myStanding = nil
+    }
+  }
+
+  // Group-scoped "% picked" per team, per game.
+  func loadPickPcts(groupId: UUID) async {
+    guard let client, let season, let week else { pickPcts = [:]; return }
+    do {
+      let rows = try await PickemsService(client: client).fetchGroupPickPcts(groupId: groupId, season: season, week: week)
+      var byGame: [UUID: [UUID: (count: Int, total: Int)]] = [:]
+      for r in rows {
+        byGame[r.gameId, default: [:]][r.pickedTeamId] = (r.pickCount, r.totalPicks)
+      }
+      pickPcts = byGame
+    } catch {
+      pickPcts = [:]
+    }
+  }
+
   func saveTiebreaker() async {
     guard let client, let season, let week, !tiebreakerLocked else { return }
     guard let value = Int(tiebreakerGuess), value >= 0 else {
@@ -162,6 +196,14 @@ struct PickemsView: View {
     (myGroups ?? []).contains { $0.game_type == .pickems || $0.game_type == .both }
   }
 
+  // First Pickems-eligible group, for the at-a-glance strip and "% picked"
+  // -- same "first group" default PickemsStandingsView uses without a
+  // fixedGroupId. A user in several Pickems groups only sees one group's
+  // numbers here; the Standings tab is where they compare.
+  private var pickemsGroupId: UUID? {
+    (myGroups ?? []).first { $0.game_type == .pickems || $0.game_type == .both }?.group_id
+  }
+
   var body: some View {
     NavigationStack {
       ZStack {
@@ -174,6 +216,7 @@ struct PickemsView: View {
           ScrollView {
             VStack(alignment: .leading, spacing: 0) {
               header
+              if tab == .pick { atAGlanceStrip }
               if tab == .pick { actorPicker }
               weekPills
               tabToggle
@@ -201,6 +244,12 @@ struct PickemsView: View {
       }
       .onChange(of: viewModel.week) { _, _ in Task { await viewModel.loadWeek() } }
       .onChange(of: viewModel.actingAs) { _, _ in Task { await viewModel.loadWeek() } }
+      .task(id: "\(pickemsGroupId?.uuidString ?? "")|\(viewModel.season ?? 0)|\(viewModel.week ?? 0)") {
+        if let pickemsGroupId {
+          await viewModel.loadStanding(groupId: pickemsGroupId)
+          await viewModel.loadPickPcts(groupId: pickemsGroupId)
+        }
+      }
       .alert("Something went wrong", isPresented: Binding(
         get: { viewModel.errorText != nil },
         set: { if !$0 { viewModel.errorText = nil } }
@@ -220,6 +269,35 @@ struct PickemsView: View {
       .sheet(isPresented: $showManageProfiles) {
         manageProfilesSheet
       }
+    }
+  }
+
+  @ViewBuilder private var atAGlanceStrip: some View {
+    if let standing = viewModel.myStanding {
+      HStack(spacing: 0) {
+        atAGlanceCell(
+          value: "\(standing.correct)-\(max(standing.total - standing.correct, 0))",
+          label: "RECORD", color: BoldTheme.Colors.text, showDivider: true
+        )
+        atAGlanceCell(value: "#\(standing.rank)", label: "RANK", color: BoldTheme.Colors.goldDeep, showDivider: true)
+        atAGlanceCell(value: "\(standing.correct)", label: "PTS", color: BoldTheme.Colors.green, showDivider: false)
+      }
+      .background(BoldTheme.Colors.glassStrong)
+      .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
+      .clipShape(RoundedRectangle(cornerRadius: 16))
+      .padding(.top, 12)
+    }
+  }
+
+  private func atAGlanceCell(value: String, label: String, color: Color, showDivider: Bool) -> some View {
+    VStack(spacing: 2) {
+      Text(value).font(BoldTheme.Fonts.display(24)).foregroundColor(color)
+      Text(label).font(BoldTheme.Fonts.mono(9.5)).tracking(0.9).foregroundColor(BoldTheme.Colors.textFaint)
+    }
+    .frame(maxWidth: .infinity)
+    .padding(.vertical, 14)
+    .overlay(alignment: .trailing) {
+      if showDivider { Rectangle().fill(BoldTheme.Colors.border).frame(width: 1) }
     }
   }
 
@@ -418,7 +496,8 @@ struct PickemsView: View {
           }
           PickemsGameRowView(
             game: game,
-            myPick: viewModel.myPicks[game.id]
+            myPick: viewModel.myPicks[game.id],
+            pickPcts: viewModel.pickPcts[game.id] ?? [:]
           ) { teamId in
             Task { await viewModel.pickTeam(game, teamId: teamId) }
           }
@@ -456,6 +535,7 @@ struct PickemsView: View {
 private struct PickemsGameRowView: View {
   let game: PickemsGameRow
   let myPick: UUID?
+  let pickPcts: [UUID: (count: Int, total: Int)]
   let onPick: (UUID) -> Void
 
   var body: some View {
@@ -490,27 +570,46 @@ private struct PickemsGameRowView: View {
   private func teamButton(teamId: UUID, name: String?, logo: String?, points: Int?) -> some View {
     let picked = myPick == teamId
     let isWinner = game.isFinal && game.winnerTeamId == teamId
+    let pctInfo = pickPcts[teamId]
+    let pct: Int? = (pctInfo?.total ?? 0) > 0 ? Int((Double(pctInfo?.count ?? 0) / Double(pctInfo!.total) * 100).rounded()) : nil
     Button {
       onPick(teamId)
     } label: {
-      HStack(spacing: 9) {
-        RetryingAsyncImage(url: logo.flatMap { URL(string: $0) }) { img in
-          img.resizable().scaledToFit()
-        } placeholder: {
-          Image(systemName: "football").resizable().scaledToFit().opacity(0.3).foregroundColor(BoldTheme.Colors.textFaint)
+      VStack(alignment: .leading, spacing: 6) {
+        HStack(spacing: 9) {
+          RetryingAsyncImage(url: logo.flatMap { URL(string: $0) }) { img in
+            img.resizable().scaledToFit()
+          } placeholder: {
+            Image(systemName: "football").resizable().scaledToFit().opacity(0.3).foregroundColor(BoldTheme.Colors.textFaint)
+          }
+          .frame(width: 30, height: 30)
+          Text((name ?? "").uppercased())
+            .font(BoldTheme.Fonts.body(12.5, weight: picked ? .bold : .semibold))
+            .foregroundColor(picked ? BoldTheme.Colors.text : BoldTheme.Colors.textDim)
+            .lineLimit(1)
+          Spacer(minLength: 0)
+          if game.isLive || game.isFinal, let points {
+            Text("\(points)")
+              .font(BoldTheme.Fonts.display(17))
+              .foregroundColor(isWinner ? BoldTheme.Colors.green : BoldTheme.Colors.text)
+          } else if picked {
+            Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundColor(BoldTheme.Colors.green)
+          }
         }
-        .frame(width: 30, height: 30)
-        Text((name ?? "").uppercased())
-          .font(BoldTheme.Fonts.body(12.5, weight: picked ? .bold : .semibold))
-          .foregroundColor(picked ? BoldTheme.Colors.text : BoldTheme.Colors.textDim)
-          .lineLimit(1)
-        Spacer(minLength: 0)
-        if game.isLive || game.isFinal, let points {
-          Text("\(points)")
-            .font(BoldTheme.Fonts.display(17))
-            .foregroundColor(isWinner ? BoldTheme.Colors.green : BoldTheme.Colors.text)
-        } else if picked {
-          Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundColor(BoldTheme.Colors.green)
+        if let pct {
+          VStack(alignment: .leading, spacing: 2) {
+            GeometryReader { geo in
+              ZStack(alignment: .leading) {
+                Capsule().fill(Color.black.opacity(0.08))
+                Capsule().fill(picked ? BoldTheme.Colors.green : Color.black.opacity(0.28))
+                  .frame(width: geo.size.width * CGFloat(pct) / 100)
+              }
+            }
+            .frame(height: 4)
+            Text("\(pct)% picked")
+              .font(BoldTheme.Fonts.mono(9.5))
+              .foregroundColor(BoldTheme.Colors.textFaint)
+          }
         }
       }
       .padding(.horizontal, 10).padding(.vertical, 9)
