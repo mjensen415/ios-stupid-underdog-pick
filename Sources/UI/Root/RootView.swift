@@ -34,6 +34,12 @@ struct RootView: View {
         MainTabView()
       }
     }
+    .overlay(alignment: .top) {
+      if let config = appState.updateAvailable {
+        UpdateBanner(config: config) { appState.updateAvailable = nil }
+          .padding(.top, 8)
+      }
+    }
     .fullScreenCover(isPresented: Binding(
       get: { appState.pendingGroupJoinToken != nil },
       set: { isPresented in if !isPresented { appState.pendingGroupJoinToken = nil } }
@@ -67,6 +73,18 @@ struct RootView: View {
         let profile = try? await ProfilesService(client: client).fetchMyProfile()
         showOnboarding = profile?.has_onboarded == false
       }
+    }
+    // Once per launch (not per session id -- this should run even before
+    // sign-in, and doesn't need to repeat on logout/login). Soft nudge
+    // only: never blocks anything, just offers app_version_config's
+    // latest_version if it's ahead of this build and the user hasn't
+    // already dismissed that specific version.
+    .task {
+      guard let client = appState.client else { return }
+      guard let config = try? await AppVersionService(client: client).fetchConfig() else { return }
+      let installed = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
+      guard isVersion(config.latestVersion, newerThan: installed), UpdateBanner.shouldShow(config) else { return }
+      appState.updateAvailable = config
     }
   }
 }

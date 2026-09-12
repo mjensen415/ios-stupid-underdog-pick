@@ -29,6 +29,12 @@ final class AppState: ObservableObject {
   /// Groups can be visited long after the switch happened.
   @Published var currentGame: CurrentGame = .cfb
 
+  /// Set once per session by RootView's launch check (app_version_config)
+  /// when the App Store has a newer build than this one. Nil means either
+  /// no check has completed yet or the app is current -- UpdateBanner
+  /// treats both the same (don't show).
+  @Published var updateAvailable: AppVersionConfig?
+
   /// Route to whichever Underdog Pick sport, updating currentGame so Groups
   /// reflects it. Single place every CFB/Pro Ball entry point should funnel
   /// through instead of setting requestedSport/requestedTab directly.
