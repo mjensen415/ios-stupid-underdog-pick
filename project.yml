@@ -35,7 +35,7 @@ targets:
       path: Sources/Info.plist
       properties:
         CFBundleDisplayName: Stupid Underdog Pick
-        CFBundleShortVersionString: "1.2.0"
+        CFBundleShortVersionString: "1.1.1"
         CFBundleVersion: "12"
         CFBundleIconName: AppIcon
         UISupportedInterfaceOrientations:
