@@ -363,12 +363,17 @@ struct HomeView: View {
   }
 
   private var quickActionsRow: some View {
-    HStack(spacing: 34) {
-      quickAction(label: "Create Group", systemImage: "plus", gold: true) { showCreateGroup = true }
-      quickAction(label: "Join Group", systemImage: "link", gold: false) { showJoinGroup = true }
-      quickAction(label: "Invite Friends", systemImage: "square.and.arrow.up", gold: false, action: handleInviteTap)
+    VStack(spacing: 0) {
+      Rectangle().fill(BoldTheme.Colors.border).frame(height: 1)
+        .padding(.bottom, 20)
+      HStack(spacing: 34) {
+        quickAction(label: "Create Group", systemImage: "plus", gold: true) { showCreateGroup = true }
+        quickAction(label: "Join Group", systemImage: "link", gold: false) { showJoinGroup = true }
+        quickAction(label: "Invite Friends", systemImage: "square.and.arrow.up", gold: false, action: handleInviteTap)
+      }
     }
-    .padding(.bottom, 20)
+    .padding(.top, 4)
+    .padding(.bottom, 8)
   }
 
   private func quickAction(label: String, systemImage: String, gold: Bool, action: @escaping () -> Void) -> some View {
