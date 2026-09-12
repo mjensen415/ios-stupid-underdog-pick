@@ -278,11 +278,11 @@ struct HomeView: View {
           VStack(alignment: .leading, spacing: 0) {
             topRow
             switchGameButton
-            quickActionsRow
             contestsSection
             groupsSection
             discoverSection
             recapSection
+            quickActionsRow
           }
           .padding(18)
         }
