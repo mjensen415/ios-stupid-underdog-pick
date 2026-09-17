@@ -231,6 +231,7 @@ struct PickemsView: View {
             }
             .padding(18)
           }
+          .dismissKeyboardOnTap()
         }
       }
       .navigationBarHidden(true)
@@ -551,6 +552,9 @@ private struct PickemsGameRowView: View {
       }
       HStack(spacing: 10) {
         teamButton(teamId: game.awayTeamId, name: game.awayName, logo: game.awayLogoUrl, points: game.awayPoints)
+        Text("@")
+          .font(BoldTheme.Fonts.body(11, weight: .bold))
+          .foregroundColor(BoldTheme.Colors.textFaint)
         teamButton(teamId: game.homeTeamId, name: game.homeName, logo: game.homeLogoUrl, points: game.homePoints)
       }
       if game.isFinal, let myPick {

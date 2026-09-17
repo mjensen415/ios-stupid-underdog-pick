@@ -570,6 +570,7 @@ struct GamesView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .background(BoldTheme.Colors.bgPage)
+        .dismissKeyboardOnTap()
         // A week spans both already-played and upcoming days -- opening on
         // the earliest day means scrolling past everything already final
         // just to reach today's or the next live game. Jump straight to
