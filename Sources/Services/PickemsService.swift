@@ -49,6 +49,11 @@ private struct PickemsPickRow: Decodable {
   let acting_as_profile_id: UUID?
 }
 
+struct CopyPickemsPicksResult: Decodable {
+  let copied: Int
+  let skipped_locked: Int
+}
+
 private struct PickemsTiebreakerRow: Decodable {
   let guessed_total_points: Int
   let acting_as_profile_id: UUID?
@@ -163,17 +168,37 @@ struct PickemsService {
   // Fetches every row for this user (own + all children) and filters by
   // actor client-side, rather than relying on a server-side IS NULL filter
   // whose exact postgrest-swift call signature isn't worth guessing at.
-  func fetchMyPicks(userId: UUID, gameIds: [UUID], actingAsProfileId: UUID? = nil) async throws -> [UUID: UUID] {
+  //
+  // Effective pick per game = groupId's own scoped pick if it has one,
+  // else the shared (group_id IS NULL) pick -- same fallback the backend
+  // uses when scoring, so what's shown here always matches what counts.
+  func fetchMyPicks(userId: UUID, gameIds: [UUID], actingAsProfileId: UUID? = nil, groupId: UUID? = nil) async throws -> [UUID: UUID] {
     guard !gameIds.isEmpty else { return [:] }
-    let res = try await client
+    let sharedRes = try await client
       .from("pickems_picks")
       .select("game_id, picked_team_id, acting_as_profile_id")
       .eq("user_id", value: userId)
       .in("game_id", values: gameIds)
+      .is("group_id", value: nil)
       .execute()
-    let rows = try JSONDecoder().decode([PickemsPickRow].self, from: res.data)
+    let sharedRows = try JSONDecoder().decode([PickemsPickRow].self, from: sharedRes.data)
       .filter { $0.acting_as_profile_id == actingAsProfileId }
-    return Dictionary(uniqueKeysWithValues: rows.map { ($0.game_id, $0.picked_team_id) })
+    var map = Dictionary(uniqueKeysWithValues: sharedRows.map { ($0.game_id, $0.picked_team_id) })
+
+    if let groupId {
+      let groupRes = try await client
+        .from("pickems_picks")
+        .select("game_id, picked_team_id, acting_as_profile_id")
+        .eq("user_id", value: userId)
+        .eq("group_id", value: groupId)
+        .in("game_id", values: gameIds)
+        .execute()
+      let groupRows = try JSONDecoder().decode([PickemsPickRow].self, from: groupRes.data)
+        .filter { $0.acting_as_profile_id == actingAsProfileId }
+      for row in groupRows { map[row.game_id] = row.picked_team_id }
+    }
+
+    return map
   }
 
   func fetchTiebreaker(userId: UUID, season: Int, week: Int, sport: String = "nfl", actingAsProfileId: UUID? = nil) async throws -> Int? {
@@ -189,14 +214,30 @@ struct PickemsService {
       .first { $0.acting_as_profile_id == actingAsProfileId }?.guessed_total_points
   }
 
-  func submitPick(gameId: UUID, pickedTeamId: UUID, actingAsProfileId: UUID? = nil) async throws {
-    struct Params: Encodable { let p_game_id: UUID; let p_picked_team_id: UUID; let p_acting_as_profile_id: UUID? }
-    _ = try await client.rpc("submit_pickems_pick", params: Params(p_game_id: gameId, p_picked_team_id: pickedTeamId, p_acting_as_profile_id: actingAsProfileId)).execute()
+  func submitPick(gameId: UUID, pickedTeamId: UUID, actingAsProfileId: UUID? = nil, groupId: UUID? = nil) async throws {
+    struct Params: Encodable { let p_game_id: UUID; let p_picked_team_id: UUID; let p_acting_as_profile_id: UUID?; let p_group_id: UUID? }
+    _ = try await client.rpc("submit_pickems_pick", params: Params(p_game_id: gameId, p_picked_team_id: pickedTeamId, p_acting_as_profile_id: actingAsProfileId, p_group_id: groupId)).execute()
   }
 
-  func clearPick(gameId: UUID) async throws {
-    struct Params: Encodable { let p_game_id: UUID }
-    _ = try await client.rpc("clear_pickems_pick", params: Params(p_game_id: gameId)).execute()
+  func clearPick(gameId: UUID, groupId: UUID? = nil) async throws {
+    struct Params: Encodable { let p_game_id: UUID; let p_group_id: UUID? }
+    _ = try await client.rpc("clear_pickems_pick", params: Params(p_game_id: gameId, p_group_id: groupId)).execute()
+  }
+
+  // Deletes this group's own scoped picks for the week, reverting the
+  // pick screen back to showing the shared/fallback pick for everything.
+  func resetGroupPicks(groupId: UUID, season: Int, week: Int, sport: String = "nfl") async throws {
+    struct Params: Encodable { let p_group_id: UUID; let p_season: Int; let p_week: Int; let p_sport: String }
+    _ = try await client.rpc("reset_group_pickems_picks", params: Params(p_group_id: groupId, p_season: season, p_week: week, p_sport: sport)).execute()
+  }
+
+  // sourceGroupId nil means "copy my shared picks". One-time copy, not a
+  // standing sync -- copied games become normal independently-editable
+  // picks in the target group afterward.
+  func copyGroupPicks(targetGroupId: UUID, sourceGroupId: UUID?, season: Int, week: Int, sport: String = "nfl") async throws -> CopyPickemsPicksResult {
+    struct Params: Encodable { let p_target_group_id: UUID; let p_source_group_id: UUID?; let p_season: Int; let p_week: Int; let p_sport: String }
+    let res = try await client.rpc("copy_group_pickems_picks", params: Params(p_target_group_id: targetGroupId, p_source_group_id: sourceGroupId, p_season: season, p_week: week, p_sport: sport)).execute()
+    return try JSONDecoder().decode(CopyPickemsPicksResult.self, from: res.data)
   }
 
   func submitTiebreaker(season: Int, week: Int, sport: String = "nfl", guess: Int, actingAsProfileId: UUID? = nil) async throws {

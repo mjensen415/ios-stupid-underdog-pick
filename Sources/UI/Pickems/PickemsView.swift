@@ -19,6 +19,11 @@ final class PickemsViewModel: ObservableObject {
   @Published var savingChild = false
   @Published var myStanding: (correct: Int, total: Int, rank: Int)?
   @Published var pickPcts: [UUID: [UUID: (count: Int, total: Int)]] = [:]
+  // nil = "my shared picks" (unchanged default). A real group id means
+  // the pick screen writes/reads that group's own scoped picks, falling
+  // back to the shared pick for any game not yet customized there.
+  @Published var activeGroupId: UUID?
+  @Published var copyingPicks = false
 
   private var client: SupabaseClient?
   private var userId: UUID?
@@ -84,7 +89,7 @@ final class PickemsViewModel: ObservableObject {
       let svc = PickemsService(client: client)
       games = try await svc.fetchGames(season: season, week: week)
       if let userId {
-        myPicks = try await svc.fetchMyPicks(userId: userId, gameIds: games.map { $0.id }, actingAsProfileId: actingAs?.id)
+        myPicks = try await svc.fetchMyPicks(userId: userId, gameIds: games.map { $0.id }, actingAsProfileId: actingAs?.id, groupId: activeGroupId)
         let guess = try await svc.fetchTiebreaker(userId: userId, season: season, week: week, actingAsProfileId: actingAs?.id)
         savedGuess = guess
         tiebreakerGuess = guess.map { String($0) } ?? ""
@@ -112,10 +117,34 @@ final class PickemsViewModel: ObservableObject {
     pickingGameId = game.id
     defer { pickingGameId = nil }
     do {
-      try await PickemsService(client: client).submitPick(gameId: game.id, pickedTeamId: teamId, actingAsProfileId: actingAs?.id)
+      try await PickemsService(client: client).submitPick(gameId: game.id, pickedTeamId: teamId, actingAsProfileId: actingAs?.id, groupId: activeGroupId)
     } catch {
       myPicks[game.id] = prev
       errorText = error.localizedDescription
+    }
+  }
+
+  func resetToSharedPicks() async {
+    guard let client, let activeGroupId, let season, let week else { return }
+    do {
+      try await PickemsService(client: client).resetGroupPicks(groupId: activeGroupId, season: season, week: week)
+      await loadWeek()
+    } catch {
+      errorText = error.localizedDescription
+    }
+  }
+
+  func copyPicks(from sourceGroupId: UUID?) async -> CopyPickemsPicksResult? {
+    guard let client, let activeGroupId, let season, let week else { return nil }
+    copyingPicks = true
+    defer { copyingPicks = false }
+    do {
+      let result = try await PickemsService(client: client).copyGroupPicks(targetGroupId: activeGroupId, sourceGroupId: sourceGroupId, season: season, week: week)
+      await loadWeek()
+      return result
+    } catch {
+      errorText = error.localizedDescription
+      return nil
     }
   }
 
@@ -189,19 +218,26 @@ struct PickemsView: View {
   @State private var showActorPicker = false
   @State private var showManageProfiles = false
   @State private var newChildName = ""
+  @State private var showGroupPicker = false
+  @State private var showCopyPicksSheet = false
 
   private enum Tab { case pick, standings }
 
-  private var hasEligibleGroup: Bool {
-    (myGroups ?? []).contains { $0.game_type == .pickems || $0.game_type == .both }
+  private var pickemsGroups: [MyGroup] {
+    (myGroups ?? []).filter { $0.game_type == .pickems || $0.game_type == .both }
   }
+
+  private var hasEligibleGroup: Bool { !pickemsGroups.isEmpty }
 
   // First Pickems-eligible group, for the at-a-glance strip and "% picked"
   // -- same "first group" default PickemsStandingsView uses without a
   // fixedGroupId. A user in several Pickems groups only sees one group's
   // numbers here; the Standings tab is where they compare.
-  private var pickemsGroupId: UUID? {
-    (myGroups ?? []).first { $0.game_type == .pickems || $0.game_type == .both }?.group_id
+  private var pickemsGroupId: UUID? { pickemsGroups.first?.group_id }
+
+  private var activeGroupName: String? {
+    guard let id = viewModel.activeGroupId else { return nil }
+    return pickemsGroups.first { $0.group_id == id }?.name ?? "this group"
   }
 
   var body: some View {
@@ -218,6 +254,8 @@ struct PickemsView: View {
               header
               if tab == .pick { atAGlanceStrip }
               if tab == .pick { actorPicker }
+              if tab == .pick && pickemsGroups.count > 1 { groupPicker }
+              if tab == .pick { groupModeBanner }
               weekPills
               tabToggle
 
@@ -245,6 +283,7 @@ struct PickemsView: View {
       }
       .onChange(of: viewModel.week) { _, _ in Task { await viewModel.loadWeek() } }
       .onChange(of: viewModel.actingAs) { _, _ in Task { await viewModel.loadWeek() } }
+      .onChange(of: viewModel.activeGroupId) { _, _ in Task { await viewModel.loadWeek() } }
       .task(id: "\(pickemsGroupId?.uuidString ?? "")|\(viewModel.season ?? 0)|\(viewModel.week ?? 0)") {
         if let pickemsGroupId {
           await viewModel.loadStanding(groupId: pickemsGroupId)
@@ -269,6 +308,16 @@ struct PickemsView: View {
       }
       .sheet(isPresented: $showManageProfiles) {
         manageProfilesSheet
+      }
+      .confirmationDialog("Picking for", isPresented: $showGroupPicker, titleVisibility: .visible) {
+        Button("My Shared Picks") { viewModel.activeGroupId = nil }
+        ForEach(pickemsGroups) { g in
+          Button(g.name) { viewModel.activeGroupId = g.group_id }
+        }
+        Button("Cancel", role: .cancel) {}
+      }
+      .sheet(isPresented: $showCopyPicksSheet) {
+        copyPicksSheet
       }
     }
   }
@@ -323,6 +372,95 @@ struct PickemsView: View {
     }
     .buttonStyle(.plain)
     .padding(.top, 14)
+  }
+
+  private var groupPicker: some View {
+    Button {
+      showGroupPicker = true
+    } label: {
+      HStack(spacing: 6) {
+        Text("Picking for")
+          .font(BoldTheme.Fonts.body(11, weight: .semibold))
+          .foregroundColor(BoldTheme.Colors.textFaint)
+        Text(activeGroupName ?? "My Shared Picks")
+          .font(BoldTheme.Fonts.body(12.5, weight: .bold))
+          .foregroundColor(BoldTheme.Colors.text)
+        Image(systemName: "chevron.down")
+          .font(.system(size: 10, weight: .bold))
+          .foregroundColor(BoldTheme.Colors.textFaint)
+      }
+      .padding(.horizontal, 12).padding(.vertical, 7)
+      .background(viewModel.activeGroupId != nil ? BoldTheme.Colors.gold.opacity(0.16) : BoldTheme.Colors.track)
+      .overlay(Capsule().strokeBorder(viewModel.activeGroupId != nil ? BoldTheme.Colors.goldDeep : .clear, lineWidth: 1))
+      .clipShape(Capsule())
+    }
+    .buttonStyle(.plain)
+    .padding(.top, 8)
+  }
+
+  @ViewBuilder private var groupModeBanner: some View {
+    if let name = activeGroupName {
+      HStack(alignment: .center, spacing: 10) {
+        Text("Picking for **\(name)** only \u{2014} your other groups keep your shared picks.")
+          .font(BoldTheme.Fonts.body(11.5))
+          .foregroundColor(BoldTheme.Colors.textDim)
+        Spacer(minLength: 0)
+        VStack(alignment: .trailing, spacing: 4) {
+          Button("Copy picks from\u{2026}") { showCopyPicksSheet = true }
+            .font(BoldTheme.Fonts.body(11.5, weight: .bold))
+            .foregroundColor(BoldTheme.Colors.goldDeep)
+          Button("Reset to shared") { Task { await viewModel.resetToSharedPicks() } }
+            .font(BoldTheme.Fonts.body(11, weight: .semibold))
+            .foregroundColor(BoldTheme.Colors.textFaint)
+        }
+      }
+      .padding(12)
+      .background(BoldTheme.Colors.gold.opacity(0.1))
+      .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(BoldTheme.Colors.goldDeep, lineWidth: 1))
+      .clipShape(RoundedRectangle(cornerRadius: 12))
+      .padding(.top, 10)
+    }
+  }
+
+  private var copyPicksSheet: some View {
+    NavigationStack {
+      List {
+        Section {
+          Text("Copy this week's picks into **\(activeGroupName ?? "this group")**. Games that already started are skipped. This overwrites what \(activeGroupName ?? "this group") currently shows for any game it copies.")
+            .font(BoldTheme.Fonts.body(12.5))
+            .foregroundColor(BoldTheme.Colors.textDim)
+        }
+        Section {
+          Button("My Shared Picks") {
+            Task {
+              if let result = await viewModel.copyPicks(from: nil) {
+                showCopyPicksSheet = false
+                _ = result
+              }
+            }
+          }
+          .disabled(viewModel.copyingPicks)
+          ForEach(pickemsGroups.filter { $0.group_id != viewModel.activeGroupId }) { g in
+            Button(g.name) {
+              Task {
+                if let result = await viewModel.copyPicks(from: g.group_id) {
+                  showCopyPicksSheet = false
+                  _ = result
+                }
+              }
+            }
+            .disabled(viewModel.copyingPicks)
+          }
+        }
+      }
+      .navigationTitle("Copy Picks")
+      .navigationBarTitleDisplayMode(.inline)
+      .toolbar {
+        ToolbarItem(placement: .cancellationAction) {
+          Button("Cancel") { showCopyPicksSheet = false }
+        }
+      }
+    }
   }
 
   private var manageProfilesSheet: some View {
