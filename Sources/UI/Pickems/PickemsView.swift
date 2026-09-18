@@ -217,6 +217,7 @@ struct PickemsView: View {
   @State private var myGroups: [MyGroup]?
   @State private var showActorPicker = false
   @State private var showManageProfiles = false
+  @State private var profileToRemove: ManagedProfile?
   @State private var newChildName = ""
   @State private var showGroupPicker = false
   @State private var showCopyPicksSheet = false
@@ -472,7 +473,7 @@ struct PickemsView: View {
               Text(profile.displayName).font(BoldTheme.Fonts.body(14, weight: .semibold))
               Spacer()
               Button("Remove") {
-                Task { await viewModel.removeManagedProfile(profile) }
+                profileToRemove = profile
               }
               .font(BoldTheme.Fonts.body(12, weight: .bold))
               .foregroundColor(Color(hex: 0xA6402A))
@@ -504,6 +505,19 @@ struct PickemsView: View {
         ToolbarItem(placement: .confirmationAction) {
           Button("Done") { showManageProfiles = false }
         }
+      }
+      .alert(
+        "Remove \(profileToRemove?.displayName ?? "this profile")?",
+        isPresented: Binding(get: { profileToRemove != nil }, set: { if !$0 { profileToRemove = nil } }),
+        presenting: profileToRemove
+      ) { profile in
+        Button("Remove", role: .destructive) {
+          Task { await viewModel.removeManagedProfile(profile) }
+          profileToRemove = nil
+        }
+        Button("Cancel", role: .cancel) { profileToRemove = nil }
+      } message: { _ in
+        Text("Their picks and history stay, but they'll disappear from pick screens and standings until re-added.")
       }
     }
   }
