@@ -27,6 +27,7 @@ final class GroupDetailViewModel: ObservableObject {
   @Published var invites: [GroupInvite] = []
   @Published var season = 2025
   @Published var week = 1
+  @Published var availableWeeks: [Int] = []
   @Published var toastMessage: String?
   // NFL season/week + this week's last game, only fetched for groups that
   // actually play Pickems -- feeds the embedded PickemsStandingsView's
@@ -88,7 +89,10 @@ final class GroupDetailViewModel: ObservableObject {
 
       if let group {
         await loadMembers()
-        if group.game_type != .pickems { await loadLeaderboard(scope: .week) }
+        if group.game_type != .pickems {
+          await loadAvailableWeeks()
+          await loadLeaderboard(scope: .week)
+        }
         if group.game_type != .underdog { await loadPickemsContext() }
       }
     } catch {
@@ -116,6 +120,19 @@ final class GroupDetailViewModel: ObservableObject {
       pickemsLastGame = games.max(by: { $0.startTime < $1.startTime })
     } catch {
       // Tiebreaker line just won't show -- non-fatal, standings still load.
+    }
+  }
+
+  // Same week-pill row as PickemsView -- lets a group's leaderboard week
+  // picker match it visually instead of the generic +/- Stepper.
+  func loadAvailableWeeks() async {
+    guard let client else { return }
+    do {
+      availableWeeks = try await PickemsService(client: client).fetchDistinctWeeks(
+        season: season, sport: effectiveLeaderboardSport == .nfl ? "nfl" : "cfb"
+      )
+    } catch {
+      availableWeeks = []
     }
   }
 
@@ -342,20 +359,36 @@ struct GroupDetailView: View {
       if viewModel.group?.sport == .both {
         PillToggle(options: [(label: "CFB", value: GroupSport.cfb), (label: "Pro Ball", value: .nfl)], selection: $viewModel.leaderboardSport)
           .onChange(of: viewModel.leaderboardSport) { _, _ in
-            Task { await viewModel.loadLeaderboard(scope: leaderboardScope) }
+            Task {
+              await viewModel.loadAvailableWeeks()
+              await viewModel.loadLeaderboard(scope: leaderboardScope)
+            }
           }
       }
-      HStack {
-        PillToggle(options: [(label: "This Week", value: LeaderboardScope.week), (label: "Season", value: .season)], selection: $leaderboardScope)
-          .onChange(of: leaderboardScope) { _, newValue in
-            Task { await viewModel.loadLeaderboard(scope: newValue) }
-          }
-        Spacer()
-        if leaderboardScope == .week {
-          Stepper("Wk \(viewModel.week)", value: $viewModel.week, in: 1...20)
-            .fixedSize()
-            .onChange(of: viewModel.week) { Task { await viewModel.loadLeaderboard(scope: leaderboardScope) } }
+      PillToggle(options: [(label: "This Week", value: LeaderboardScope.week), (label: "Season", value: .season)], selection: $leaderboardScope)
+        .onChange(of: leaderboardScope) { _, newValue in
+          Task { await viewModel.loadLeaderboard(scope: newValue) }
         }
+      if leaderboardScope == .week && viewModel.availableWeeks.count > 1 {
+        ScrollView(.horizontal, showsIndicators: false) {
+          HStack(spacing: 6) {
+            ForEach(viewModel.availableWeeks, id: \.self) { w in
+              let active = w == viewModel.week
+              Button {
+                viewModel.week = w
+              } label: {
+                Text("Week \(w)")
+                  .font(BoldTheme.Fonts.body(12.5, weight: .bold))
+                  .padding(.horizontal, 16).padding(.vertical, 7)
+                  .background(active ? BoldTheme.Colors.gold : BoldTheme.Colors.track)
+                  .foregroundColor(active ? BoldTheme.Colors.text : BoldTheme.Colors.textDim)
+                  .clipShape(Capsule())
+              }
+              .buttonStyle(.plain)
+            }
+          }
+        }
+        .onChange(of: viewModel.week) { Task { await viewModel.loadLeaderboard(scope: leaderboardScope) } }
       }
 
       if viewModel.leaderboard.isEmpty {
