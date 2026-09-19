@@ -35,6 +35,7 @@ final class GroupDetailViewModel: ObservableObject {
   @Published var pickemsSeason: Int?
   @Published var pickemsWeek: Int?
   @Published var pickemsLastGame: PickemsGameRow?
+  @Published var pickemsAvailableWeeks: [Int] = []
   // Only meaningful (and only shown) when group.sport == .both -- a
   // single-sport group's board always uses its own sport regardless of
   // this value, see effectiveLeaderboardSport.
@@ -116,10 +117,23 @@ final class GroupDetailViewModel: ObservableObject {
       let ctx = try await ContextService(client: client).getCurrentContext(sport: "nfl")
       pickemsSeason = ctx.season
       pickemsWeek = ctx.week
-      let games = try await PickemsService(client: client).fetchGames(season: ctx.season, week: ctx.week)
-      pickemsLastGame = games.max(by: { $0.startTime < $1.startTime })
+      pickemsAvailableWeeks = try await PickemsService(client: client).fetchDistinctWeeks(season: ctx.season, sport: "nfl")
+      await reloadPickemsLastGame()
     } catch {
       // Tiebreaker line just won't show -- non-fatal, standings still load.
+    }
+  }
+
+  // Re-fetches just the tiebreaker's "last game" for the currently
+  // selected pickemsWeek, without re-resolving season/week from context --
+  // called when the week-pill row changes pickemsWeek directly.
+  func reloadPickemsLastGame() async {
+    guard let client, let pickemsSeason, let pickemsWeek else { return }
+    do {
+      let games = try await PickemsService(client: client).fetchGames(season: pickemsSeason, week: pickemsWeek)
+      pickemsLastGame = games.max(by: { $0.startTime < $1.startTime })
+    } catch {
+      pickemsLastGame = nil
     }
   }
 
@@ -460,6 +474,28 @@ struct GroupDetailView: View {
       .background(BoldTheme.Colors.gold)
       .foregroundColor(BoldTheme.Colors.text)
       .cornerRadius(10)
+
+      if viewModel.pickemsAvailableWeeks.count > 1 {
+        ScrollView(.horizontal, showsIndicators: false) {
+          HStack(spacing: 6) {
+            ForEach(viewModel.pickemsAvailableWeeks, id: \.self) { w in
+              let active = w == viewModel.pickemsWeek
+              Button {
+                viewModel.pickemsWeek = w
+              } label: {
+                Text("Week \(w)")
+                  .font(BoldTheme.Fonts.body(12.5, weight: .bold))
+                  .padding(.horizontal, 16).padding(.vertical, 7)
+                  .background(active ? BoldTheme.Colors.gold : BoldTheme.Colors.track)
+                  .foregroundColor(active ? BoldTheme.Colors.text : BoldTheme.Colors.textDim)
+                  .clipShape(Capsule())
+              }
+              .buttonStyle(.plain)
+            }
+          }
+        }
+        .onChange(of: viewModel.pickemsWeek) { Task { await viewModel.reloadPickemsLastGame() } }
+      }
 
       PickemsStandingsView(
         season: viewModel.pickemsSeason,
