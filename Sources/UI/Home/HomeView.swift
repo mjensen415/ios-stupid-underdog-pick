@@ -30,6 +30,10 @@ final class HomeViewModel: ObservableObject {
   @Published var myPickNfl: Pick?
   @Published var nextOpenKickoffCfb: Date?
   @Published var nextOpenKickoffNfl: Date?
+  /// Set once each sport's open-kickoff lookup has finished, so the
+  /// contest row doesn't flash "Missed" while it's still loading.
+  @Published var cfbWindowLoaded = false
+  @Published var nflWindowLoaded = false
   @Published var cfbOffseason = false
   @Published var nflOffseason = false
   @Published var profile: ProfileRow?
@@ -94,6 +98,7 @@ final class HomeViewModel: ObservableObject {
       async let cfbOffseasonTask = checkOffseason(client: client, season: cfbCtx.season, sport: "cfb")
       myPickCfb = await cfbPickTask ?? nil
       nextOpenKickoffCfb = await cfbKickoffTask
+      cfbWindowLoaded = true
       cfbOffseason = await cfbOffseasonTask
     }
     if let nflCtx {
@@ -102,6 +107,7 @@ final class HomeViewModel: ObservableObject {
       async let nflOffseasonTask = checkOffseason(client: client, season: nflCtx.season, sport: "nfl")
       myPickNfl = await nflPickTask ?? nil
       nextOpenKickoffNfl = await nflKickoffTask
+      nflWindowLoaded = true
       nflOffseason = await nflOffseasonTask
     }
   }
@@ -220,15 +226,16 @@ struct HomeView: View {
   // (unlike contestsSection, which only shows ones you're already active
   // in), since this is the explicit "take me somewhere else" tool.
   private var switchGameOptions: [SwitchGameOption] {
-    func countdownStatus(myPick: Pick?, kickoff: Date?, offseason: Bool) -> (String?, Color) {
+    func countdownStatus(myPick: Pick?, kickoff: Date?, offseason: Bool, loaded: Bool) -> (String?, Color) {
       if offseason { return ("Offseason", BoldTheme.Colors.textDim) }
       if myPick != nil { return ("Picked", BoldTheme.Colors.green) }
+      guard loaded else { return (nil, BoldTheme.Colors.textDim) }
       guard kickoff != nil else { return ("Missed", BoldTheme.Colors.textDim) }
       return ("Pick now", BoldTheme.Colors.goldDeep)
     }
 
-    let (cfbStatus, cfbColor) = countdownStatus(myPick: viewModel.myPickCfb, kickoff: viewModel.nextOpenKickoffCfb, offseason: viewModel.cfbOffseason)
-    let (nflStatus, nflColor) = countdownStatus(myPick: viewModel.myPickNfl, kickoff: viewModel.nextOpenKickoffNfl, offseason: viewModel.nflOffseason)
+    let (cfbStatus, cfbColor) = countdownStatus(myPick: viewModel.myPickCfb, kickoff: viewModel.nextOpenKickoffCfb, offseason: viewModel.cfbOffseason, loaded: viewModel.cfbWindowLoaded)
+    let (nflStatus, nflColor) = countdownStatus(myPick: viewModel.myPickNfl, kickoff: viewModel.nextOpenKickoffNfl, offseason: viewModel.nflOffseason, loaded: viewModel.nflWindowLoaded)
 
     return [
       SwitchGameOption(
@@ -506,7 +513,7 @@ struct HomeView: View {
               sublabel: viewModel.cfbOffseason ? "Offseason" : "Week \(formatWeekLabel(viewModel.cfbContext?.week ?? 0)) · \(viewModel.cfbContext?.season ?? 0)",
               isOffseason: viewModel.cfbOffseason,
               picked: viewModel.myPickCfb != nil,
-              countdown: countdownText(myPick: viewModel.myPickCfb, kickoff: viewModel.nextOpenKickoffCfb)
+              countdown: countdownText(myPick: viewModel.myPickCfb, kickoff: viewModel.nextOpenKickoffCfb, loaded: viewModel.cfbWindowLoaded)
             ) {
               appState.goToUnderdog(sport: "cfb")
             }
@@ -517,7 +524,7 @@ struct HomeView: View {
               sublabel: viewModel.nflOffseason ? "Offseason" : "Week \(formatWeekLabel(viewModel.nflContext?.week ?? 0)) · \(viewModel.nflContext?.season ?? 0)",
               isOffseason: viewModel.nflOffseason,
               picked: viewModel.myPickNfl != nil,
-              countdown: countdownText(myPick: viewModel.myPickNfl, kickoff: viewModel.nextOpenKickoffNfl)
+              countdown: countdownText(myPick: viewModel.myPickNfl, kickoff: viewModel.nextOpenKickoffNfl, loaded: viewModel.nflWindowLoaded)
             ) {
               appState.goToUnderdog(sport: "nfl")
             }
@@ -562,8 +569,9 @@ struct HomeView: View {
 
   /// nil when picked (the row shows "Picked ✓"); "Pick now" while any
   /// pickable game is still to come; "Missed" only once all have kicked off.
-  private func countdownText(myPick: Pick?, kickoff: Date?) -> String? {
-    guard myPick == nil else { return nil }
+  private func countdownText(myPick: Pick?, kickoff: Date?, loaded: Bool) -> String? {
+    // nil = neutral "Make Pick" (also shown while still loading).
+    guard myPick == nil, loaded else { return nil }
     return kickoff == nil ? "Missed" : "Pick now"
   }
 
