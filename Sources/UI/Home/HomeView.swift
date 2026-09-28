@@ -14,7 +14,7 @@ final class HomeViewModel: ObservableObject {
   @Published var week: Int?
   @Published var isOffseason = false
   @Published var myPick: Pick?
-  @Published var firstKickoff: Date?
+  @Published var nextOpenKickoff: Date?
   @Published var myRank: MyRank?
   @Published var myGroups: [MyGroup] = []
   @Published var discoverGroups: [DiscoverGroup] = []
@@ -28,8 +28,8 @@ final class HomeViewModel: ObservableObject {
   @Published var nflContext: CurrentContext?
   @Published var myPickCfb: Pick?
   @Published var myPickNfl: Pick?
-  @Published var firstKickoffCfb: Date?
-  @Published var firstKickoffNfl: Date?
+  @Published var nextOpenKickoffCfb: Date?
+  @Published var nextOpenKickoffNfl: Date?
   @Published var cfbOffseason = false
   @Published var nflOffseason = false
   @Published var profile: ProfileRow?
@@ -67,7 +67,7 @@ final class HomeViewModel: ObservableObject {
     guard let season, let week, !isOffseason else { return }
 
     async let pickTask = try? PicksService(client: client).myPick(season: season, week: week, sport: sport)
-    async let kickoffTask = fetchFirstKickoff(client: client, season: season, week: week, sport: sport)
+    async let kickoffTask = fetchNextOpenKickoff(client: client, season: season, week: week, sport: sport)
     async let rankTask = try? LeaderboardService(client: client).fetchMyRank(userId: userId, season: season, sport: sport)
     async let groupsTask = try? GroupsService(client: client).fetchMyGroups()
     async let discoverTask = try? GroupsService(client: client).fetchDiscoverGroups(limit: 6)
@@ -75,7 +75,7 @@ final class HomeViewModel: ObservableObject {
     async let streakTask = try? LeaderboardService(client: client).fetchStreak(userId: userId, season: season, sport: sport)
 
     myPick = await pickTask ?? nil
-    firstKickoff = await kickoffTask
+    nextOpenKickoff = await kickoffTask
     myRank = await rankTask ?? nil
     myGroups = await groupsTask ?? []
     discoverGroups = await discoverTask ?? []
@@ -90,18 +90,18 @@ final class HomeViewModel: ObservableObject {
     nflContext = nflCtx
     if let cfbCtx {
       async let cfbPickTask = try? PicksService(client: client).myPick(season: cfbCtx.season, week: cfbCtx.week, sport: "cfb")
-      async let cfbKickoffTask = fetchFirstKickoff(client: client, season: cfbCtx.season, week: cfbCtx.week, sport: "cfb")
+      async let cfbKickoffTask = fetchNextOpenKickoff(client: client, season: cfbCtx.season, week: cfbCtx.week, sport: "cfb")
       async let cfbOffseasonTask = checkOffseason(client: client, season: cfbCtx.season, sport: "cfb")
       myPickCfb = await cfbPickTask ?? nil
-      firstKickoffCfb = await cfbKickoffTask
+      nextOpenKickoffCfb = await cfbKickoffTask
       cfbOffseason = await cfbOffseasonTask
     }
     if let nflCtx {
       async let nflPickTask = try? PicksService(client: client).myPick(season: nflCtx.season, week: nflCtx.week, sport: "nfl")
-      async let nflKickoffTask = fetchFirstKickoff(client: client, season: nflCtx.season, week: nflCtx.week, sport: "nfl")
+      async let nflKickoffTask = fetchNextOpenKickoff(client: client, season: nflCtx.season, week: nflCtx.week, sport: "nfl")
       async let nflOffseasonTask = checkOffseason(client: client, season: nflCtx.season, sport: "nfl")
       myPickNfl = await nflPickTask ?? nil
-      firstKickoffNfl = await nflKickoffTask
+      nextOpenKickoffNfl = await nflKickoffTask
       nflOffseason = await nflOffseasonTask
     }
   }
@@ -120,7 +120,11 @@ final class HomeViewModel: ObservableObject {
     return games.isEmpty
   }
 
-  private func fetchFirstKickoff(client: SupabaseClient, season: Int, week: Int, sport: String) async -> Date? {
+  /// Earliest kickoff among games you can still pick (has a line, hasn't
+  /// started). nil once every pickable game has kicked off. Previously this
+  /// was the week's FIRST kickoff, so the contest row read "Locked" as soon
+  /// as Thursday's game started even though the weekend slate was open.
+  private func fetchNextOpenKickoff(client: SupabaseClient, season: Int, week: Int, sport: String) async -> Date? {
     struct Row: Decodable { let start_time: Date }
     guard let res = try? await client
       .from("v_games_named")
@@ -128,6 +132,8 @@ final class HomeViewModel: ObservableObject {
       .eq("season", value: season)
       .eq("week", value: week)
       .eq("sport", value: sport)
+      .gt("start_time", value: ISO8601DateFormatter().string(from: Date()))
+      .not("latest_spread", operator: .is, value: "null")
       .order("start_time", ascending: true)
       .limit(1)
       .execute()
@@ -217,14 +223,12 @@ struct HomeView: View {
     func countdownStatus(myPick: Pick?, kickoff: Date?, offseason: Bool) -> (String?, Color) {
       if offseason { return ("Offseason", BoldTheme.Colors.textDim) }
       if myPick != nil { return ("Picked", BoldTheme.Colors.green) }
-      guard let kickoff else { return (nil, BoldTheme.Colors.textDim) }
-      let diff = kickoff.timeIntervalSinceNow
-      if diff <= 0 { return ("Locked", Color(hex: 0xA6402A)) }
-      return ("Make a pick", BoldTheme.Colors.goldDeep)
+      guard kickoff != nil else { return ("Missed", BoldTheme.Colors.textDim) }
+      return ("Pick now", BoldTheme.Colors.goldDeep)
     }
 
-    let (cfbStatus, cfbColor) = countdownStatus(myPick: viewModel.myPickCfb, kickoff: viewModel.firstKickoffCfb, offseason: viewModel.cfbOffseason)
-    let (nflStatus, nflColor) = countdownStatus(myPick: viewModel.myPickNfl, kickoff: viewModel.firstKickoffNfl, offseason: viewModel.nflOffseason)
+    let (cfbStatus, cfbColor) = countdownStatus(myPick: viewModel.myPickCfb, kickoff: viewModel.nextOpenKickoffCfb, offseason: viewModel.cfbOffseason)
+    let (nflStatus, nflColor) = countdownStatus(myPick: viewModel.myPickNfl, kickoff: viewModel.nextOpenKickoffNfl, offseason: viewModel.nflOffseason)
 
     return [
       SwitchGameOption(
@@ -502,7 +506,7 @@ struct HomeView: View {
               sublabel: viewModel.cfbOffseason ? "Offseason" : "Week \(formatWeekLabel(viewModel.cfbContext?.week ?? 0)) · \(viewModel.cfbContext?.season ?? 0)",
               isOffseason: viewModel.cfbOffseason,
               picked: viewModel.myPickCfb != nil,
-              countdown: countdownText(myPick: viewModel.myPickCfb, kickoff: viewModel.firstKickoffCfb)
+              countdown: countdownText(myPick: viewModel.myPickCfb, kickoff: viewModel.nextOpenKickoffCfb)
             ) {
               appState.goToUnderdog(sport: "cfb")
             }
@@ -513,7 +517,7 @@ struct HomeView: View {
               sublabel: viewModel.nflOffseason ? "Offseason" : "Week \(formatWeekLabel(viewModel.nflContext?.week ?? 0)) · \(viewModel.nflContext?.season ?? 0)",
               isOffseason: viewModel.nflOffseason,
               picked: viewModel.myPickNfl != nil,
-              countdown: countdownText(myPick: viewModel.myPickNfl, kickoff: viewModel.firstKickoffNfl)
+              countdown: countdownText(myPick: viewModel.myPickNfl, kickoff: viewModel.nextOpenKickoffNfl)
             ) {
               appState.goToUnderdog(sport: "nfl")
             }
@@ -556,14 +560,11 @@ struct HomeView: View {
     .padding(.bottom, 22)
   }
 
+  /// nil when picked (the row shows "Picked ✓"); "Pick now" while any
+  /// pickable game is still to come; "Missed" only once all have kicked off.
   private func countdownText(myPick: Pick?, kickoff: Date?) -> String? {
-    guard myPick == nil, let kickoff else { return nil }
-    let diff = kickoff.timeIntervalSinceNow
-    guard diff > 0 else { return "Locked" }
-    let hours = Int(diff / 3600)
-    let minutes = Int(diff.truncatingRemainder(dividingBy: 3600) / 60)
-    if hours >= 24 { return "\(hours / 24)d \(hours % 24)h" }
-    return "\(hours)h \(minutes)m"
+    guard myPick == nil else { return nil }
+    return kickoff == nil ? "Missed" : "Pick now"
   }
 
   private func dismissPickemsIntro() async {
@@ -751,13 +752,20 @@ private struct ContestRow: View {
         .background(BoldTheme.Colors.green.opacity(0.13))
         .overlay(Capsule().strokeBorder(BoldTheme.Colors.green.opacity(0.28)))
         .clipShape(Capsule())
-    } else if let countdown {
-      Text(verbatim: countdown == "Locked" ? "Locked" : "Locks in \(countdown)")
+    } else if countdown == "Missed" {
+      Text("Missed")
         .font(BoldTheme.Fonts.body(11.5, weight: .bold))
-        .foregroundColor(Color(hex: 0xA6402A))
+        .foregroundColor(BoldTheme.Colors.textDim)
         .padding(.horizontal, 10).padding(.vertical, 4)
-        .background(Color(hex: 0xC6402A).opacity(0.13))
-        .overlay(Capsule().strokeBorder(Color(hex: 0xC6402A).opacity(0.28)))
+        .background(BoldTheme.Colors.track)
+        .clipShape(Capsule())
+        .fixedSize()
+    } else if countdown == "Pick now" {
+      Text("Pick now →")
+        .font(BoldTheme.Fonts.body(11.5, weight: .bold))
+        .foregroundColor(BoldTheme.Colors.text)
+        .padding(.horizontal, 10).padding(.vertical, 4)
+        .background(BoldTheme.Colors.gold)
         .clipShape(Capsule())
         .fixedSize()
     } else {
