@@ -129,22 +129,24 @@ final class HomeViewModel: ObservableObject {
     }
   }
 
-  /// The picked game + team logo, for the "This week" row.
+  /// The picked game + team logo, for the "This week" row. The logo comes
+  /// from the same v_games_named row (home/away_logo_url) -- a separate
+  /// teams lookup was intermittently coming back empty.
   private func fetchPickDetail(client: SupabaseClient, pick: Pick?) async -> HomePickDetail? {
     guard let pick else { return nil }
     let dec = JSONDecoder()
     dec.dateDecodingStrategy = .iso8601withFallback
     guard let res = try? await client
       .from("v_games_named")
-      .select("id, season, week, status, home_name, away_name, home_team_id, away_team_id, favorite_team_id, start_time, betting_line, latest_spread, picks_locked, home_points, away_points, sport")
+      .select("id, season, week, status, home_name, away_name, home_team_id, away_team_id, favorite_team_id, start_time, betting_line, latest_spread, picks_locked, home_points, away_points, sport, home_logo_url, away_logo_url")
       .eq("id", value: pick.game_id)
       .limit(1)
       .execute(),
       let game = try? dec.decode([Game].self, from: res.data).first
     else { return nil }
-    struct LogoRow: Decodable { let logo_url: String? }
-    let logoRes = try? await client.from("teams").select("logo_url").eq("id", value: pick.picked_team_id).limit(1).execute()
-    let logo = logoRes.flatMap { try? JSONDecoder().decode([LogoRow].self, from: $0.data).first?.logo_url }
+    struct Logos: Decodable { let home_logo_url: String?; let away_logo_url: String? }
+    let logos = try? JSONDecoder().decode([Logos].self, from: res.data).first
+    let logo = pick.picked_team_id == game.homeTeamId ? logos?.home_logo_url : logos?.away_logo_url
     return HomePickDetail(pick: pick, game: game, logoURL: logo.flatMap(URL.init(string:)))
   }
 
@@ -440,7 +442,7 @@ struct HomeView: View {
         .shadow(color: Color(hex: 0x142A1C).opacity(0.3), radius: 6, y: 4)
 
       VStack(alignment: .leading, spacing: 2) {
-        Text(verbatim: !viewModel.hasLoaded || viewModel.week == nil ? " " : (viewModel.isOffseason ? "OFFSEASON" : "WEEK \(formatWeekLabel(viewModel.week ?? 0)) · \(sport.rawValue.uppercased()) \(viewModel.season ?? 0)"))
+        Text(verbatim: !viewModel.hasLoaded || viewModel.week == nil ? " " : (viewModel.isOffseason ? "OFFSEASON" : "WEEK \(formatWeekLabel(viewModel.week ?? 0)) · \(sport == .cfb ? "CFB" : "PRO BALL") \(viewModel.season ?? 0)"))
           .font(BoldTheme.Fonts.mono(10, weight: .semibold))
           .foregroundColor(BoldTheme.Colors.green)
         HStack(spacing: 8) {
@@ -860,9 +862,9 @@ private struct GameCardView: View {
   private var body_: String {
     game == .underdog
       ? "One pick every week. Take the underdog — if they win outright, you bank the spread."
-      : "Straight-up picks on every NFL game, every week. Play in a group, chase the leaderboard."
+      : "Straight-up picks on every Pro Ball game, every week. Play in a group, chase the leaderboard."
   }
-  private var badges: [String] { game == .underdog ? ["CFB · Free", "Pro Ball · Free"] : ["NFL · Free"] }
+  private var badges: [String] { game == .underdog ? ["CFB · Free", "Pro Ball · Free"] : ["Pro Ball · Free"] }
   private var cta: String { game == .underdog ? "Play Underdog Pick" : "Play Pickems" }
 
   var body: some View {
@@ -926,7 +928,7 @@ private struct PickemsIntroBanner: View {
           .disabled(dismissing)
         }
         Text("PRO BALL PICKEMS IS HERE").font(BoldTheme.Fonts.display(20)).foregroundColor(BoldTheme.Colors.text)
-        Text("Pick every NFL game's winner each week — no spreads, just wins. Play in a group, chase the leaderboard.")
+        Text("Pick every Pro Ball game's winner each week — no spreads, just wins. Play in a group, chase the leaderboard.")
           .font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
         Button(action: onCheckItOut) {
           ZStack {

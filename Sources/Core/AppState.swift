@@ -6,6 +6,10 @@ import Supabase
 final class AppState: ObservableObject {
   @Published var client: SupabaseClient?
   @Published var session: Session?
+  /// False until launch's saved-session restore has finished. RootView
+  /// waits on it so returning users don't see the sign-in screen flash
+  /// before their session loads.
+  @Published var authChecked = false
   @Published var startupError: Error?
   /// Set by DeepLinkHandler when a /groups/join/:token link (universal or
   /// custom-scheme) is opened. Consumed by RootView's full-screen cover,

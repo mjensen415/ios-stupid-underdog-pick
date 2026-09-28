@@ -47,7 +47,7 @@ struct CreateGroupView: View {
             gameType == .underdog
               ? "This group plays the classic one-pick-a-week underdog game."
               : gameType == .pickems
-              ? "This group plays Pro Ball Pickems -- pick every NFL game's winner."
+              ? "This group plays Pro Ball Pickems -- pick every Pro Ball game's winner."
               : "This group plays both games -- separate leaderboards for each."
           )
           .font(BoldTheme.Fonts.body(12))

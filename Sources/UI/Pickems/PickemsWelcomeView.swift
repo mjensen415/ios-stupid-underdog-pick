@@ -23,7 +23,7 @@ struct PickemsWelcomeView: View {
       ScrollView {
         VStack(spacing: 20) {
           VStack(spacing: 4) {
-            Text("NFL · NEW")
+            Text("PRO BALL · NEW")
               .font(BoldTheme.Fonts.mono(10, weight: .semibold))
               .tracking(1.2)
               .foregroundColor(BoldTheme.Colors.green)
@@ -31,7 +31,7 @@ struct PickemsWelcomeView: View {
               .font(BoldTheme.Fonts.display(38))
               .foregroundColor(BoldTheme.Colors.text)
               .multilineTextAlignment(.center)
-            Text("Pick the winner of every NFL game, every week. 1 point per correct pick — no spreads, no favorites, just wins.")
+            Text("Pick the winner of every Pro Ball game, every week. 1 point per correct pick — no spreads, no favorites, just wins.")
               .font(BoldTheme.Fonts.body(15))
               .foregroundColor(BoldTheme.Colors.textDim)
               .multilineTextAlignment(.center)

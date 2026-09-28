@@ -555,7 +555,7 @@ struct PickemsView: View {
 
   private var header: some View {
     VStack(alignment: .leading, spacing: 4) {
-      Text("NFL · \(viewModel.season.map { String($0) } ?? "")")
+      Text("PRO BALL · \(viewModel.season.map { String($0) } ?? "")")
         .font(BoldTheme.Fonts.mono(10, weight: .semibold))
         .tracking(1.2)
         .foregroundColor(BoldTheme.Colors.green)

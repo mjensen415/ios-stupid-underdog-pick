@@ -28,7 +28,14 @@ struct RootView: View {
 
   var body: some View {
     Group {
-      if appState.session == nil {
+      if !appState.authChecked {
+        // Same look as the app's "Starting…" screen -- holds until the saved
+        // session restore finishes instead of flashing AuthView.
+        ZStack {
+          BoldTheme.Colors.bgPage.ignoresSafeArea()
+          ProgressView().tint(BoldTheme.Colors.gold)
+        }
+      } else if appState.session == nil {
         AuthView()
       } else {
         MainTabView()

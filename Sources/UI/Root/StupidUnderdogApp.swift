@@ -69,6 +69,7 @@ struct StupidUnderdogApp: App {
             print("[Auth] no existing session:", error.localizedDescription)
             #endif
           }
+          appState.authChecked = true
         } catch {
           appState.startupError = error
         }
