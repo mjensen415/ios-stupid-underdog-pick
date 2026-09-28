@@ -10,6 +10,9 @@ private enum Sport: String { case cfb, nfl }
 @MainActor
 final class HomeViewModel: ObservableObject {
   @Published var isLoading = false
+  /// False until the first load finishes -- Home shows a spinner instead of
+  /// flashing the new-user "Get started" state and "WEEK 0".
+  @Published var hasLoaded = false
   @Published var season: Int?
   @Published var week: Int?
   @Published var isOffseason = false
@@ -38,6 +41,17 @@ final class HomeViewModel: ObservableObject {
   @Published var nflOffseason = false
   @Published var profile: ProfileRow?
 
+  // "This week" row detail: the picked team for each Underdog sport, and
+  // Pickems progress for the current NFL week.
+  @Published var pickDetailCfb: HomePickDetail?
+  @Published var pickDetailNfl: HomePickDetail?
+  @Published var pickemsPicked = 0
+  @Published var pickemsTotal = 0
+  @Published var pickemsOpen = 0
+  /// Open (not yet locked) games with no pick -- 0 means nothing left to do.
+  @Published var pickemsOpenUnpicked = 0
+  @Published var pickemsLoaded = false
+
   private var client: SupabaseClient?
 
   func configure(client: SupabaseClient) {
@@ -47,7 +61,7 @@ final class HomeViewModel: ObservableObject {
   func load(userId: UUID, sport: String) async {
     guard let client else { return }
     isLoading = true
-    defer { isLoading = false }
+    defer { isLoading = false; hasLoaded = true }
 
     do {
       let ctx = try await ContextService(client: client).getCurrentContext(sport: sport)
@@ -100,6 +114,7 @@ final class HomeViewModel: ObservableObject {
       nextOpenKickoffCfb = await cfbKickoffTask
       cfbWindowLoaded = true
       cfbOffseason = await cfbOffseasonTask
+      pickDetailCfb = await fetchPickDetail(client: client, pick: myPickCfb)
     }
     if let nflCtx {
       async let nflPickTask = try? PicksService(client: client).myPick(season: nflCtx.season, week: nflCtx.week, sport: "nfl")
@@ -109,7 +124,39 @@ final class HomeViewModel: ObservableObject {
       nextOpenKickoffNfl = await nflKickoffTask
       nflWindowLoaded = true
       nflOffseason = await nflOffseasonTask
+      pickDetailNfl = await fetchPickDetail(client: client, pick: myPickNfl)
+      await loadPickemsProgress(client: client, userId: userId, season: nflCtx.season, week: nflCtx.week)
     }
+  }
+
+  /// The picked game + team logo, for the "This week" row.
+  private func fetchPickDetail(client: SupabaseClient, pick: Pick?) async -> HomePickDetail? {
+    guard let pick else { return nil }
+    let dec = JSONDecoder()
+    dec.dateDecodingStrategy = .iso8601withFallback
+    guard let res = try? await client
+      .from("v_games_named")
+      .select("id, season, week, status, home_name, away_name, home_team_id, away_team_id, favorite_team_id, start_time, betting_line, latest_spread, picks_locked, home_points, away_points, sport")
+      .eq("id", value: pick.game_id)
+      .limit(1)
+      .execute(),
+      let game = try? dec.decode([Game].self, from: res.data).first
+    else { return nil }
+    struct LogoRow: Decodable { let logo_url: String? }
+    let logoRes = try? await client.from("teams").select("logo_url").eq("id", value: pick.picked_team_id).limit(1).execute()
+    let logo = logoRes.flatMap { try? JSONDecoder().decode([LogoRow].self, from: $0.data).first?.logo_url }
+    return HomePickDetail(pick: pick, game: game, logoURL: logo.flatMap(URL.init(string:)))
+  }
+
+  private func loadPickemsProgress(client: SupabaseClient, userId: UUID, season: Int, week: Int) async {
+    let service = PickemsService(client: client)
+    let games = (try? await service.fetchGames(season: season, week: week, sport: "nfl")) ?? []
+    let picks = (try? await service.fetchMyPicks(userId: userId, gameIds: games.map(\.id))) ?? [:]
+    pickemsTotal = games.count
+    pickemsOpen = games.filter { !$0.isLocked }.count
+    pickemsOpenUnpicked = games.filter { !$0.isLocked && picks[$0.id] == nil }.count
+    pickemsPicked = picks.count
+    pickemsLoaded = true
   }
 
   private func checkOffseason(client: SupabaseClient, season: Int, sport: String) async -> Bool {
@@ -162,6 +209,30 @@ final class HomeViewModel: ObservableObject {
       .execute()
     guard let res else { return [] }
     return (try? JSONDecoder().decode([RecapHit].self, from: res.data)) ?? []
+  }
+}
+
+struct HomePickDetail {
+  let pick: Pick
+  let game: Game
+  let logoURL: URL?
+
+  var pickedIsHome: Bool { pick.picked_team_id == game.homeTeamId }
+  var teamName: String { (pickedIsHome ? game.homeTeam : game.awayTeam) ?? "Your pick" }
+  var opponent: String { (pickedIsHome ? game.awayTeam : game.homeTeam) ?? "Opponent" }
+  var spread: Double? { pick.picked_team_id == game.derivedUnderdogTeamId ? game.underdogSpread : nil }
+  var outcome: Game.PickOutcome { game.outcome(forPickedTeamId: pick.picked_team_id) }
+  var isLive: Bool { game.status == "in_progress" }
+
+  /// "vs Army · Fri 1:00 PM", or the score once it's live/final.
+  var subline: String {
+    if let h = game.homePoints, let a = game.awayPoints, isLive || game.status == "final" {
+      let (mine, theirs) = pickedIsHome ? (h, a) : (a, h)
+      return "vs \(opponent) · \(isLive ? "Live " : "")\(mine)–\(theirs)"
+    }
+    let f = DateFormatter()
+    f.dateFormat = "EEE h:mm a"
+    return "vs \(opponent) · \(f.string(from: game.startTime))"
   }
 }
 
@@ -236,20 +307,31 @@ struct HomeView: View {
         ScrollView {
           VStack(alignment: .leading, spacing: 0) {
             topRow
-            contestsSection
-            groupsSection
-            discoverSection
-            recapSection
-            quickActionsRow
+            if viewModel.hasLoaded {
+              contestsSection
+              groupsSection
+              discoverSection
+              recapSection
+              quickActionsRow
+            } else {
+              ProgressView()
+                .tint(BoldTheme.Colors.goldDeep)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 80)
+            }
           }
           .padding(18)
         }
       }
       .navigationBarHidden(true)
-      .task {
-        if let client, let userId = appState.session?.user.id {
-          viewModel.configure(client: client)
-          await viewModel.load(userId: userId, sport: sport.rawValue)
+      // onAppear (not .task) so returning from Games/Pickems after making a
+      // pick refreshes the This Week rows.
+      .onAppear {
+        Task {
+          if let client, let userId = appState.session?.user.id {
+            viewModel.configure(client: client)
+            await viewModel.load(userId: userId, sport: sport.rawValue)
+          }
         }
       }
       .onChange(of: sport) { _, newSport in
@@ -358,7 +440,7 @@ struct HomeView: View {
         .shadow(color: Color(hex: 0x142A1C).opacity(0.3), radius: 6, y: 4)
 
       VStack(alignment: .leading, spacing: 2) {
-        Text(verbatim: viewModel.isOffseason ? "OFFSEASON" : "WEEK \(formatWeekLabel(viewModel.week ?? 0)) · \(sport.rawValue.uppercased()) \(viewModel.season ?? 0)")
+        Text(verbatim: !viewModel.hasLoaded || viewModel.week == nil ? " " : (viewModel.isOffseason ? "OFFSEASON" : "WEEK \(formatWeekLabel(viewModel.week ?? 0)) · \(sport.rawValue.uppercased()) \(viewModel.season ?? 0)"))
           .font(BoldTheme.Fonts.mono(10, weight: .semibold))
           .foregroundColor(BoldTheme.Colors.green)
         HStack(spacing: 8) {
@@ -425,33 +507,33 @@ struct HomeView: View {
         VStack(spacing: 10) {
           if underdogCfbActive {
             ContestRow(
-              title: "Underdog Pick — CFB",
-              sublabel: viewModel.cfbOffseason ? "Offseason" : weekSublabel(viewModel.cfbContext),
-              isOffseason: viewModel.cfbOffseason,
-              picked: viewModel.myPickCfb != nil,
-              countdown: countdownText(myPick: viewModel.myPickCfb, kickoff: viewModel.nextOpenKickoffCfb, loaded: viewModel.cfbWindowLoaded)
+              kind: .underdog,
+              sport: "CFB",
+              week: weekShort(viewModel.cfbContext),
+              status: underdogStatus(pick: viewModel.myPickCfb, detail: viewModel.pickDetailCfb, kickoff: viewModel.nextOpenKickoffCfb, loaded: viewModel.cfbWindowLoaded, offseason: viewModel.cfbOffseason),
+              detail: viewModel.pickDetailCfb
             ) {
               appState.goToUnderdog(sport: "cfb")
             }
           }
           if underdogProBallActive {
             ContestRow(
-              title: "Underdog Pick — Pro Ball",
-              sublabel: viewModel.nflOffseason ? "Offseason" : weekSublabel(viewModel.nflContext),
-              isOffseason: viewModel.nflOffseason,
-              picked: viewModel.myPickNfl != nil,
-              countdown: countdownText(myPick: viewModel.myPickNfl, kickoff: viewModel.nextOpenKickoffNfl, loaded: viewModel.nflWindowLoaded)
+              kind: .underdog,
+              sport: "Pro Ball",
+              week: weekShort(viewModel.nflContext),
+              status: underdogStatus(pick: viewModel.myPickNfl, detail: viewModel.pickDetailNfl, kickoff: viewModel.nextOpenKickoffNfl, loaded: viewModel.nflWindowLoaded, offseason: viewModel.nflOffseason),
+              detail: viewModel.pickDetailNfl
             ) {
               appState.goToUnderdog(sport: "nfl")
             }
           }
           if pickemsActive {
             ContestRow(
-              title: "Pro Ball Pickems",
-              sublabel: viewModel.nflOffseason ? "Offseason" : weekSublabel(viewModel.nflContext),
-              isOffseason: viewModel.nflOffseason,
-              picked: false,
-              countdown: nil
+              kind: .pickems,
+              sport: "Pro Ball",
+              week: weekShort(viewModel.nflContext),
+              status: pickemsStatus,
+              progress: viewModel.pickemsPicked > 0 && viewModel.pickemsTotal > 0 ? (viewModel.pickemsPicked, viewModel.pickemsTotal) : nil
             ) {
               appState.goToPickems()
             }
@@ -483,18 +565,42 @@ struct HomeView: View {
     .padding(.bottom, 22)
   }
 
-  /// nil when picked (the row shows "Picked ✓"); "Pick now" while any
-  /// pickable game is still to come; "Missed" only once all have kicked off.
-  /// "Week 3 · 2026", or blank until the context loads (was "Week 0 · 0").
-  private func weekSublabel(_ ctx: CurrentContext?) -> String {
-    guard let ctx else { return " " }
-    return "Week \(formatWeekLabel(ctx.week)) · \(ctx.season)"
+  /// "WEEK 3", or blank until the context loads.
+  private func weekShort(_ ctx: CurrentContext?) -> String {
+    ctx.map { "WEEK \(formatWeekLabel($0.week))" } ?? ""
   }
 
-  private func countdownText(myPick: Pick?, kickoff: Date?, loaded: Bool) -> String? {
-    // nil = neutral "Make Pick" (also shown while still loading).
-    guard myPick == nil, loaded else { return nil }
-    return kickoff == nil ? "Missed" : "Pick now"
+  /// Picked (or its result once played); otherwise "Pick now" while any
+  /// pickable game is still to come, "Missed" only once all have kicked
+  /// off, and a neutral CTA while still loading.
+  private func underdogStatus(pick: Pick?, detail: HomePickDetail?, kickoff: Date?, loaded: Bool, offseason: Bool) -> ContestRow.Status {
+    if offseason { return .offseason }
+    if pick != nil {
+      guard let detail else { return .picked }
+      if detail.isLive { return .live }
+      switch detail.outcome {
+      case .win: return .won(detail.spread.map { "+\(formatSpread($0))" } ?? "")
+      case .loss: return .lost
+      case .pending: return .picked
+      }
+    }
+    guard loaded else { return .neutral("Make pick →") }
+    return kickoff == nil ? .missed : .cta("Pick now →")
+  }
+
+  private var pickemsStatus: ContestRow.Status {
+    if viewModel.nflOffseason { return .offseason }
+    guard viewModel.pickemsLoaded else { return .neutral("Make picks →") }
+    let picked = viewModel.pickemsPicked, total = viewModel.pickemsTotal
+    if total > 0 && picked >= total { return .picked }
+    if viewModel.pickemsOpenUnpicked > 0 { return .cta("Make picks →") }
+    // Every still-open game is picked -- nothing left to do this week.
+    if viewModel.pickemsOpen > 0 && picked > 0 { return .picked }
+    return picked == 0 ? .missed : .partial(picked, total)
+  }
+
+  private func formatSpread(_ v: Double) -> String {
+    v == v.rounded() ? String(format: "%.0f", v) : String(format: "%.1f", v)
   }
 
   private func dismissPickemsIntro() async {
@@ -622,23 +728,92 @@ struct HomeView: View {
 
 // ── Your Contests row ────────────────────────────────────────────────────
 private struct ContestRow: View {
-  let title: String
-  let sublabel: String
-  let isOffseason: Bool
-  let picked: Bool
-  let countdown: String?
+  enum Kind { case underdog, pickems }
+  enum Status: Equatable {
+    case offseason, picked, live, lost, missed
+    case won(String)
+    case partial(Int, Int)
+    /// Gold call-to-action chip ("Pick now →", "Make picks →").
+    case cta(String)
+    /// Plain text CTA while status is still loading.
+    case neutral(String)
+  }
+
+  let kind: Kind
+  /// Primary label -- the sport ("CFB" / "Pro Ball").
+  let sport: String
+  /// "WEEK 3" (blank while loading).
+  let week: String
+  let status: Status
+  var detail: HomePickDetail? = nil
+  var progress: (picked: Int, total: Int)? = nil
   let action: () -> Void
+
+  private var gameLabel: String { kind == .pickems ? "PICKEMS" : "UNDERDOG PICK" }
+  private var gameColor: Color { kind == .pickems ? BoldTheme.Colors.pickemsAccent : BoldTheme.Colors.goldDeep }
 
   var body: some View {
     Button(action: action) {
       BoldTheme.GlassCard(strong: true, radius: 16, padding: 14) {
-        HStack(spacing: 12) {
-          VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(BoldTheme.Fonts.body(14.5, weight: .heavy)).foregroundColor(BoldTheme.Colors.text)
-            Text(sublabel).font(BoldTheme.Fonts.mono(10.5)).foregroundColor(BoldTheme.Colors.textDim)
+        VStack(alignment: .leading, spacing: 10) {
+          HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 1) {
+              Text(week.isEmpty ? gameLabel : "\(gameLabel) · \(week)")
+                .font(BoldTheme.Fonts.mono(10, weight: .semibold))
+                .tracking(0.6)
+                .foregroundColor(gameColor)
+              Text(sport)
+                .font(BoldTheme.Fonts.display(26))
+                .foregroundColor(BoldTheme.Colors.text)
+            }
+            Spacer()
+            statusView
           }
-          Spacer()
-          statusView
+
+          if let detail {
+            Rectangle().fill(BoldTheme.Colors.border).frame(height: 1)
+            HStack(spacing: 10) {
+              AsyncImage(url: detail.logoURL) { phase in
+                if let img = phase.image { img.resizable().scaledToFit() }
+                else { Image(systemName: "football").resizable().scaledToFit().padding(5).foregroundColor(BoldTheme.Colors.textFaint) }
+              }
+              .frame(width: 30, height: 30)
+              VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 6) {
+                  Text(detail.teamName)
+                    .font(BoldTheme.Fonts.body(15, weight: .bold))
+                    .foregroundColor(BoldTheme.Colors.text)
+                    .lineLimit(1)
+                  if let sp = detail.spread {
+                    Text(verbatim: "+\(sp == sp.rounded() ? String(format: "%.0f", sp) : String(format: "%.1f", sp))")
+                      .font(BoldTheme.Fonts.mono(13, weight: .semibold))
+                      .foregroundColor(BoldTheme.Colors.goldDeep)
+                  }
+                }
+                Text(detail.subline)
+                  .font(BoldTheme.Fonts.body(12))
+                  .foregroundColor(BoldTheme.Colors.textDim)
+                  .lineLimit(1)
+              }
+              Spacer(minLength: 0)
+            }
+          }
+
+          if let progress {
+            VStack(alignment: .leading, spacing: 5) {
+              GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                  Capsule().fill(BoldTheme.Colors.track)
+                  Capsule().fill(BoldTheme.Colors.pickemsAccent)
+                    .frame(width: geo.size.width * CGFloat(min(progress.picked, progress.total)) / CGFloat(max(progress.total, 1)))
+                }
+              }
+              .frame(height: 5)
+              Text(verbatim: "\(progress.picked) of \(progress.total) picked")
+                .font(BoldTheme.Fonts.body(12))
+                .foregroundColor(BoldTheme.Colors.textDim)
+            }
+          }
         }
       }
     }
@@ -646,40 +821,28 @@ private struct ContestRow: View {
   }
 
   @ViewBuilder private var statusView: some View {
-    if isOffseason {
-      Text("Offseason")
-        .font(BoldTheme.Fonts.body(11.5, weight: .bold))
-        .foregroundColor(BoldTheme.Colors.textDim)
-        .padding(.horizontal, 10).padding(.vertical, 4)
-        .background(BoldTheme.Colors.track)
-        .clipShape(Capsule())
-    } else if picked {
-      Text("Picked ✓")
-        .font(BoldTheme.Fonts.body(11.5, weight: .bold))
-        .foregroundColor(BoldTheme.Colors.green)
-        .padding(.horizontal, 10).padding(.vertical, 4)
-        .background(BoldTheme.Colors.green.opacity(0.13))
-        .overlay(Capsule().strokeBorder(BoldTheme.Colors.green.opacity(0.28)))
-        .clipShape(Capsule())
-    } else if countdown == "Missed" {
-      Text("Missed")
-        .font(BoldTheme.Fonts.body(11.5, weight: .bold))
-        .foregroundColor(BoldTheme.Colors.textDim)
-        .padding(.horizontal, 10).padding(.vertical, 4)
-        .background(BoldTheme.Colors.track)
-        .clipShape(Capsule())
-        .fixedSize()
-    } else if countdown == "Pick now" {
-      Text("Pick now →")
-        .font(BoldTheme.Fonts.body(11.5, weight: .bold))
-        .foregroundColor(BoldTheme.Colors.text)
-        .padding(.horizontal, 10).padding(.vertical, 4)
-        .background(BoldTheme.Colors.gold)
-        .clipShape(Capsule())
-        .fixedSize()
-    } else {
-      Text("Make Pick →").font(BoldTheme.Fonts.display(15)).foregroundColor(BoldTheme.Colors.goldDeep)
+    switch status {
+    case .offseason: chip("Offseason", fg: BoldTheme.Colors.textDim, bg: BoldTheme.Colors.track)
+    case .picked: chip("Picked ✓", fg: BoldTheme.Colors.green, bg: BoldTheme.Colors.green.opacity(0.13))
+    case .live: chip("Live", fg: Color(hex: 0xA6402A), bg: Color(hex: 0xC6402A).opacity(0.13))
+    case .won(let pts): chip(pts.isEmpty ? "Won" : "Won \(pts)", fg: BoldTheme.Colors.text, bg: BoldTheme.Colors.gold)
+    case .lost: chip("Lost", fg: BoldTheme.Colors.textDim, bg: BoldTheme.Colors.track)
+    case .missed: chip("Missed", fg: BoldTheme.Colors.textDim, bg: BoldTheme.Colors.track)
+    case .partial(let p, let t): chip("\(p) of \(t)", fg: BoldTheme.Colors.textDim, bg: BoldTheme.Colors.track)
+    case .cta(let label): chip(label, fg: BoldTheme.Colors.text, bg: BoldTheme.Colors.gold)
+    case .neutral(let label):
+      Text(label).font(BoldTheme.Fonts.display(15)).foregroundColor(BoldTheme.Colors.goldDeep)
     }
+  }
+
+  private func chip(_ text: String, fg: Color, bg: Color) -> some View {
+    Text(text)
+      .font(BoldTheme.Fonts.body(11.5, weight: .bold))
+      .foregroundColor(fg)
+      .padding(.horizontal, 10).padding(.vertical, 4)
+      .background(bg)
+      .clipShape(Capsule())
+      .fixedSize()
   }
 }
 
