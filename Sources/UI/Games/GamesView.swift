@@ -146,7 +146,17 @@ final class GamesViewModel: ObservableObject {
     return games.filter { g in g.derivedFavoriteTeamId != nil }
   }
 
+  /// Your current pick's game has kicked off (or locked) -- the pick is
+  /// final for the week, so no other game can be picked either. The server
+  /// enforces this too (upsert_weekly_pick); this just stops the app from
+  /// offering a switch that can only fail.
+  var currentPickIsLocked: Bool {
+    guard let id = selectedGameId, let g = games.first(where: { $0.id == id }) else { return false }
+    return g.picksLocked == true || g.startTime <= Date() || (g.status != nil && g.status != "scheduled")
+  }
+
   func canPick(_ g: Game) -> Bool {
+    if currentPickIsLocked && g.id != selectedGameId { return false }
     if g.picksLocked == true {
       #if DEBUG
       print("[canPick] BLOCKED (picksLocked) \(g.awayTeam ?? "?") @ \(g.homeTeam ?? "?")")
@@ -186,6 +196,7 @@ final class GamesViewModel: ObservableObject {
       // what swiping actually does now.
       return selectedGameId != nil && selectedGameId != g.id ? "Change to this upset" : "Pick this upset"
     }
+    if currentPickIsLocked && g.id != selectedGameId { return "Your pick is locked" }
     if g.status == "in_progress" { return "Game Live" }
     if g.status == "final" { return "Game Over" }
     return "Locked"
