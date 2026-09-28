@@ -273,6 +273,16 @@ struct PickemsView: View {
           .dismissKeyboardOnTap()
         }
       }
+      // Shared CFB | PRO BALL | PICKEMS switcher -- pinned above every state
+      // (including the no-group welcome screen) so you can always get back
+      // to Underdog from this tab.
+      .safeAreaInset(edge: .top, spacing: 0) {
+        GameSwitcher()
+          .padding(.horizontal, 18)
+          .padding(.top, 6)
+          .padding(.bottom, 8)
+          .background(BoldTheme.Colors.bgPage)
+      }
       .navigationBarHidden(true)
       .task {
         await loadMyGroups()

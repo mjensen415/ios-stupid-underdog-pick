@@ -253,57 +253,12 @@ struct GamesView: View {
   @EnvironmentObject var appState: AppState
   @State private var shareImage: Image?
   @State private var searchQuery: String = ""
-  @State private var showSwitchGame = false
   @State private var showGroupPicker = false
   @State private var showCopyPicksSheet = false
 
   private var activeGroupName: String? {
     guard let id = viewModel.activeGroupId else { return nil }
     return viewModel.underdogGroups.first { $0.group_id == id }?.name ?? "this group"
-  }
-
-  private var switchGameOptions: [SwitchGameOption] {
-    [
-      SwitchGameOption(
-        id: "cfb",
-        title: "Underdog Pick — CFB",
-        subtitle: "Pick the underdog to win outright",
-        statusText: nil,
-        statusColor: BoldTheme.Colors.goldDeep,
-        accent: BoldTheme.Colors.goldDeep,
-        isCurrent: viewModel.sport == "cfb"
-      ) {
-        appState.currentGame = .cfb
-        Task { await viewModel.switchSport(to: "cfb") }
-      },
-      SwitchGameOption(
-        id: "nfl",
-        title: "Underdog Pick — Pro Ball",
-        subtitle: "Pick the underdog to win outright",
-        statusText: nil,
-        statusColor: BoldTheme.Colors.goldDeep,
-        accent: BoldTheme.Colors.goldDeep,
-        isCurrent: viewModel.sport == "nfl"
-      ) {
-        appState.currentGame = .nfl
-        Task { await viewModel.switchSport(to: "nfl") }
-      },
-      SwitchGameOption(
-        id: "pickems",
-        title: "Pro Ball Pickems",
-        subtitle: "Pick every winner — no spreads",
-        statusText: nil,
-        statusColor: BoldTheme.Colors.pickemsAccentDeep,
-        accent: BoldTheme.Colors.pickemsAccent,
-        isCurrent: false
-      ) {
-        // This tab's own slot in MainTabView now renders PickemsView
-        // whenever currentGame is .pickems, so this swap happens in place
-        // -- no tab hop needed, goToPickems's requestedTab=1 is a no-op
-        // since we're already there.
-        appState.goToPickems()
-      },
-    ]
   }
 
   // Picking here is a swipe-left gesture on the row (see .swipeActions
@@ -494,38 +449,6 @@ struct GamesView: View {
     guard !query.isEmpty else { return viewModel.visibleGames }
     return viewModel.visibleGames.filter { g in
       [g.homeTeam, g.awayTeam].compactMap { $0 }.contains { $0.localizedCaseInsensitiveContains(query) }
-    }
-  }
-
-  // Same "Switch Game" sheet Home uses, in place of the old inline CFB/Pro
-  // Ball pill -- see HomeView.switchGameButton for the full rationale.
-  private var switchGameButton: some View {
-    Button { showSwitchGame = true } label: {
-      HStack(spacing: 8) {
-        Image(systemName: "arrow.left.arrow.right")
-          .font(.system(size: 12, weight: .bold))
-        Text(viewModel.sport == "cfb" ? "CFB" : "PRO BALL")
-          .font(BoldTheme.Fonts.body(13, weight: .bold))
-        Spacer()
-        Text("Switch")
-          .font(BoldTheme.Fonts.body(12, weight: .semibold))
-          .foregroundColor(BoldTheme.Colors.textDim)
-        Image(systemName: "chevron.right")
-          .font(.system(size: 11, weight: .semibold))
-          .foregroundColor(BoldTheme.Colors.textFaint)
-      }
-      .foregroundColor(BoldTheme.Colors.text)
-      .padding(.horizontal, 14)
-      .padding(.vertical, 9)
-      .background(Color.white.opacity(0.6))
-      .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
-      .cornerRadius(13)
-    }
-    .buttonStyle(.plain)
-    .padding(.horizontal, 20)
-    .padding(.bottom, 10)
-    .sheet(isPresented: $showSwitchGame) {
-      SwitchGameSheet(options: switchGameOptions)
     }
   }
 
@@ -798,7 +721,9 @@ struct GamesView: View {
     ZStack {
       VStack(spacing: 0) {
         header
-        switchGameButton
+        GameSwitcher()
+          .padding(.horizontal, 20)
+          .padding(.bottom, 10)
         groupPicker
         groupModeBanner
         searchField
@@ -835,6 +760,9 @@ struct GamesView: View {
         viewModel.sport = requested
         appState.requestedSport = nil
         appState.currentGame = requested == "nfl" ? .nfl : .cfb
+      } else if appState.currentGame == .nfl || appState.currentGame == .cfb {
+        // No hand-off: land on whatever the shared switcher says.
+        viewModel.sport = appState.currentGame.rawValue
       }
       await viewModel.loadInitial()
     }
@@ -847,6 +775,12 @@ struct GamesView: View {
       appState.requestedSport = nil
       appState.currentGame = requested == "nfl" ? .nfl : .cfb
       Task { await viewModel.switchSport(to: requested) }
+    }
+    // The shared GameSwitcher (here or on another tab) changed sport.
+    // Pickems swaps this whole tab to PickemsView (see MainTabView).
+    .onChange(of: appState.currentGame) { _, game in
+      guard game == .cfb || game == .nfl, game.rawValue != viewModel.sport else { return }
+      Task { await viewModel.switchSport(to: game.rawValue) }
     }
     .onChange(of: viewModel.activeGroupId) { _, _ in
       Task { try? await viewModel.loadExistingPick() }

@@ -73,31 +73,9 @@ struct GroupsListView: View {
   }
 
   private var contextSwitcher: some View {
-    HStack(spacing: 4) {
-      ForEach([CurrentGame.cfb, .nfl, .pickems], id: \.self) { game in
-        let active = game == appState.currentGame
-        let label = game == .cfb ? "CFB" : (game == .nfl ? "PRO BALL" : "PICKEMS")
-        let accent = game == .pickems ? BoldTheme.Colors.pickemsAccentDeep : BoldTheme.Colors.goldDeep
-        Button {
-          appState.currentGame = game
-        } label: {
-          Text(label)
-            .font(BoldTheme.Fonts.body(12, weight: .bold))
-            .foregroundColor(active ? accent : BoldTheme.Colors.textDim)
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-            .background(active ? Color.white : Color.clear)
-            .cornerRadius(9)
-            .shadow(color: active ? Color.black.opacity(0.1) : .clear, radius: 4, y: 2)
-        }
-      }
-    }
-    .padding(3)
-    .background(Color.black.opacity(0.05))
-    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
-    .cornerRadius(12)
-    .padding(.horizontal, 16)
-    .padding(.top, 8)
+    GameSwitcher()
+      .padding(.horizontal, 16)
+      .padding(.top, 8)
   }
 
   var body: some View {

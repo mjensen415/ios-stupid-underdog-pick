@@ -221,19 +221,6 @@ struct MyPicksView: View {
     }
   }
 
-  private var sectionBinding: Binding<MyPicksSection> {
-    Binding(
-      get: { section },
-      set: { new in
-        switch new {
-        case .cfb: appState.currentGame = .cfb
-        case .nfl: appState.currentGame = .nfl
-        case .pickems: appState.currentGame = .pickems
-        }
-      }
-    )
-  }
-
   private var sport: String { section == .nfl ? "nfl" : "cfb" }
   private var context: CurrentContext? { section == .cfb ? viewModel.cfbContext : viewModel.nflContext }
 
@@ -344,34 +331,7 @@ struct MyPicksView: View {
     }
   }
 
-  /// Full-width segmented control: CFB | PRO BALL | PICKEMS.
-  private var sectionToggle: some View {
-    HStack(spacing: 4) {
-      ForEach([(MyPicksSection.cfb, "CFB"), (.nfl, "PRO BALL"), (.pickems, "PICKEMS")], id: \.0) { value, label in
-        let active = section == value
-        Button {
-          withAnimation(.easeInOut(duration: 0.2)) { sectionBinding.wrappedValue = value }
-        } label: {
-          Text(label)
-            .font(BoldTheme.Fonts.body(13, weight: .bold))
-            .tracking(0.4)
-            .foregroundColor(active ? BoldTheme.Colors.text : BoldTheme.Colors.textDim)
-            .frame(maxWidth: .infinity)
-            .frame(height: 36)
-            .background(
-              RoundedRectangle(cornerRadius: 11)
-                .fill(active ? (value == .pickems ? BoldTheme.Colors.pickemsAccent.opacity(0.18) : BoldTheme.Colors.gold) : .clear)
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-      }
-    }
-    .padding(4)
-    .background(BoldTheme.Colors.glassStrong)
-    .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
-    .clipShape(RoundedRectangle(cornerRadius: 14))
-  }
+  private var sectionToggle: some View { GameSwitcher() }
 
   private func errorState(_ message: String) -> some View {
     VStack(spacing: 8) {

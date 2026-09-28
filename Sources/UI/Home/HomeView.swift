@@ -179,7 +179,8 @@ struct HomeView: View {
   @Environment(\.supabaseClient) private var client
   @EnvironmentObject var appState: AppState
   @StateObject private var viewModel = HomeViewModel()
-  @State private var sport: Sport = .cfb
+  // Follows the shared CFB | PRO BALL | PICKEMS switcher (Pickems is NFL).
+  private var sport: Sport { appState.currentGame == .cfb ? .cfb : .nfl }
   @State private var showCreateGroup = false
   @State private var showJoinGroup = false
   @State private var showInvitePicker = false
@@ -188,7 +189,6 @@ struct HomeView: View {
   @State private var showShareSheet = false
   @State private var dismissingIntro = false
   @State private var showProfile = false
-  @State private var showSwitchGame = false
 
   // groups-create-invite is admin-only server-side (assertIsGroupAdmin) --
   // only owner/admin rows can actually generate a link.
@@ -222,58 +222,6 @@ struct HomeView: View {
     return profile.has_onboarded && !profile.pickems_intro_dismissed && !pickemsActive
   }
 
-  // Options for the "Switch Game" sheet -- always all three contests
-  // (unlike contestsSection, which only shows ones you're already active
-  // in), since this is the explicit "take me somewhere else" tool.
-  private var switchGameOptions: [SwitchGameOption] {
-    func countdownStatus(myPick: Pick?, kickoff: Date?, offseason: Bool, loaded: Bool) -> (String?, Color) {
-      if offseason { return ("Offseason", BoldTheme.Colors.textDim) }
-      if myPick != nil { return ("Picked", BoldTheme.Colors.green) }
-      guard loaded else { return (nil, BoldTheme.Colors.textDim) }
-      guard kickoff != nil else { return ("Missed", BoldTheme.Colors.textDim) }
-      return ("Pick now", BoldTheme.Colors.goldDeep)
-    }
-
-    let (cfbStatus, cfbColor) = countdownStatus(myPick: viewModel.myPickCfb, kickoff: viewModel.nextOpenKickoffCfb, offseason: viewModel.cfbOffseason, loaded: viewModel.cfbWindowLoaded)
-    let (nflStatus, nflColor) = countdownStatus(myPick: viewModel.myPickNfl, kickoff: viewModel.nextOpenKickoffNfl, offseason: viewModel.nflOffseason, loaded: viewModel.nflWindowLoaded)
-
-    return [
-      SwitchGameOption(
-        id: "cfb",
-        title: "Underdog Pick — CFB",
-        subtitle: viewModel.cfbOffseason ? "Offseason" : "Week \(formatWeekLabel(viewModel.cfbContext?.week ?? 0)) · \(viewModel.cfbContext?.season ?? 0)",
-        statusText: underdogCfbActive ? cfbStatus : "Explore",
-        statusColor: underdogCfbActive ? cfbColor : BoldTheme.Colors.goldDeep,
-        accent: BoldTheme.Colors.goldDeep,
-        isCurrent: sport == .cfb
-      ) {
-        appState.goToUnderdog(sport: "cfb")
-      },
-      SwitchGameOption(
-        id: "nfl",
-        title: "Underdog Pick — Pro Ball",
-        subtitle: viewModel.nflOffseason ? "Offseason" : "Week \(formatWeekLabel(viewModel.nflContext?.week ?? 0)) · \(viewModel.nflContext?.season ?? 0)",
-        statusText: underdogProBallActive ? nflStatus : "Explore",
-        statusColor: underdogProBallActive ? nflColor : BoldTheme.Colors.goldDeep,
-        accent: BoldTheme.Colors.goldDeep,
-        isCurrent: sport == .nfl
-      ) {
-        appState.goToUnderdog(sport: "nfl")
-      },
-      SwitchGameOption(
-        id: "pickems",
-        title: "Pro Ball Pickems",
-        subtitle: "Pick every winner — no spreads",
-        statusText: pickemsActive ? "Your groups" : "Explore",
-        statusColor: BoldTheme.Colors.pickemsAccentDeep,
-        accent: BoldTheme.Colors.pickemsAccent,
-        isCurrent: false
-      ) {
-        appState.goToPickems()
-      },
-    ]
-  }
-
   private var initials: String {
     let email = appState.session?.user.email ?? "??"
     return String(email.prefix(2)).uppercased()
@@ -288,7 +236,8 @@ struct HomeView: View {
         ScrollView {
           VStack(alignment: .leading, spacing: 0) {
             topRow
-            switchGameButton
+            GameSwitcher()
+              .padding(.bottom, 20)
             contestsSection
             groupsSection
             discoverSection
@@ -299,9 +248,6 @@ struct HomeView: View {
         }
       }
       .navigationBarHidden(true)
-      .sheet(isPresented: $showSwitchGame) {
-        SwitchGameSheet(options: switchGameOptions)
-      }
       .task {
         if let client, let userId = appState.session?.user.id {
           viewModel.configure(client: client)
@@ -457,34 +403,6 @@ struct HomeView: View {
     .sheet(isPresented: $showProfile) {
       ProfileView()
     }
-  }
-
-  // Replaces the old CFB/Pro Ball pill toggle -- it only flipped this
-  // page's own header label and re-scoped a couple of widgets below, which
-  // was easy to mistake for "does nothing" since contestsSection already
-  // shows every active contest at once regardless of the toggle. This is an
-  // explicit, one-tap jump into whichever contest you actually want.
-  private var switchGameButton: some View {
-    Button { showSwitchGame = true } label: {
-      HStack(spacing: 8) {
-        Image(systemName: "arrow.left.arrow.right")
-          .font(.system(size: 12, weight: .bold))
-        Text("Switch Game")
-          .font(BoldTheme.Fonts.body(13, weight: .bold))
-        Spacer()
-        Image(systemName: "chevron.right")
-          .font(.system(size: 11, weight: .semibold))
-          .foregroundColor(BoldTheme.Colors.textFaint)
-      }
-      .foregroundColor(BoldTheme.Colors.text)
-      .padding(.horizontal, 14)
-      .padding(.vertical, 11)
-      .background(Color.white.opacity(0.6))
-      .overlay(RoundedRectangle(cornerRadius: 13).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
-      .cornerRadius(13)
-    }
-    .buttonStyle(.plain)
-    .padding(.bottom, 20)
   }
 
   // ── Your Contests -- one row per game this account is actually playing,
