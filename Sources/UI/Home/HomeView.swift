@@ -773,9 +773,10 @@ private struct ContestRow: View {
           if let detail {
             Rectangle().fill(BoldTheme.Colors.border).frame(height: 1)
             HStack(spacing: 10) {
-              AsyncImage(url: detail.logoURL) { phase in
-                if let img = phase.image { img.resizable().scaledToFit() }
-                else { Image(systemName: "football").resizable().scaledToFit().padding(5).foregroundColor(BoldTheme.Colors.textFaint) }
+              RetryingAsyncImage(url: detail.logoURL) { img in
+                img.resizable().scaledToFit()
+              } placeholder: {
+                Image(systemName: "football").resizable().scaledToFit().padding(5).foregroundColor(BoldTheme.Colors.textFaint)
               }
               .frame(width: 30, height: 30)
               VStack(alignment: .leading, spacing: 1) {

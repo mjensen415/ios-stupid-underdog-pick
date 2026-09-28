@@ -150,6 +150,10 @@ struct GameRowView: View {
     .padding(.vertical, 14)
     .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
     .listRowSeparatorTint(BoldTheme.Colors.border)
+    // The day card's last row has no divider -- it would poke out below
+    // the card's rounded bottom corners.
+    .listRowSeparator(isLastInDay ? .hidden : .visible, edges: .bottom)
+    .listRowSeparator(.hidden, edges: .top)
     // A fixed-position bottom overlay here previously caused a "Picked" pill
     // to land at different relative heights depending on whether team names
     // wrapped to one or two lines, sometimes overlapping the spread/kickoff
@@ -172,6 +176,9 @@ struct GameRowView: View {
       topTrailingRadius: isFirstInDay ? 16 : 0
     )
     .fill(isSelected ? BoldTheme.Colors.gold.opacity(0.10) : BoldTheme.Colors.glassStrong)
+    // listRowBackground spans the full row width -- inset the card so it
+    // lines up with the day header instead of running edge to edge.
+    .padding(.horizontal, 12)
   }
 
   @ViewBuilder

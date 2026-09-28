@@ -124,6 +124,25 @@ final class PickemsViewModel: ObservableObject {
     }
   }
 
+  /// "Save picks" button: picks already save the moment a team is tapped
+  /// (pickTeam), so this doesn't write anything -- it re-reads this week's
+  /// picks from the server and confirms they match what's on screen, for
+  /// people who want a final "saved" moment. Returns the confirmed count,
+  /// or nil if the server copy doesn't match / couldn't be read.
+  func confirmPicksSaved() async -> Int? {
+    guard let client, let userId else { return nil }
+    let ids = games.map { $0.id }
+    guard let server = try? await PickemsService(client: client).fetchMyPicks(
+      userId: userId, gameIds: ids, actingAsProfileId: actingAs?.id, groupId: activeGroupId
+    ) else { return nil }
+    let local = myPicks.filter { ids.contains($0.key) }
+    guard local.allSatisfy({ server[$0.key] == $0.value }) else {
+      myPicks = server  // show what's actually saved
+      return nil
+    }
+    return server.count
+  }
+
   func resetToSharedPicks() async {
     guard let client, let activeGroupId, let season, let week else { return }
     do {
@@ -214,6 +233,7 @@ struct PickemsView: View {
   @EnvironmentObject var appState: AppState
   @StateObject private var viewModel = PickemsViewModel()
   @State private var tab: Tab = .pick
+  @State private var saveState: SaveState = .idle
   @State private var myGroups: [MyGroup]?
   @State private var showActorPicker = false
   @State private var showManageProfiles = false
@@ -265,6 +285,7 @@ struct PickemsView: View {
               } else {
                 tiebreakerCard
                 gamesList
+                saveButton
                 footerSummary
               }
             }
@@ -667,6 +688,64 @@ struct PickemsView: View {
         }
       }
       .padding(.top, 16)
+    }
+  }
+
+  private enum SaveState: Equatable { case idle, checking, saved(Int), failed }
+
+  @ViewBuilder private var saveButton: some View {
+    if !viewModel.games.isEmpty && viewModel.weekPicked > 0 {
+      Button {
+        guard saveState != .checking else { return }
+        saveState = .checking
+        Task {
+          let confirmed = await viewModel.confirmPicksSaved()
+          withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+            saveState = confirmed.map { .saved($0) } ?? .failed
+          }
+          if confirmed != nil { UINotificationFeedbackGenerator().notificationOccurred(.success) }
+          try? await Task.sleep(nanoseconds: 2_500_000_000)
+          withAnimation(.easeOut(duration: 0.3)) { saveState = .idle }
+        }
+      } label: {
+        HStack(spacing: 8) {
+          switch saveState {
+          case .idle:
+            Image(systemName: "tray.and.arrow.down.fill")
+            Text("Save picks")
+          case .checking:
+            ProgressView().tint(.white)
+            Text("Saving…")
+          case .saved(let n):
+            Image(systemName: "checkmark.circle.fill")
+              .transition(.scale.combined(with: .opacity))
+            Text("Saved \(n) pick\(n == 1 ? "" : "s")")
+          case .failed:
+            Image(systemName: "exclamationmark.triangle.fill")
+            Text("Couldn't confirm. Check connection")
+          }
+        }
+        .font(BoldTheme.Fonts.body(15, weight: .bold))
+        .foregroundColor(.white)
+        .frame(maxWidth: .infinity)
+        .frame(height: 50)
+        .background(
+          RoundedRectangle(cornerRadius: 14)
+            .fill(saveBackground)
+        )
+        .scaleEffect(saveState == .checking ? 0.98 : 1)
+      }
+      .buttonStyle(.plain)
+      .disabled(saveState == .checking)
+      .padding(.top, 16)
+    }
+  }
+
+  private var saveBackground: Color {
+    switch saveState {
+    case .saved: return BoldTheme.Colors.green
+    case .failed: return Color(hex: 0xA6402A)
+    default: return BoldTheme.Colors.pickemsAccentDeep
     }
   }
 

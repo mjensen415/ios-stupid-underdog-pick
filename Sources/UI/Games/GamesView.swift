@@ -631,11 +631,6 @@ struct GamesView: View {
               }
             } header: {
               columnHeader(dateLabel: day.dateLabel)
-            } footer: {
-              // Visible gap between one day's card and the next -- otherwise
-              // adjoining cards' rounded bottom/top corners would touch with
-              // no breathing room, reading as one broken shape instead of two.
-              Color.clear.frame(height: 16).listRowInsets(EdgeInsets())
             }
             .id(day.id)
           }
@@ -711,9 +706,20 @@ struct GamesView: View {
       .tracking(0.9)
       .foregroundColor(BoldTheme.Colors.textFaint)
     }
+    // Full-bleed and opaque: a plain List's section header otherwise gets
+    // its own inset + default background, so the pinned header floated as
+    // an inset grey box with white edges while rows scrolled under it. The
+    // gap between days lives here (top padding) instead of a clear footer
+    // that let the list background show through.
     .padding(.horizontal, 20)
-    .padding(.vertical, 10)
+    .padding(.top, 14)
+    .padding(.bottom, 8)
+    .frame(maxWidth: .infinity, alignment: .leading)
     .background(BoldTheme.Colors.bgPage)
+    .overlay(alignment: .bottom) {
+      Rectangle().fill(BoldTheme.Colors.border).frame(height: 1).padding(.horizontal, 12)
+    }
+    .listRowInsets(EdgeInsets())
     .textCase(nil)
   }
 
