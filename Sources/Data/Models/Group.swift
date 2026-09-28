@@ -40,6 +40,8 @@ struct MyGroup: Codable, Identifiable, Equatable {
   let rank: Int?
   let my_points: Double?
   let leader_points: Double?
+  /// Everyone ranked (incl. Pickems managed profiles) -- rank denominator.
+  var player_count: Int? = nil
 
   var id: UUID { group_id }
 
@@ -49,10 +51,11 @@ struct MyGroup: Codable, Identifiable, Equatable {
   // standings haven't been computed for this group yet.
   var standingsLine: String? {
     guard let rank, let my_points, let leader_points else { return nil }
-    if rank == 1 { return "YOU: 1/\(member_count) · Leading" }
-    let gap = my_points - leader_points
-    let gapText = gap == gap.rounded() ? String(format: "%.0f", gap) : String(format: "%.1f", gap)
-    return "YOU: \(rank)/\(member_count) · \(gapText) from leader"
+    let of = player_count ?? member_count
+    if rank == 1 { return "YOU: 1/\(of) · Leading" }
+    let back = leader_points - my_points
+    let backText = back == back.rounded() ? String(format: "%.0f", back) : String(format: "%.1f", back)
+    return "YOU: \(rank)/\(of) · \(backText) back"
   }
 }
 
