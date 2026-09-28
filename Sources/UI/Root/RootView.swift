@@ -18,7 +18,10 @@ struct RootView: View {
   // launch, which would otherwise show iOS's "Allow Paste" prompt for
   // completely unrelated clipboard contents on every single app open.
   private func checkPasteboardForPendingInvite() {
+    // hasURLs doesn't trigger iOS's "Allow Paste" prompt; reading .string
+    // does -- so only read when there's actually a URL to look at.
     guard appState.pendingGroupJoinToken == nil,
+          UIPasteboard.general.hasURLs,
           let text = UIPasteboard.general.string,
           let url = URL(string: text.trimmingCharacters(in: .whitespacesAndNewlines)),
           let token = DeepLinkHandler.groupJoinToken(from: url)
@@ -65,14 +68,19 @@ struct RootView: View {
     // re-fires when the id itself changes).
     .task(id: appState.session?.user.id) {
       guard let client = appState.client, appState.session != nil else { return }
-      checkPasteboardForPendingInvite()
+      let profile = try? await ProfilesService(client: client).fetchMyProfile()
+      let needsOnboarding = profile?.has_onboarded == false
+      // Clipboard invite check only for a brand-new account (see
+      // checkPasteboardForPendingInvite) -- running it on every launch made
+      // iOS show "Allow Paste" to every returning user whenever their
+      // clipboard held something.
+      if needsOnboarding { checkPasteboardForPendingInvite() }
       // Don't show onboarding in the same tick as a pending invite join --
       // two simultaneous fullScreenCovers on one view isn't reliable in
       // SwiftUI. Let the invite cover show uncontested; the onChange below
       // picks up onboarding once it's dismissed.
       guard appState.pendingGroupJoinToken == nil else { return }
-      let profile = try? await ProfilesService(client: client).fetchMyProfile()
-      showOnboarding = profile?.has_onboarded == false
+      showOnboarding = needsOnboarding
     }
     .onChange(of: appState.pendingGroupJoinToken) { _, newToken in
       guard newToken == nil, let client = appState.client, appState.session != nil else { return }

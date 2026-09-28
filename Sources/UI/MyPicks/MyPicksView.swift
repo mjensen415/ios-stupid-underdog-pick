@@ -66,6 +66,7 @@ final class MyPicksViewModel: ObservableObject {
   @Published var pickemsThisWeekWrong = 0
   @Published var pickemsThisWeekOpen = 0
   @Published var pickemsThisWeekUnfinished = 0
+  @Published var pickemsThisWeekOpenUnpicked = 0
 
   private var client: SupabaseClient?
 
@@ -190,13 +191,14 @@ final class MyPicksViewModel: ObservableObject {
       .sorted { ($0.season, $0.week) > ($1.season, $1.week) }
 
     // Current week: every game, not just picked ones.
-    pickemsThisWeekTotal = 0; pickemsThisWeekPicked = 0; pickemsThisWeekUnfinished = 0
+    pickemsThisWeekTotal = 0; pickemsThisWeekPicked = 0; pickemsThisWeekUnfinished = 0; pickemsThisWeekOpenUnpicked = 0
     pickemsThisWeekCorrect = 0; pickemsThisWeekWrong = 0; pickemsThisWeekOpen = 0
     guard let ctx = nflContext else { return }
     let weekGames = (try? await PickemsService(client: client).fetchGames(season: ctx.season, week: ctx.week, sport: "nfl")) ?? []
     pickemsThisWeekTotal = weekGames.count
     pickemsThisWeekOpen = weekGames.filter { !$0.isLocked }.count
     pickemsThisWeekUnfinished = weekGames.filter { !$0.isFinal }.count
+    pickemsThisWeekOpenUnpicked = weekGames.filter { !$0.isLocked && pickByGame[$0.id] == nil }.count
     for g in weekGames {
       guard let picked = pickByGame[g.id] else { continue }
       pickemsThisWeekPicked += 1
@@ -547,7 +549,14 @@ struct MyPicksView: View {
     let correct = viewModel.pickemsThisWeekCorrect
     let wrong = viewModel.pickemsThisWeekWrong
     let open = viewModel.pickemsThisWeekOpen
-    let status: PickStatus = total == 0 ? .none : (picked >= total ? .picked : (open > 0 ? .pickNow : (picked == 0 ? .missed : .partial(picked, total))))
+    let openUnpicked = viewModel.pickemsThisWeekOpenUnpicked
+    // Only open games still lacking a pick are "to do" -- started games
+    // can't be picked anymore.
+    let status: PickStatus = total == 0 ? .none
+      : picked >= total ? .picked
+      : openUnpicked > 0 ? (picked == 0 ? .pickNow : .partial(picked, total))
+      : (picked > 0 && open > 0) ? .picked
+      : picked == 0 ? .missed : .partial(picked, total)
     return VStack(alignment: .leading, spacing: 14) {
       HStack {
         Text(verbatim: "PICKEMS · WEEK \(formatWeekLabel(ctx.week))")
@@ -587,7 +596,7 @@ struct MyPicksView: View {
 
       if open > 0 {
         Button { appState.goToPickems() } label: {
-          Text(picked == 0 ? "Pick now →" : (picked < total ? "Finish your picks →" : "Change picks →"))
+          Text(picked == 0 ? "Pick now →" : (openUnpicked > 0 ? "Finish your picks →" : "Change picks →"))
             .font(BoldTheme.Fonts.body(14, weight: .bold))
             .foregroundColor(.white)
             .frame(maxWidth: .infinity)

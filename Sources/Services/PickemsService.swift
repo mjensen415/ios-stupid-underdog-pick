@@ -59,10 +59,6 @@ private struct PickemsTiebreakerRow: Decodable {
   let acting_as_profile_id: UUID?
 }
 
-private struct WeekRow: Decodable {
-  let week: Int
-}
-
 struct ManagedProfile: Decodable, Identifiable, Equatable {
   let id: UUID
   let displayName: String
@@ -155,14 +151,7 @@ struct PickemsService {
   }
 
   func fetchDistinctWeeks(season: Int, sport: String = "nfl") async throws -> [Int] {
-    let res = try await client
-      .from("games")
-      .select("week")
-      .eq("season", value: season)
-      .eq("sport", value: sport)
-      .execute()
-    let rows = try JSONDecoder().decode([WeekRow].self, from: res.data)
-    return Array(Set(rows.map { $0.week })).sorted()
+    try await fetchGameWeeks(client: client, season: season, sport: sport)
   }
 
   // Fetches every row for this user (own + all children) and filters by

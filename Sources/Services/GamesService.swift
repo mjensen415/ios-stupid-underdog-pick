@@ -23,18 +23,18 @@ struct GamesService {
     return try dec.decode([Game].self, from: res.data)
   }
 
+  /// Weeks that have games. Server-side distinct (get_game_weeks): pulling
+  /// every game's week hit PostgREST's 1000-row cap for CFB, so the current
+  /// week and later silently fell off the week menu.
   func distinctWeeks(forSeason season: Int, sport: String = "cfb") async throws -> [Int] {
-    let res = try await client
-      .from("games")
-      .select("week", head: false, count: nil)
-      .eq("season", value: season)
-      .eq("sport", value: sport)
-      .order("week", ascending: true)
-      .execute()
-    struct W: Decodable { let week: Int }
-    let weeks = try JSONDecoder().decode([W].self, from: res.data).map { $0.week }
-    return Array(Set(weeks)).sorted()
+    try await fetchGameWeeks(client: client, season: season, sport: sport)
   }
+}
+
+func fetchGameWeeks(client: SupabaseClient, season: Int, sport: String) async throws -> [Int] {
+  struct Params: Encodable { let p_season: Int; let p_sport: String }
+  let res = try await client.rpc("get_game_weeks", params: Params(p_season: season, p_sport: sport)).execute()
+  return try JSONDecoder().decode([Int].self, from: res.data).sorted()
 }
 
 extension JSONDecoder.DateDecodingStrategy {
