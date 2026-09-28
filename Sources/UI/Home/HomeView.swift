@@ -236,8 +236,6 @@ struct HomeView: View {
         ScrollView {
           VStack(alignment: .leading, spacing: 0) {
             topRow
-            GameSwitcher()
-              .padding(.bottom, 20)
             contestsSection
             groupsSection
             discoverSection
@@ -419,7 +417,7 @@ struct HomeView: View {
         }
       }
 
-      Text(hasAnyContest ? "YOUR CONTESTS" : "GET STARTED")
+      Text(hasAnyContest ? "THIS WEEK" : "GET STARTED")
         .font(BoldTheme.Fonts.mono(10, weight: .semibold))
         .foregroundColor(BoldTheme.Colors.textFaint)
 
@@ -428,7 +426,7 @@ struct HomeView: View {
           if underdogCfbActive {
             ContestRow(
               title: "Underdog Pick — CFB",
-              sublabel: viewModel.cfbOffseason ? "Offseason" : "Week \(formatWeekLabel(viewModel.cfbContext?.week ?? 0)) · \(viewModel.cfbContext?.season ?? 0)",
+              sublabel: viewModel.cfbOffseason ? "Offseason" : weekSublabel(viewModel.cfbContext),
               isOffseason: viewModel.cfbOffseason,
               picked: viewModel.myPickCfb != nil,
               countdown: countdownText(myPick: viewModel.myPickCfb, kickoff: viewModel.nextOpenKickoffCfb, loaded: viewModel.cfbWindowLoaded)
@@ -439,7 +437,7 @@ struct HomeView: View {
           if underdogProBallActive {
             ContestRow(
               title: "Underdog Pick — Pro Ball",
-              sublabel: viewModel.nflOffseason ? "Offseason" : "Week \(formatWeekLabel(viewModel.nflContext?.week ?? 0)) · \(viewModel.nflContext?.season ?? 0)",
+              sublabel: viewModel.nflOffseason ? "Offseason" : weekSublabel(viewModel.nflContext),
               isOffseason: viewModel.nflOffseason,
               picked: viewModel.myPickNfl != nil,
               countdown: countdownText(myPick: viewModel.myPickNfl, kickoff: viewModel.nextOpenKickoffNfl, loaded: viewModel.nflWindowLoaded)
@@ -450,7 +448,7 @@ struct HomeView: View {
           if pickemsActive {
             ContestRow(
               title: "Pro Ball Pickems",
-              sublabel: viewModel.nflOffseason ? "Offseason" : "Week \(viewModel.nflContext?.week ?? 0) · \(viewModel.nflContext?.season ?? 0)",
+              sublabel: viewModel.nflOffseason ? "Offseason" : weekSublabel(viewModel.nflContext),
               isOffseason: viewModel.nflOffseason,
               picked: false,
               countdown: nil
@@ -487,6 +485,12 @@ struct HomeView: View {
 
   /// nil when picked (the row shows "Picked ✓"); "Pick now" while any
   /// pickable game is still to come; "Missed" only once all have kicked off.
+  /// "Week 3 · 2026", or blank until the context loads (was "Week 0 · 0").
+  private func weekSublabel(_ ctx: CurrentContext?) -> String {
+    guard let ctx else { return " " }
+    return "Week \(formatWeekLabel(ctx.week)) · \(ctx.season)"
+  }
+
   private func countdownText(myPick: Pick?, kickoff: Date?, loaded: Bool) -> String? {
     // nil = neutral "Make Pick" (also shown while still loading).
     guard myPick == nil, loaded else { return nil }
@@ -511,27 +515,6 @@ struct HomeView: View {
         } label: {
           Text("Discover public groups →").font(BoldTheme.Fonts.body(12, weight: .bold)).foregroundColor(BoldTheme.Colors.green)
         }
-      }
-
-      Button { showCreateGroup = true } label: {
-        HStack(spacing: 14) {
-          ZStack {
-            Circle().fill(BoldTheme.Colors.gold).frame(width: 42, height: 42)
-              .overlay { BoldTheme.HatchOverlay().clipShape(Circle()) }
-            Text("+").font(BoldTheme.Fonts.display(22)).foregroundColor(BoldTheme.Colors.text)
-          }
-          VStack(alignment: .leading, spacing: 2) {
-            Text("Start a group").font(BoldTheme.Fonts.body(14.5, weight: .heavy)).foregroundColor(BoldTheme.Colors.text)
-            Text("Invite friends, run your own pool, set your own bragging rights.")
-              .font(BoldTheme.Fonts.body(12))
-              .foregroundColor(BoldTheme.Colors.textDim)
-          }
-          Spacer(minLength: 0)
-        }
-        .padding(16)
-        .background(Color.white.opacity(0.28))
-        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(BoldTheme.Colors.border, style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])))
-        .cornerRadius(16)
       }
 
       if viewModel.myGroups.isEmpty {
