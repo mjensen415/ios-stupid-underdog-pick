@@ -3,7 +3,28 @@ import UIKit
 
 struct RootView: View {
   @EnvironmentObject var appState: AppState
+  @Environment(\.scenePhase) private var scenePhase
   @State private var showOnboarding = false
+  @State private var lastUpdateCheck: Date?
+
+  /// App Store + app_version_config check. Runs on launch and again when
+  /// the app returns to the foreground (people leave it open for days),
+  /// at most every 6 hours.
+  private func checkForUpdate(force: Bool = false) async {
+    guard let client = appState.client else { return }
+    if !force, let last = lastUpdateCheck, Date().timeIntervalSince(last) < 6 * 3600 { return }
+    lastUpdateCheck = Date()
+    switch await AppVersionService(client: client).checkForUpdate() {
+    case .required(let config):
+      appState.updateRequired = config
+    case .available(let config):
+      appState.updateRequired = nil
+      if UpdateBanner.shouldShow(config) { appState.updateAvailable = config }
+    case .current:
+      appState.updateRequired = nil
+      appState.updateAvailable = nil
+    }
+  }
 
   // Covers a gap the universal-link handling can't: someone taps an invite
   // link with the app not yet installed, goes to download it separately,
@@ -94,12 +115,15 @@ struct RootView: View {
     // only: never blocks anything, just offers app_version_config's
     // latest_version if it's ahead of this build and the user hasn't
     // already dismissed that specific version.
-    .task {
-      guard let client = appState.client else { return }
-      guard let config = try? await AppVersionService(client: client).fetchConfig() else { return }
-      let installed = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
-      guard isVersion(config.latestVersion, newerThan: installed), UpdateBanner.shouldShow(config) else { return }
-      appState.updateAvailable = config
+    .task { await checkForUpdate(force: true) }
+    .onChange(of: scenePhase) { _, phase in
+      if phase == .active { Task { await checkForUpdate() } }
+    }
+    .overlay {
+      if let config = appState.updateRequired {
+        UpdateRequiredView(config: config) { await checkForUpdate(force: true) }
+          .transition(.opacity)
+      }
     }
   }
 }

@@ -38,6 +38,9 @@ final class AppState: ObservableObject {
   /// no check has completed yet or the app is current -- UpdateBanner
   /// treats both the same (don't show).
   @Published var updateAvailable: AppVersionConfig?
+  /// Set when this build is below app_version_config.min_supported_version
+  /// -- RootView covers the app with a non-dismissible "Update required".
+  @Published var updateRequired: AppVersionConfig?
 
   /// Route to whichever Underdog Pick sport, updating currentGame so Groups
   /// reflects it. Single place every CFB/Pro Ball entry point should funnel

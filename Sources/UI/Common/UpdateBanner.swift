@@ -9,7 +9,7 @@ struct UpdateBanner: View {
   let config: AppVersionConfig
   let onDismiss: () -> Void
 
-  private static let appStoreURL = URL(string: "https://apps.apple.com/app/id6790921821")!
+  static let appStoreURL = URL(string: "https://apps.apple.com/app/id6790921821")!
 
   var body: some View {
     HStack(alignment: .center, spacing: 12) {
@@ -50,7 +50,10 @@ struct UpdateBanner: View {
       }
     }
     .padding(.horizontal, 14).padding(.vertical, 10)
+    // Solid page color under the glass -- it floats over screen content,
+    // which otherwise shows through the translucent glass.
     .background(BoldTheme.Colors.glassStrong)
+    .background(BoldTheme.Colors.bgPage)
     .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
     .clipShape(RoundedRectangle(cornerRadius: 14))
     .padding(.horizontal, 14)
@@ -59,5 +62,53 @@ struct UpdateBanner: View {
 
   static func shouldShow(_ config: AppVersionConfig) -> Bool {
     UserDefaults.standard.string(forKey: dismissedVersionKey) != config.latestVersion
+  }
+}
+
+/// Blocking screen for builds below app_version_config.min_supported_version.
+/// No dismiss -- the only ways out are updating, or the floor being lowered
+/// server-side (re-checked on "Check again" and every foreground).
+struct UpdateRequiredView: View {
+  let config: AppVersionConfig
+  let recheck: () async -> Void
+  @State private var checking = false
+
+  var body: some View {
+    ZStack {
+      BoldTheme.Colors.bgPage.ignoresSafeArea()
+      BoldTheme.AmbientBlobs().ignoresSafeArea()
+      VStack(spacing: 18) {
+        SupIcon(variant: .monogram)
+          .frame(width: 72, height: 72)
+          .clipShape(RoundedRectangle(cornerRadius: 18))
+        Text("TIME TO UPDATE")
+          .font(BoldTheme.Fonts.display(30))
+          .foregroundColor(BoldTheme.Colors.text)
+        Text(config.updateMessage ?? "This version of Stupid Underdog Pick is out of date. Update to \(config.latestVersion) to keep making picks.")
+          .font(BoldTheme.Fonts.body(15))
+          .foregroundColor(BoldTheme.Colors.textDim)
+          .multilineTextAlignment(.center)
+          .padding(.horizontal, 12)
+        Button { UIApplication.shared.open(UpdateBanner.appStoreURL) } label: {
+          Text("Update on the App Store")
+            .font(BoldTheme.Fonts.body(15, weight: .bold))
+            .foregroundColor(BoldTheme.Colors.text)
+            .frame(maxWidth: .infinity).frame(height: 50)
+            .background(BoldTheme.Colors.gold)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+        }
+        Button {
+          checking = true
+          Task { await recheck(); checking = false }
+        } label: {
+          Text(checking ? "Checking…" : "Check again")
+            .font(BoldTheme.Fonts.body(14, weight: .semibold))
+            .foregroundColor(BoldTheme.Colors.textDim)
+        }
+        .disabled(checking)
+      }
+      .padding(28)
+    }
+    .interactiveDismissDisabled(true)
   }
 }
