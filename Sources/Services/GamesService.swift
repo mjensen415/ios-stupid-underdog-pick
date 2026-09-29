@@ -31,6 +31,21 @@ struct GamesService {
   }
 }
 
+/// Week status from get_week_pick_window, counted on the real games table.
+/// v_games_named hides CFB games with no line yet, so a new week (lines not
+/// posted) looked empty and Home/My Picks said "Missed".
+struct WeekPickWindow: Decodable {
+  let upcoming: Int      // games not yet kicked off, lined or not
+  let lined_open: Int    // of those, games with a line (pickable now)
+}
+
+func fetchWeekPickWindow(client: SupabaseClient, season: Int, week: Int, sport: String) async -> WeekPickWindow? {
+  struct Params: Encodable { let p_season: Int; let p_week: Int; let p_sport: String }
+  guard let res = try? await client.rpc("get_week_pick_window", params: Params(p_season: season, p_week: week, p_sport: sport)).execute()
+  else { return nil }
+  return try? JSONDecoder().decode([WeekPickWindow].self, from: res.data).first
+}
+
 func fetchGameWeeks(client: SupabaseClient, season: Int, sport: String) async throws -> [Int] {
   struct Params: Encodable { let p_season: Int; let p_sport: String }
   let res = try await client.rpc("get_game_weeks", params: Params(p_season: season, p_sport: sport)).execute()

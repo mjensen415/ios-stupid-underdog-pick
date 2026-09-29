@@ -37,6 +37,11 @@ final class HomeViewModel: ObservableObject {
   /// contest row doesn't flash "Missed" while it's still loading.
   @Published var cfbWindowLoaded = false
   @Published var nflWindowLoaded = false
+  /// Any game this week still to kick off, lined or not. A new week before
+  /// lines post has upcoming games but no pickable ones -- that's "Make
+  /// pick", not "Missed".
+  @Published var cfbWeekUpcoming = false
+  @Published var nflWeekUpcoming = false
   @Published var cfbOffseason = false
   @Published var nflOffseason = false
   @Published var profile: ProfileRow?
@@ -112,6 +117,7 @@ final class HomeViewModel: ObservableObject {
       async let cfbOffseasonTask = checkOffseason(client: client, season: cfbCtx.season, sport: "cfb")
       myPickCfb = await cfbPickTask ?? nil
       nextOpenKickoffCfb = await cfbKickoffTask
+      cfbWeekUpcoming = await weekHasUpcomingGame(client: client, season: cfbCtx.season, week: cfbCtx.week, sport: "cfb")
       cfbWindowLoaded = true
       cfbOffseason = await cfbOffseasonTask
       pickDetailCfb = await fetchPickDetail(client: client, pick: myPickCfb)
@@ -122,6 +128,7 @@ final class HomeViewModel: ObservableObject {
       async let nflOffseasonTask = checkOffseason(client: client, season: nflCtx.season, sport: "nfl")
       myPickNfl = await nflPickTask ?? nil
       nextOpenKickoffNfl = await nflKickoffTask
+      nflWeekUpcoming = await weekHasUpcomingGame(client: client, season: nflCtx.season, week: nflCtx.week, sport: "nfl")
       nflWindowLoaded = true
       nflOffseason = await nflOffseasonTask
       pickDetailNfl = await fetchPickDetail(client: client, pick: myPickNfl)
@@ -179,6 +186,12 @@ final class HomeViewModel: ObservableObject {
   /// started). nil once every pickable game has kicked off. Previously this
   /// was the week's FIRST kickoff, so the contest row read "Locked" as soon
   /// as Thursday's game started even though the weekend slate was open.
+  private func weekHasUpcomingGame(client: SupabaseClient, season: Int, week: Int, sport: String) async -> Bool {
+    // nil (couldn't check) -> assume games remain rather than claim "Missed"
+    guard let w = await fetchWeekPickWindow(client: client, season: season, week: week, sport: sport) else { return true }
+    return w.upcoming > 0
+  }
+
   private func fetchNextOpenKickoff(client: SupabaseClient, season: Int, week: Int, sport: String) async -> Date? {
     struct Row: Decodable { let start_time: Date }
     guard let res = try? await client
@@ -512,7 +525,7 @@ struct HomeView: View {
               kind: .underdog,
               sport: "CFB",
               week: weekShort(viewModel.cfbContext),
-              status: underdogStatus(pick: viewModel.myPickCfb, detail: viewModel.pickDetailCfb, kickoff: viewModel.nextOpenKickoffCfb, loaded: viewModel.cfbWindowLoaded, offseason: viewModel.cfbOffseason),
+              status: underdogStatus(pick: viewModel.myPickCfb, detail: viewModel.pickDetailCfb, kickoff: viewModel.nextOpenKickoffCfb, upcoming: viewModel.cfbWeekUpcoming, loaded: viewModel.cfbWindowLoaded, offseason: viewModel.cfbOffseason),
               detail: viewModel.pickDetailCfb
             ) {
               appState.goToUnderdog(sport: "cfb")
@@ -523,7 +536,7 @@ struct HomeView: View {
               kind: .underdog,
               sport: "Pro Ball",
               week: weekShort(viewModel.nflContext),
-              status: underdogStatus(pick: viewModel.myPickNfl, detail: viewModel.pickDetailNfl, kickoff: viewModel.nextOpenKickoffNfl, loaded: viewModel.nflWindowLoaded, offseason: viewModel.nflOffseason),
+              status: underdogStatus(pick: viewModel.myPickNfl, detail: viewModel.pickDetailNfl, kickoff: viewModel.nextOpenKickoffNfl, upcoming: viewModel.nflWeekUpcoming, loaded: viewModel.nflWindowLoaded, offseason: viewModel.nflOffseason),
               detail: viewModel.pickDetailNfl
             ) {
               appState.goToUnderdog(sport: "nfl")
@@ -575,7 +588,7 @@ struct HomeView: View {
   /// Picked (or its result once played); otherwise "Pick now" while any
   /// pickable game is still to come, "Missed" only once all have kicked
   /// off, and a neutral CTA while still loading.
-  private func underdogStatus(pick: Pick?, detail: HomePickDetail?, kickoff: Date?, loaded: Bool, offseason: Bool) -> ContestRow.Status {
+  private func underdogStatus(pick: Pick?, detail: HomePickDetail?, kickoff: Date?, upcoming: Bool, loaded: Bool, offseason: Bool) -> ContestRow.Status {
     if offseason { return .offseason }
     if pick != nil {
       guard let detail else { return .picked }
@@ -587,7 +600,9 @@ struct HomeView: View {
       }
     }
     guard loaded else { return .neutral("Make pick →") }
-    return kickoff == nil ? .missed : .cta("Pick now →")
+    if kickoff != nil { return .cta("Pick now →") }
+    // No lined game open: lines not posted yet (new week) vs week over.
+    return upcoming ? .cta("Make pick →") : .missed
   }
 
   private var pickemsStatus: ContestRow.Status {

@@ -58,6 +58,9 @@ final class MyPicksViewModel: ObservableObject {
   @Published var nflContext: CurrentContext?
   /// Whether any pickable game (has a line, not kicked off) remains this week.
   @Published var underdogOpen: [String: Bool] = [:]
+  /// Any game still to kick off this week, lined or not -- a new week before
+  /// lines post is "Make pick", not "Missed".
+  @Published var underdogUpcoming: [String: Bool] = [:]
 
   // Pickems current week
   @Published var pickemsThisWeekTotal = 0
@@ -135,14 +138,18 @@ final class MyPicksViewModel: ObservableObject {
     underdog = picks.compactMap { p in gamesById[p.game_id].map { UnderdogWeekEntry(pick: p, game: $0) } }
 
     // Is anything still pickable this week? Drives "Pick now" vs "Missed".
-    func anyOpen(_ ctx: CurrentContext?, _ sport: String) async -> Bool {
-      guard let ctx else { return false }
-      let games = (try? await GamesService(client: client).fetch(season: ctx.season, week: ctx.week, sport: sport)) ?? []
-      return games.contains { $0.latestSpread != nil && $0.startTime > Date() && $0.picksLocked != true }
+    // (lined game open, any game still to kick off)
+    func window(_ ctx: CurrentContext?, _ sport: String) async -> (Bool, Bool) {
+      guard let ctx else { return (false, false) }
+      guard let w = await fetchWeekPickWindow(client: client, season: ctx.season, week: ctx.week, sport: sport)
+      else { return (false, true) }  // couldn't check -> don't claim "Missed"
+      return (w.lined_open > 0, w.upcoming > 0)
     }
-    async let cfbOpen = anyOpen(cfbContext, "cfb")
-    async let nflOpen = anyOpen(nflContext, "nfl")
-    underdogOpen = ["cfb": await cfbOpen, "nfl": await nflOpen]
+    async let cfbW = window(cfbContext, "cfb")
+    async let nflW = window(nflContext, "nfl")
+    let (c, n) = (await cfbW, await nflW)
+    underdogOpen = ["cfb": c.0, "nfl": n.0]
+    underdogUpcoming = ["cfb": c.1, "nfl": n.1]
   }
 
   private func loadPickems(client: SupabaseClient, userId: UUID) async throws {
@@ -417,7 +424,7 @@ struct MyPicksView: View {
 
       if status != .missed {
         Button { appState.goToUnderdog(sport: sport) } label: {
-          Text(entry == nil ? "Pick now →" : (status == .picked ? "Change pick →" : "View games →"))
+          Text(entry == nil ? (viewModel.underdogOpen[sport] == true ? "Pick now →" : "Make pick →") : (status == .picked ? "Change pick →" : "View games →"))
             .font(BoldTheme.Fonts.body(14, weight: .bold))
             .foregroundColor(BoldTheme.Colors.text)
             .frame(maxWidth: .infinity)
@@ -665,7 +672,10 @@ struct MyPicksView: View {
   enum PickStatus: Equatable { case none, pickNow, picked, live, won, lost, missed, partial(Int, Int) }
 
   private func underdogStatus(_ entry: UnderdogWeekEntry?) -> PickStatus {
-    guard let entry else { return viewModel.underdogOpen[sport] == true ? .pickNow : .missed }
+    guard let entry else {
+      if viewModel.underdogOpen[sport] == true || viewModel.underdogUpcoming[sport] == true { return .pickNow }
+      return .missed
+    }
     if entry.isLive { return .live }
     switch entry.outcome {
     case .win: return .won
