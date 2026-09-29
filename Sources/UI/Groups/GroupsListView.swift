@@ -99,14 +99,17 @@ struct GroupsListView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.top, 60)
             } else {
+              if let top = topGroup { heroCard(top) }
               if !filteredMyGroups.isEmpty { stats }
-              sectionLabel("YOUR \(contextDisplayName.uppercased()) GROUPS")
               if filteredMyGroups.isEmpty {
+                sectionLabel("YOUR \(contextDisplayName.uppercased()) GROUPS")
                 emptyMyGroups
-              } else {
-                cardList(filteredMyGroups) { group in
+              } else if !otherGroups.isEmpty {
+                // The top group already has the hero card above.
+                sectionLabel(topGroup == nil ? "YOUR \(contextDisplayName.uppercased()) GROUPS" : "YOUR OTHER GROUPS")
+                cardList(otherGroups) { group in
                   NavigationLink(destination: GroupDetailView(slug: group.slug)) {
-                    GroupRowView(group: group)
+                    GroupRowView(group: group, pickems: isPickems)
                   }
                   .buttonStyle(.plain)
                 }
@@ -171,10 +174,109 @@ struct GroupsListView: View {
         .font(BoldTheme.Fonts.body(13, weight: .semibold))
         .foregroundColor(BoldTheme.Colors.text)
         .padding(.horizontal, 14).padding(.vertical, 7)
-        .background(BoldTheme.Colors.gold)
+        .background(isPickems ? BoldTheme.Colors.pickemsAccent.opacity(0.22) : BoldTheme.Colors.gold)
         .clipShape(Capsule())
       }
     }
+  }
+
+  private var isPickems: Bool { appState.currentGame == .pickems }
+  /// Highlight color: gold for Underdog, the Pickems accent on Pickems --
+  /// same split My Picks uses for its stat tiles.
+  private var accent: Color { isPickems ? BoldTheme.Colors.pickemsAccent : BoldTheme.Colors.goldDeep }
+
+  /// Your best-standing group (then most points) -- the hero, like My
+  /// Picks' "this week" card.
+  private var topGroup: MyGroup? {
+    filteredMyGroups
+      .filter { $0.rank != nil }
+      .min { a, b in
+        (a.rank ?? .max, -(a.my_points ?? 0)) < (b.rank ?? .max, -(b.my_points ?? 0))
+      }
+  }
+
+  private var otherGroups: [MyGroup] {
+    filteredMyGroups.filter { $0.group_id != topGroup?.group_id }
+  }
+
+  private func fmt(_ v: Double) -> String {
+    v == v.rounded() ? String(format: "%.0f", v) : String(format: "%.1f", v)
+  }
+
+  private func heroCard(_ g: MyGroup) -> some View {
+    let rank = g.rank ?? 0
+    let of = g.player_count ?? g.member_count
+    let mine = g.my_points ?? 0
+    let leader = max(g.leader_points ?? 0, mine)
+    let unit = isPickems ? "correct" : "pts"
+    let (chipText, chipFg, chipBg): (String, Color, Color) = rank == 1
+      ? ("Leading", BoldTheme.Colors.text, isPickems ? BoldTheme.Colors.pickemsAccent.opacity(0.22) : BoldTheme.Colors.gold)
+      : ("#\(rank) of \(of)", BoldTheme.Colors.green, BoldTheme.Colors.green.opacity(0.13))
+    return VStack(alignment: .leading, spacing: 14) {
+      HStack {
+        Text("YOUR TOP GROUP")
+          .font(BoldTheme.Fonts.mono(11, weight: .semibold))
+          .tracking(0.8)
+          .foregroundColor(BoldTheme.Colors.textDim)
+        Spacer()
+        Text(chipText)
+          .font(BoldTheme.Fonts.body(12, weight: .bold))
+          .foregroundColor(chipFg)
+          .padding(.horizontal, 10).padding(.vertical, 4)
+          .background(chipBg)
+          .clipShape(Capsule())
+      }
+
+      HStack(spacing: 14) {
+        AvatarInitials(name: g.name, size: 52)
+        VStack(alignment: .leading, spacing: 3) {
+          Text(g.name)
+            .font(BoldTheme.Fonts.body(20, weight: .bold))
+            .foregroundColor(BoldTheme.Colors.text)
+            .lineLimit(1)
+            .minimumScaleFactor(0.75)
+          Text(verbatim: "\(g.member_count) member\(g.member_count == 1 ? "" : "s")")
+            .font(BoldTheme.Fonts.body(13))
+            .foregroundColor(BoldTheme.Colors.textDim)
+        }
+        Spacer(minLength: 0)
+      }
+
+      VStack(alignment: .leading, spacing: 6) {
+        GeometryReader { geo in
+          ZStack(alignment: .leading) {
+            Capsule().fill(BoldTheme.Colors.track)
+            Capsule().fill(isPickems ? BoldTheme.Colors.pickemsAccent : BoldTheme.Colors.gold)
+              .frame(width: leader > 0 ? geo.size.width * CGFloat(mine / leader) : 0)
+          }
+        }
+        .frame(height: 6)
+        HStack {
+          Text(verbatim: "You \(fmt(mine)) \(unit)")
+            .foregroundColor(BoldTheme.Colors.text)
+          Spacer()
+          Text(verbatim: rank == 1 ? "Top of the table" : "\(fmt(leader - mine)) back of the leader")
+            .foregroundColor(BoldTheme.Colors.textDim)
+        }
+        .font(BoldTheme.Fonts.mono(11, weight: .semibold))
+      }
+
+      NavigationLink(destination: GroupDetailView(slug: g.slug)) {
+        Text("View leaderboard →")
+          .font(BoldTheme.Fonts.body(14, weight: .bold))
+          .foregroundColor(BoldTheme.Colors.text)
+          .frame(maxWidth: .infinity)
+          .frame(height: 44)
+          .background(isPickems ? BoldTheme.Colors.pickemsAccent.opacity(0.22) : BoldTheme.Colors.gold)
+          .clipShape(RoundedRectangle(cornerRadius: 12))
+      }
+      .buttonStyle(.plain)
+    }
+    .padding(18)
+    .background(BoldTheme.Colors.glassStrong)
+    .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(BoldTheme.Colors.glassBorder, lineWidth: 1))
+    .clipShape(RoundedRectangle(cornerRadius: 20))
+    .shadow(color: Color.black.opacity(0.08), radius: 16, y: 8)
   }
 
   private var stats: some View {
@@ -204,7 +306,7 @@ struct GroupsListView: View {
             .font(BoldTheme.Fonts.body(14, weight: .bold))
             .foregroundColor(BoldTheme.Colors.text)
             .frame(maxWidth: .infinity).padding(.vertical, 12)
-            .background(BoldTheme.Colors.gold)
+            .background(isPickems ? BoldTheme.Colors.pickemsAccent.opacity(0.22) : BoldTheme.Colors.gold)
             .clipShape(RoundedRectangle(cornerRadius: 12))
         }
         Button { showJoin = true } label: {
@@ -248,7 +350,7 @@ struct GroupsListView: View {
         .foregroundColor(BoldTheme.Colors.textFaint)
       Text(value)
         .font(BoldTheme.Fonts.display(24))
-        .foregroundColor(highlight ? BoldTheme.Colors.goldDeep : BoldTheme.Colors.text)
+        .foregroundColor(highlight ? accent : BoldTheme.Colors.text)
         .lineLimit(1)
         .minimumScaleFactor(0.7)
     }
@@ -256,8 +358,8 @@ struct GroupsListView: View {
     .padding(.horizontal, 14)
     .padding(.vertical, 12)
     .background(BoldTheme.Colors.glassStrong)
-    .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(BoldTheme.Colors.glassBorder, lineWidth: 1))
-    .clipShape(RoundedRectangle(cornerRadius: 16))
+    .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(BoldTheme.Colors.glassBorder, lineWidth: 1))
+    .clipShape(RoundedRectangle(cornerRadius: 14))
   }
 
   private func sectionLabel(_ text: String) -> some View {
@@ -285,6 +387,7 @@ struct GroupsListView: View {
 // One row in the "your groups" card: who, how big, and where you stand.
 private struct GroupRowView: View {
   let group: MyGroup
+  var pickems: Bool = false
 
   private var roleLabel: String? {
     switch group.my_role {
@@ -316,15 +419,19 @@ private struct GroupRowView: View {
       }
       Spacer(minLength: 6)
       if let rank = group.rank {
-        VStack(alignment: .trailing, spacing: 1) {
-          Text(verbatim: "#\(rank)")
-            .font(BoldTheme.Fonts.mono(17, weight: .semibold))
-            .foregroundColor(rank == 1 ? BoldTheme.Colors.goldDeep : BoldTheme.Colors.text)
-          if let of = group.player_count ?? Optional(group.member_count), of > 0 {
-            Text(verbatim: "of \(of)")
-              .font(BoldTheme.Fonts.mono(10))
-              .foregroundColor(BoldTheme.Colors.textFaint)
-          }
+        // Same badge language as My Picks' history rows: gold capsule for
+        // the win (leading), track capsule otherwise.
+        VStack(alignment: .trailing, spacing: 3) {
+          Text(verbatim: rank == 1 ? "1ST" : "#\(rank)")
+            .font(BoldTheme.Fonts.mono(12, weight: .semibold))
+            .tracking(0.5)
+            .foregroundColor(rank == 1 ? BoldTheme.Colors.text : BoldTheme.Colors.textDim)
+            .padding(.horizontal, 10).padding(.vertical, 5)
+            .background(rank == 1 ? (pickems ? BoldTheme.Colors.pickemsAccent.opacity(0.22) : BoldTheme.Colors.gold) : BoldTheme.Colors.track)
+            .clipShape(Capsule())
+          Text(verbatim: "of \(group.player_count ?? group.member_count)")
+            .font(BoldTheme.Fonts.mono(11))
+            .foregroundColor(BoldTheme.Colors.textFaint)
         }
       }
       Image(systemName: "chevron.right")
