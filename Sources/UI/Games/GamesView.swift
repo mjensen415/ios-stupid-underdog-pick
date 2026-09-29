@@ -10,6 +10,10 @@ final class GamesViewModel: ObservableObject {
   @Published var selectedWeek: Int = 1
   @Published var season: Int = 2025
   @Published var selectedGameId: UUID? = nil
+  /// The saved pick row, for its picked team and Pro Ball locked line.
+  /// Nil right after a fresh pick -- the banner then falls back to the
+  /// game's current underdog/line, which is exactly what just got locked.
+  @Published var myPick: Pick? = nil
   @Published var savingPick = false
   @Published var toastMessage: String?
   @Published var sport: String = "cfb"
@@ -97,8 +101,10 @@ final class GamesViewModel: ObservableObject {
   func loadExistingPick() async throws {
     if let pick = try await PicksService(client: client).myPick(season: season, week: selectedWeek, sport: sport, groupId: activeGroupId) {
       selectedGameId = pick.game_id
+      myPick = pick
     } else {
       selectedGameId = nil
+      myPick = nil
     }
   }
 
@@ -214,7 +220,9 @@ final class GamesViewModel: ObservableObject {
       return
     }
     let previous = selectedGameId
+    let previousPick = myPick
     selectedGameId = g.id
+    myPick = nil
     savingPick = true; defer { savingPick = false }
     do {
       _ = try await PicksService(client: client)
@@ -232,6 +240,7 @@ final class GamesViewModel: ObservableObject {
       #endif
     } catch {
       selectedGameId = previous
+      myPick = previousPick
       flashToast("Couldn’t save pick: \(friendlyPickErrorMessage(error))")
       #if DEBUG
       print("[pickUnderdog] SAVE FAILED: \(error)")
@@ -241,13 +250,16 @@ final class GamesViewModel: ObservableObject {
 
   func clearPickForWeek() async {
     let previous = selectedGameId
+    let previousPick = myPick
     selectedGameId = nil
+    myPick = nil
     savingPick = true; defer { savingPick = false }
     do {
       try await PicksService(client: client).clearPick(season: season, week: selectedWeek, sport: sport, groupId: activeGroupId)
       flashToast("Pick cleared")
     } catch {
       selectedGameId = previous
+      myPick = previousPick
       flashToast("Couldn’t clear: \(friendlyPickErrorMessage(error))")
     }
   }
@@ -279,6 +291,7 @@ struct GamesView: View {
   // (whichever first -- see GamesViewModel.pickUnderdog).
   static let swipeHintDefaultsKey = "hasSeenSwipeToPickHint"
   @AppStorage(GamesView.swipeHintDefaultsKey) private var hasSeenSwipeHint = false
+  @State private var tappedGame: Game?
 
   private var header: some View {
     HStack {
@@ -325,15 +338,21 @@ struct GamesView: View {
   @ViewBuilder
   private var pickedBanner: some View {
     if let g = pickedGame {
-      let underdogIsHome = g.derivedUnderdogTeamId != nil && g.derivedUnderdogTeamId == g.homeTeamId
+      // The team actually picked (a Pro Ball line can move after the pick,
+      // even flipping who the underdog is), scored on its locked line.
+      let savedPick = viewModel.myPick?.game_id == g.id ? viewModel.myPick : nil
+      let pickedTeamId = savedPick?.picked_team_id ?? g.derivedUnderdogTeamId
+      let underdogIsHome = pickedTeamId != nil && pickedTeamId == g.homeTeamId
       let underdogName = underdogIsHome ? (g.homeTeam ?? "Home") : (g.awayTeam ?? "Away")
       let favoriteName = underdogIsHome ? (g.awayTeam ?? "Away") : (g.homeTeam ?? "Home")
+      let bankSpread: Double? = savedPick.map { $0.winPoints(on: g) } ?? g.underdogSpread
+      let lineNote = savedPick?.lineNote(on: g)
       HStack(spacing: 14) {
         Circle()
           .fill(BoldTheme.Colors.gold)
           .frame(width: 40, height: 40)
           .overlay(
-            RetryingAsyncImage(url: viewModel.logoURL(for: g.derivedUnderdogTeamId)) { img in
+            RetryingAsyncImage(url: viewModel.logoURL(for: pickedTeamId)) { img in
               img.resizable().scaledToFit().padding(5)
             } placeholder: {
               Image(systemName: "checkmark")
@@ -350,7 +369,7 @@ struct GamesView: View {
             Text(underdogName.uppercased())
               .font(BoldTheme.Fonts.display(20))
               .foregroundColor(textOnGreen)
-            if let sp = g.underdogSpread {
+            if let sp = bankSpread {
               Text(verbatim: "+\(String(format: "%.1f", sp))")
                 .font(BoldTheme.Fonts.display(20))
                 .foregroundColor(BoldTheme.Colors.gold)
@@ -359,15 +378,20 @@ struct GamesView: View {
           Text(verbatim: "vs \(favoriteName)")
             .font(BoldTheme.Fonts.body(12))
             .foregroundColor(textOnGreen.opacity(0.75))
-          if let sp = g.underdogSpread {
+          if let sp = bankSpread {
             Text(verbatim: "Wins outright and you bank \(String(format: "%.1f", sp)) points.")
               .font(BoldTheme.Fonts.body(11))
               .foregroundColor(textOnGreen.opacity(0.65))
               .padding(.top, 2)
           }
+          if let lineNote {
+            Text(lineNote)
+              .font(BoldTheme.Fonts.body(11, weight: .semibold))
+              .foregroundColor(BoldTheme.Colors.gold)
+          }
         }
         Spacer()
-        if let shareImage, let sp = g.underdogSpread {
+        if let shareImage, let sp = bankSpread {
           // No singular `item: Image` initializer exists on ShareLink --
           // only items:/preview: (Image conforms to Transferable, so a
           // one-element array is the correct way to share a single image).
@@ -387,12 +411,21 @@ struct GamesView: View {
       .padding(.horizontal, 20)
       .padding(.bottom, 12)
       .task(id: g.id) {
-        guard let sp = g.underdogSpread else { shareImage = nil; return }
+        guard let sp = bankSpread else { shareImage = nil; return }
         if let uiImage = renderShareCardImage(dogName: underdogName, spread: sp, favoriteName: favoriteName) {
           shareImage = Image(uiImage: uiImage)
         }
       }
     }
+  }
+
+  private var tapDialogTitle: String {
+    guard let g = tappedGame else { return "" }
+    if viewModel.selectedGameId == g.id { return "Your pick" }
+    let dog = g.derivedUnderdogTeamId == g.homeTeamId ? g.homeTeam : g.awayTeam
+    guard let sp = g.underdogSpread else { return dog ?? "Pick this upset?" }
+    let n = sp == sp.rounded() ? String(format: "%.0f", sp) : String(format: "%.1f", sp)
+    return "\(dog ?? "Underdog") +\(n)"
   }
 
   @ViewBuilder
@@ -401,7 +434,7 @@ struct GamesView: View {
       HStack(spacing: 10) {
         Image(systemName: "hand.draw.fill")
           .foregroundColor(BoldTheme.Colors.goldDeep)
-        Text("Swipe left on a game to lock in that underdog.")
+        Text("Tap a game (or swipe left) to lock in that underdog.")
           .font(BoldTheme.Fonts.body(13, weight: .medium))
           .foregroundColor(BoldTheme.Colors.text)
         Spacer()
@@ -639,6 +672,13 @@ struct GamesView: View {
                     .disabled(!viewModel.canPick(g))
                   }
                 }
+                // Tap is the second way in (swipe stays): opens a confirm
+                // sheet with the same actions the swipe would offer.
+                .contentShape(Rectangle())
+                .onTapGesture {
+                  guard viewModel.canPick(g) else { return }
+                  tappedGame = g
+                }
               }
             } header: {
               columnHeader(dateLabel: day.dateLabel)
@@ -650,6 +690,27 @@ struct GamesView: View {
         .scrollContentBackground(.hidden)
         .background(BoldTheme.Colors.bgPage)
         .dismissKeyboardOnTap()
+        .confirmationDialog(
+          tapDialogTitle,
+          isPresented: Binding(get: { tappedGame != nil }, set: { if !$0 { tappedGame = nil } }),
+          titleVisibility: .visible,
+          presenting: tappedGame
+        ) { g in
+          if viewModel.selectedGameId == g.id {
+            Button("Clear pick", role: .destructive) {
+              Task { await viewModel.clearPickForWeek() }
+            }
+          } else {
+            Button(viewModel.swipeActionLabel(for: g)) {
+              Task { await viewModel.pickUnderdog(for: g) }
+            }
+          }
+          Button("Cancel", role: .cancel) {}
+        } message: { g in
+          if viewModel.selectedGameId != g.id, g.sport == "nfl" {
+            Text("Pro Ball lines move during the week. Your line locks in when you pick.")
+          }
+        }
         // A week spans both already-played and upcoming days -- opening on
         // the earliest day means scrolling past everything already final
         // just to reach today's or the next live game. Jump straight to

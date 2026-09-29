@@ -19,7 +19,7 @@ struct PicksService {
     let userId = try await client.auth.session.user.id
     let sharedRes = try await client
       .from("picks")
-      .select("id, user_id, game_id, picked_team_id, season, week, created_at")
+      .select("id, user_id, game_id, picked_team_id, season, week, created_at, locked_spread")
       .eq("user_id", value: userId)
       .eq("season", value: season)
       .eq("week", value: week)
@@ -31,7 +31,7 @@ struct PicksService {
 
     let groupRes = try await client
       .from("picks")
-      .select("id, user_id, game_id, picked_team_id, season, week, created_at")
+      .select("id, user_id, game_id, picked_team_id, season, week, created_at, locked_spread")
       .eq("user_id", value: userId)
       .eq("season", value: season)
       .eq("week", value: week)
@@ -49,7 +49,7 @@ struct PicksService {
     let userId = try await client.auth.session.user.id
     var query = client
       .from("picks")
-      .select("id, user_id, game_id, picked_team_id, season, week, created_at")
+      .select("id, user_id, game_id, picked_team_id, season, week, created_at, locked_spread")
       .eq("user_id", value: userId)
     if let season {
       query = query.eq("season", value: season)

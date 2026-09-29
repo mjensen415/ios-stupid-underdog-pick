@@ -18,7 +18,9 @@ struct UnderdogWeekEntry: Identifiable {
   var pickedIsHome: Bool { pick.picked_team_id == game.homeTeamId }
   var pickedName: String { (pickedIsHome ? game.homeTeam : game.awayTeam) ?? "Your pick" }
   var opponentName: String { (pickedIsHome ? game.awayTeam : game.homeTeam) ?? "Opponent" }
-  var spread: Double? { pick.picked_team_id == game.derivedUnderdogTeamId ? game.underdogSpread : nil }
+  var spread: Double? { pick.winPoints(on: game) }
+  var isLocked: Bool { pick.locked_spread != nil }
+  var lineNote: String? { pick.lineNote(on: game) }
   var outcome: Game.PickOutcome { game.outcome(forPickedTeamId: pick.picked_team_id) }
   /// Underdog must win outright -- points = the spread.
   var points: Double { outcome == .win ? (spread ?? 0) : 0 }
@@ -118,7 +120,7 @@ final class MyPicksViewModel: ObservableObject {
     // otherwise show the same week twice.
     let res = try await client
       .from("picks")
-      .select("id, user_id, game_id, picked_team_id, season, week, created_at")
+      .select("id, user_id, game_id, picked_team_id, season, week, created_at, locked_spread")
       .eq("user_id", value: userId)
       .is("group_id", value: nil)
       .execute()
@@ -407,12 +409,24 @@ struct MyPicksView: View {
                 Text(verbatim: "+\(formatNumber(sp))")
                   .font(BoldTheme.Fonts.mono(16, weight: .semibold))
                   .foregroundColor(BoldTheme.Colors.goldDeep)
+                if entry.isLocked {
+                  Image(systemName: "lock.fill")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundColor(BoldTheme.Colors.textFaint)
+                    .accessibilityLabel("Line locked")
+                }
               }
             }
             Text(verbatim: "vs \(entry.opponentName) · \(entry.scoreLine ?? kickoffText(entry.game.startTime))")
               .font(BoldTheme.Fonts.body(13))
               .foregroundColor(BoldTheme.Colors.textDim)
               .lineLimit(1)
+            if let note = entry.lineNote {
+              Text(note)
+                .font(BoldTheme.Fonts.body(12, weight: .semibold))
+                .foregroundColor(BoldTheme.Colors.goldDeep)
+                .lineLimit(2)
+            }
           }
           Spacer(minLength: 0)
         }

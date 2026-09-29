@@ -235,7 +235,9 @@ struct HomePickDetail {
   var pickedIsHome: Bool { pick.picked_team_id == game.homeTeamId }
   var teamName: String { (pickedIsHome ? game.homeTeam : game.awayTeam) ?? "Your pick" }
   var opponent: String { (pickedIsHome ? game.awayTeam : game.homeTeam) ?? "Opponent" }
-  var spread: Double? { pick.picked_team_id == game.derivedUnderdogTeamId ? game.underdogSpread : nil }
+  var spread: Double? { pick.winPoints(on: game) }
+  var isLocked: Bool { pick.locked_spread != nil }
+  var lineNote: String? { pick.lineNote(on: game) }
   var outcome: Game.PickOutcome { game.outcome(forPickedTeamId: pick.picked_team_id) }
   var isLive: Bool { game.status == "in_progress" }
 
@@ -306,6 +308,33 @@ struct HomeView: View {
   private var showPickemsIntroBanner: Bool {
     guard let profile = viewModel.profile else { return false }
     return profile.has_onboarded && !profile.pickems_intro_dismissed && !pickemsActive
+  }
+
+  /// Follows the games you actually play, not the last-used switcher: a
+  /// Pro-Ball-only player shouldn't see "WEEK 5 · CFB". Pickems counts as
+  /// Pro Ball. Playing both shows both weeks (they differ -- CFB starts a
+  /// week earlier).
+  private var headerLine: String {
+    guard viewModel.hasLoaded else { return " " }
+    let playsCfb = underdogCfbActive
+    let playsPro = underdogProBallActive || pickemsActive
+    let cfb = viewModel.cfbOffseason ? nil : viewModel.cfbContext
+    let pro = viewModel.nflOffseason ? nil : viewModel.nflContext
+    if playsCfb && playsPro, let cfb, let pro {
+      return "CFB WK \(formatWeekLabel(cfb.week)) · PRO BALL WK \(formatWeekLabel(pro.week)) · \(max(cfb.season, pro.season))"
+    }
+    if playsPro && !playsCfb {
+      if let pro { return "WEEK \(formatWeekLabel(pro.week)) · PRO BALL \(pro.season)" }
+      return "PRO BALL · OFFSEASON"
+    }
+    if playsCfb && !playsPro {
+      if let cfb { return "WEEK \(formatWeekLabel(cfb.week)) · CFB \(cfb.season)" }
+      return "CFB · OFFSEASON"
+    }
+    // No contests yet (or one side in its offseason): whatever's in season.
+    if let cfb { return "WEEK \(formatWeekLabel(cfb.week)) · CFB \(cfb.season)" }
+    if let pro { return "WEEK \(formatWeekLabel(pro.week)) · PRO BALL \(pro.season)" }
+    return viewModel.week == nil ? " " : "OFFSEASON"
   }
 
   private var initials: String {
@@ -455,7 +484,7 @@ struct HomeView: View {
         .shadow(color: Color(hex: 0x142A1C).opacity(0.3), radius: 6, y: 4)
 
       VStack(alignment: .leading, spacing: 2) {
-        Text(verbatim: !viewModel.hasLoaded || viewModel.week == nil ? " " : (viewModel.isOffseason ? "OFFSEASON" : "WEEK \(formatWeekLabel(viewModel.week ?? 0)) · \(sport == .cfb ? "CFB" : "PRO BALL") \(viewModel.season ?? 0)"))
+        Text(verbatim: headerLine)
           .font(BoldTheme.Fonts.mono(10, weight: .semibold))
           .foregroundColor(BoldTheme.Colors.green)
         HStack(spacing: 8) {
@@ -806,12 +835,24 @@ private struct ContestRow: View {
                     Text(verbatim: "+\(sp == sp.rounded() ? String(format: "%.0f", sp) : String(format: "%.1f", sp))")
                       .font(BoldTheme.Fonts.mono(13, weight: .semibold))
                       .foregroundColor(BoldTheme.Colors.goldDeep)
+                    if detail.isLocked {
+                      Image(systemName: "lock.fill")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundColor(BoldTheme.Colors.textFaint)
+                        .accessibilityLabel("Line locked")
+                    }
                   }
                 }
                 Text(detail.subline)
                   .font(BoldTheme.Fonts.body(12))
                   .foregroundColor(BoldTheme.Colors.textDim)
                   .lineLimit(1)
+                if let note = detail.lineNote {
+                  Text(note)
+                    .font(BoldTheme.Fonts.body(11, weight: .semibold))
+                    .foregroundColor(BoldTheme.Colors.goldDeep)
+                    .lineLimit(2)
+                }
               }
               Spacer(minLength: 0)
             }

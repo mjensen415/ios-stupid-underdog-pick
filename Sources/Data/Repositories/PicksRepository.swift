@@ -11,7 +11,7 @@ struct PicksRepository {
   func myPick(season: Int, week: Int, userId: UUID) async throws -> Pick? {
     let picks: [Pick] = try await client
       .from("picks")
-      .select("id, user_id, game_id, picked_team_id, season, week, created_at")
+      .select("id, user_id, game_id, picked_team_id, season, week, created_at, locked_spread")
       .eq("user_id", value: userId)
       .eq("season", value: season)
       .eq("week", value: week)
@@ -24,7 +24,7 @@ struct PicksRepository {
   func history(userId: UUID, limit: Int = 10) async throws -> [Pick] {
     try await client
       .from("picks")
-      .select("id, user_id, game_id, picked_team_id, season, week, created_at")
+      .select("id, user_id, game_id, picked_team_id, season, week, created_at, locked_spread")
       .eq("user_id", value: userId)
       .order("season", ascending: false)
       .order("week", ascending: false)
@@ -45,7 +45,7 @@ struct PicksRepository {
       let picks: [Pick] = try await client
         .from("picks")
         .upsert(insert, onConflict: "user_id,season,week")
-        .select("id, user_id, game_id, picked_team_id, season, week, created_at")
+        .select("id, user_id, game_id, picked_team_id, season, week, created_at, locked_spread")
         .execute()
         .value
       if let pick = picks.first { return pick }

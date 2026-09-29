@@ -189,6 +189,9 @@ struct ProfileView: View {
               Toggle("Game kickoff", isOn: $notificationPrefs.game_live)
               Toggle("Game results", isOn: $notificationPrefs.game_result)
               Toggle("Weekly recap", isOn: $notificationPrefs.weekly_recap)
+              NavigationLink(destination: NotificationSourcesView()) {
+                Text("Contests & groups")
+              }
             default:
               // .notDetermined -- covers existing users who upgraded past
               // this build and never saw the onboarding-flow prompt.

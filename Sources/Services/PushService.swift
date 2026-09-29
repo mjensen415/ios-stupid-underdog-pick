@@ -74,4 +74,38 @@ struct PushService {
       )
       .execute()
   }
+
+  /// Contest / group mutes (notification_mutes): a row means "don't push me
+  /// about this". Keys come back as "scope|scope_key", e.g. "contest|nfl"
+  /// or "group|<uuid>". No row = on, so an empty set means everything's on.
+  func fetchMutes() async throws -> Set<String> {
+    struct Row: Decodable { let scope: String; let scope_key: String }
+    let userId = try await client.auth.session.user.id
+    let res = try await client
+      .from("notification_mutes")
+      .select("scope, scope_key")
+      .eq("user_id", value: userId)
+      .execute()
+    let rows = try JSONDecoder().decode([Row].self, from: res.data)
+    return Set(rows.map { "\($0.scope)|\($0.scope_key)" })
+  }
+
+  func setMuted(scope: String, key: String, muted: Bool) async throws {
+    struct Row: Encodable { let user_id: UUID; let scope: String; let scope_key: String }
+    let userId = try await client.auth.session.user.id
+    if muted {
+      _ = try await client
+        .from("notification_mutes")
+        .upsert(Row(user_id: userId, scope: scope, scope_key: key), onConflict: "user_id,scope,scope_key", ignoreDuplicates: true)
+        .execute()
+    } else {
+      _ = try await client
+        .from("notification_mutes")
+        .delete()
+        .eq("user_id", value: userId)
+        .eq("scope", value: scope)
+        .eq("scope_key", value: key)
+        .execute()
+    }
+  }
 }
