@@ -290,21 +290,31 @@ struct HomeView: View {
   // group requirement to make a pick at all, so group membership is a
   // signal here, not a gate. Mirrors web's Home.tsx exactly.
   private var gameInterests: [String] { viewModel.profile?.game_interests ?? [] }
+  /// DEBUG-only simulator preview: SIMCTL_CHILD_SUP_CONTESTS=proball_underdog
+  /// (comma list of cfb_underdog / proball_underdog / pickems) forces which
+  /// contests count as yours.
+  private var debugContests: Set<String>? {
+    #if DEBUG
+    if let v = ProcessInfo.processInfo.environment["SUP_CONTESTS"] { return Set(v.split(separator: ",").map(String.init)) }
+    #endif
+    return nil
+  }
   private var underdogCfbActive: Bool {
-    viewModel.myGroups.contains { $0.game_type != .pickems && ($0.sport == .cfb || $0.sport == .both) }
+    if let d = debugContests { return d.contains("cfb_underdog") }
+    return viewModel.myGroups.contains { $0.game_type != .pickems && ($0.sport == .cfb || $0.sport == .both) }
       || gameInterests.contains("cfb_underdog")
   }
   private var underdogProBallActive: Bool {
-    viewModel.myGroups.contains { $0.game_type != .pickems && ($0.sport == .nfl || $0.sport == .both) }
+    if let d = debugContests { return d.contains("proball_underdog") }
+    return viewModel.myGroups.contains { $0.game_type != .pickems && ($0.sport == .nfl || $0.sport == .both) }
       || gameInterests.contains("proball_underdog")
   }
   private var pickemsActive: Bool {
-    viewModel.myGroups.contains { $0.game_type == .pickems || $0.game_type == .both }
+    if let d = debugContests { return d.contains("pickems") }
+    return viewModel.myGroups.contains { $0.game_type == .pickems || $0.game_type == .both }
       || gameInterests.contains("pickems")
   }
   private var hasAnyContest: Bool { underdogCfbActive || underdogProBallActive || pickemsActive }
-  private var showExploreUnderdog: Bool { !underdogCfbActive && !underdogProBallActive }
-  private var showExplorePickems: Bool { !pickemsActive }
   private var showPickemsIntroBanner: Bool {
     guard let profile = viewModel.profile else { return false }
     return profile.has_onboarded && !profile.pickems_intro_dismissed && !pickemsActive
@@ -585,28 +595,53 @@ struct HomeView: View {
         }
       }
 
-      if showExploreUnderdog || showExplorePickems {
-        if hasAnyContest {
-          Text("EXPLORE OTHER GAMES")
+      if hasAnyContest {
+        // Every contest you're not in yet gets a one-tap way in -- a
+        // Pro-Ball-only player still sees College Underdog here, etc.
+        let joinable: [(key: String, kind: JoinContestRow.Kind, sport: String, blurb: String)] = [
+          underdogCfbActive ? nil : ("cfb_underdog", .underdog, "CFB", "One underdog a week. Win outright, bank the spread."),
+          underdogProBallActive ? nil : ("proball_underdog", .underdog, "Pro Ball", "One underdog a week. Win outright, bank the spread."),
+          pickemsActive ? nil : ("pickems", .pickems, "Pro Ball", "Pick every game's winner. 1 point each."),
+        ].compactMap { $0 }
+        if !joinable.isEmpty {
+          Text("JOIN ANOTHER CONTEST")
             .font(BoldTheme.Fonts.mono(10, weight: .semibold))
             .foregroundColor(BoldTheme.Colors.textFaint)
             .padding(.top, 4)
-        }
-        VStack(spacing: 10) {
-          if showExploreUnderdog {
-            GameCardView(game: .underdog, compact: true) {
-              appState.requestedTab = 1
+          VStack(spacing: 10) {
+            ForEach(joinable, id: \.key) { c in
+              JoinContestRow(kind: c.kind, sport: c.sport, blurb: c.blurb) {
+                Task { await joinContest(c.key) }
+              }
             }
           }
-          if showExplorePickems {
-            GameCardView(game: .pickems, compact: true) {
-              appState.goToPickems()
-            }
+        }
+      } else {
+        VStack(spacing: 10) {
+          GameCardView(game: .underdog, compact: true) {
+            appState.requestedTab = 1
+          }
+          GameCardView(game: .pickems, compact: true) {
+            appState.goToPickems()
           }
         }
       }
     }
     .padding(.bottom, 22)
+  }
+
+  /// Record the contest on the profile (so it shows under This Week from
+  /// now on), then take them straight to it.
+  private func joinContest(_ key: String) async {
+    guard let client, let profile = viewModel.profile else { return }
+    if let next = try? await ProfilesService(client: client).addGameInterest(key, to: profile.game_interests) {
+      viewModel.profile?.game_interests = next
+    }
+    switch key {
+    case "cfb_underdog": appState.goToUnderdog(sport: "cfb")
+    case "proball_underdog": appState.goToUnderdog(sport: "nfl")
+    default: appState.goToPickems()
+    }
   }
 
   /// "WEEK 3", or blank until the context loads.
@@ -773,6 +808,48 @@ struct HomeView: View {
 }
 
 // ── Your Contests row ────────────────────────────────────────────────────
+/// A contest you're not in yet: same card shape as ContestRow, with a
+/// "Join" pill instead of a status.
+private struct JoinContestRow: View {
+  enum Kind { case underdog, pickems }
+  let kind: Kind
+  let sport: String
+  let blurb: String
+  let action: () -> Void
+
+  private var gameLabel: String { kind == .pickems ? "PICKEMS" : "UNDERDOG PICK" }
+  private var gameColor: Color { kind == .pickems ? BoldTheme.Colors.pickemsAccent : BoldTheme.Colors.goldDeep }
+
+  var body: some View {
+    Button(action: action) {
+      BoldTheme.GlassCard(strong: false, radius: 16, padding: 14) {
+        HStack(alignment: .center, spacing: 12) {
+          VStack(alignment: .leading, spacing: 2) {
+            Text(gameLabel)
+              .font(BoldTheme.Fonts.mono(10, weight: .semibold))
+              .tracking(0.6)
+              .foregroundColor(gameColor)
+            Text(sport)
+              .font(BoldTheme.Fonts.display(22))
+              .foregroundColor(BoldTheme.Colors.text)
+            Text(blurb)
+              .font(BoldTheme.Fonts.body(12))
+              .foregroundColor(BoldTheme.Colors.textDim)
+              .lineLimit(2)
+          }
+          Spacer(minLength: 8)
+          Text("Join →")
+            .font(BoldTheme.Fonts.body(13, weight: .bold))
+            .foregroundColor(BoldTheme.Colors.green)
+            .padding(.horizontal, 14).padding(.vertical, 7)
+            .overlay(Capsule().strokeBorder(BoldTheme.Colors.green.opacity(0.55), lineWidth: 1.5))
+        }
+      }
+    }
+    .buttonStyle(.plain)
+  }
+}
+
 private struct ContestRow: View {
   enum Kind { case underdog, pickems }
   enum Status: Equatable {

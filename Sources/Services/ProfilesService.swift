@@ -8,7 +8,7 @@ struct ProfileRow: Decodable {
   let avatar_url: String?
   let has_onboarded: Bool
   let favorite_team_id: UUID?
-  let game_interests: [String]
+  var game_interests: [String]
   let pickems_intro_dismissed: Bool
   // Not a DB column -- profiles has no email column at all (email lives on
   // auth.users, which clients can't query directly). Filled in from the
@@ -111,6 +111,22 @@ struct ProfilesService {
       .update(Update(has_onboarded: true, game_interests: gameInterests, pickems_intro_dismissed: true))
       .eq("user_id", value: userId)
       .execute()
+  }
+
+  /// "Join" a contest from Home: records it in game_interests so it shows
+  /// under This Week from now on. Underdog Pick needs no group to play, so
+  /// this is all joining takes. Keys: cfb_underdog, proball_underdog, pickems.
+  func addGameInterest(_ key: String, to current: [String]) async throws -> [String] {
+    struct Update: Encodable { let game_interests: [String] }
+    guard !current.contains(key) else { return current }
+    let next = current + [key]
+    let userId = try await client.auth.session.user.id
+    _ = try await client
+      .from("profiles")
+      .update(Update(game_interests: next))
+      .eq("user_id", value: userId)
+      .execute()
+    return next
   }
 
   /// Dismisses the one-time Home banner shown to accounts that onboarded
