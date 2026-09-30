@@ -352,7 +352,7 @@ struct GamesView: View {
           )
           .clipShape(Circle())
         VStack(alignment: .leading, spacing: 2) {
-          Text("YOUR PICK THIS WEEK")
+          Text(verbatim: "WEEK \(formatWeekLabel(viewModel.selectedWeek)) PICK")
             .font(BoldTheme.Fonts.mono(10, weight: .semibold))
             .foregroundColor(textOnGreen.opacity(0.7))
           HStack(spacing: 6) {
@@ -368,7 +368,21 @@ struct GamesView: View {
           Text(verbatim: "vs \(favoriteName)")
             .font(BoldTheme.Fonts.body(12))
             .foregroundColor(textOnGreen.opacity(0.75))
-          if let sp = bankSpread {
+          // Once the game's decided, say what happened instead of what could.
+          if let pickedTeamId, g.status == "final" {
+            let won = g.outcome(forPickedTeamId: pickedTeamId) == .win
+            Text(verbatim: won
+                 ? (bankSpread.map { "Won outright — banked \(String(format: "%.1f", $0)) points." } ?? "Won outright.")
+                 : "Lost — no points this week.")
+              .font(BoldTheme.Fonts.body(11, weight: won ? .semibold : .regular))
+              .foregroundColor(won ? BoldTheme.Colors.gold : textOnGreen.opacity(0.65))
+              .padding(.top, 2)
+          } else if g.status == "in_progress" {
+            Text("Live now.")
+              .font(BoldTheme.Fonts.body(11, weight: .semibold))
+              .foregroundColor(textOnGreen.opacity(0.8))
+              .padding(.top, 2)
+          } else if let sp = bankSpread {
             Text(verbatim: "Wins outright and you bank \(String(format: "%.1f", sp)) points.")
               .font(BoldTheme.Fonts.body(11))
               .foregroundColor(textOnGreen.opacity(0.65))

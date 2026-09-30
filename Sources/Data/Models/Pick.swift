@@ -46,7 +46,7 @@ extension Pick {
       return v > 0 ? "+\(n)" : v < 0 ? "-\(n)" : "PK"
     }
     if let line = pickedLine(on: game), line <= 0 {
-      return "Now the favorite (\(fmt(line))) -- no points if they win"
+      return "Now the favorite (\(fmt(line))) — no points if they win"
     }
     if let line = pickedLine(on: game), let now = movedLine(on: game) {
       return "Locked at \(fmt(line)) · line now \(fmt(now))"
