@@ -770,6 +770,7 @@ struct GamesView: View {
           }
         }
         .listStyle(.plain)
+        .hardTopScrollEdge()
         .scrollContentBackground(.hidden)
         .background(BoldTheme.Colors.bgPage)
         .dismissKeyboardOnTap()
