@@ -8,6 +8,9 @@ final class GamesViewModel: ObservableObject {
   @Published var games: [Game] = []
   @Published var availableWeeks: [Int] = []
   @Published var selectedWeek: Int = 1
+  /// The live week for this sport (selectedWeek's starting value). Weeks
+  /// before it get a compact "your pick" note instead of the big banner.
+  @Published var currentWeek: Int = 1
   @Published var season: Int = 2025
   @Published var selectedGameId: UUID? = nil
   /// The saved pick row, for its picked team and Pro Ball locked line.
@@ -62,6 +65,7 @@ final class GamesViewModel: ObservableObject {
       let ctx = try await ContextService(client: client).getCurrentContext(sport: sport)
       season = ctx.season
       selectedWeek = ctx.week
+      currentWeek = ctx.week
       availableWeeks = try await GamesService(client: client).distinctWeeks(forSeason: season, sport: sport)
       // Inline team logo fetch to avoid TeamService dependency
       struct T: Decodable { let id: UUID; let logo_url: String? }
@@ -420,6 +424,81 @@ struct GamesView: View {
           shareImage = Image(uiImage: uiImage)
         }
       }
+    }
+  }
+
+  /// Looking back at an earlier week: a one-line reminder of what you
+  /// picked and how it went (or that you sat it out), not the full banner.
+  @ViewBuilder
+  private var pastWeekNote: some View {
+    let week = formatWeekLabel(viewModel.selectedWeek)
+    if let g = pickedGame {
+      let savedPick = viewModel.myPick?.game_id == g.id ? viewModel.myPick : nil
+      let pickedTeamId = savedPick?.picked_team_id ?? g.derivedUnderdogTeamId
+      let pickedIsHome = pickedTeamId != nil && pickedTeamId == g.homeTeamId
+      let name = (pickedIsHome ? g.homeTeam : g.awayTeam) ?? "Your pick"
+      let spread: Double? = savedPick.map { $0.winPoints(on: g) } ?? g.underdogSpread
+      let outcome = pickedTeamId.map { g.outcome(forPickedTeamId: $0) } ?? .pending
+      HStack(spacing: 10) {
+        RetryingAsyncImage(url: viewModel.logoURL(for: pickedTeamId)) { img in
+          img.resizable().scaledToFit()
+        } placeholder: {
+          Image(systemName: "football").resizable().scaledToFit().foregroundColor(BoldTheme.Colors.textFaint)
+        }
+        .frame(width: 22, height: 22)
+        Text(verbatim: "Week \(week) pick:")
+          .font(BoldTheme.Fonts.body(13))
+          .foregroundColor(BoldTheme.Colors.textDim)
+        + Text(verbatim: " \(name)")
+          .font(BoldTheme.Fonts.body(13, weight: .bold))
+          .foregroundColor(BoldTheme.Colors.text)
+        + Text(verbatim: spread.map { " +\(String(format: "%.1f", $0))" } ?? "")
+          .font(BoldTheme.Fonts.mono(12, weight: .semibold))
+          .foregroundColor(BoldTheme.Colors.goldDeep)
+        Spacer(minLength: 6)
+        switch outcome {
+        case .win:
+          Text(verbatim: spread.map { "WON +\(String(format: "%.1f", $0))" } ?? "WON")
+            .font(BoldTheme.Fonts.mono(11, weight: .semibold))
+            .foregroundColor(BoldTheme.Colors.text)
+            .padding(.horizontal, 9).padding(.vertical, 4)
+            .background(BoldTheme.Colors.gold)
+            .clipShape(Capsule())
+        case .loss:
+          Text("MISS")
+            .font(BoldTheme.Fonts.mono(11, weight: .semibold))
+            .foregroundColor(BoldTheme.Colors.textDim)
+            .padding(.horizontal, 9).padding(.vertical, 4)
+            .background(BoldTheme.Colors.track)
+            .clipShape(Capsule())
+        case .pending:
+          Text(g.status == "in_progress" ? "LIVE" : "PENDING")
+            .font(BoldTheme.Fonts.mono(11, weight: .semibold))
+            .foregroundColor(BoldTheme.Colors.textFaint)
+        }
+      }
+      .lineLimit(1)
+      .padding(.horizontal, 14).padding(.vertical, 10)
+      .background(BoldTheme.Colors.glassStrong)
+      .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(BoldTheme.Colors.glassBorder, lineWidth: 1))
+      .clipShape(RoundedRectangle(cornerRadius: 12))
+      .padding(.horizontal, 20)
+      .padding(.bottom, 10)
+    } else if !viewModel.games.isEmpty && viewModel.selectedGameId == nil {
+      HStack(spacing: 8) {
+        Image(systemName: "minus.circle")
+          .foregroundColor(BoldTheme.Colors.textFaint)
+        Text(verbatim: "No pick in Week \(week).")
+          .font(BoldTheme.Fonts.body(13))
+          .foregroundColor(BoldTheme.Colors.textDim)
+        Spacer()
+      }
+      .padding(.horizontal, 14).padding(.vertical, 10)
+      .background(BoldTheme.Colors.glassStrong)
+      .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(BoldTheme.Colors.glassBorder, lineWidth: 1))
+      .clipShape(RoundedRectangle(cornerRadius: 12))
+      .padding(.horizontal, 20)
+      .padding(.bottom, 10)
     }
   }
 
@@ -815,8 +894,12 @@ struct GamesView: View {
         }
         searchField
         swipeHintBanner
-        pickedBanner
-          .transition(.opacity.combined(with: .move(edge: .top)))
+        if viewModel.selectedWeek < viewModel.currentWeek {
+          pastWeekNote
+        } else {
+          pickedBanner
+            .transition(.opacity.combined(with: .move(edge: .top)))
+        }
         content
         if let msg = viewModel.toastMessage {
           Spacer()
