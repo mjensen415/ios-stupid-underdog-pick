@@ -571,24 +571,7 @@ struct PickemsView: View {
   private var weekPills: some View {
     Group {
       if viewModel.availableWeeks.count > 1 {
-        ScrollView(.horizontal, showsIndicators: false) {
-          HStack(spacing: 6) {
-            ForEach(viewModel.availableWeeks, id: \.self) { w in
-              let active = w == viewModel.week
-              Button {
-                viewModel.week = w
-              } label: {
-                Text("Week \(w)")
-                  .font(BoldTheme.Fonts.body(12.5, weight: .bold))
-                  .padding(.horizontal, 16).padding(.vertical, 7)
-                  .background(active ? BoldTheme.Colors.gold : BoldTheme.Colors.track)
-                  .foregroundColor(active ? BoldTheme.Colors.text : BoldTheme.Colors.textDim)
-                  .clipShape(Capsule())
-              }
-              .buttonStyle(.plain)
-            }
-          }
-        }
+        WeekPills(weeks: viewModel.availableWeeks, selected: Binding(get: { viewModel.week ?? 0 }, set: { viewModel.week = $0 }))
         .padding(.top, 14)
       }
     }

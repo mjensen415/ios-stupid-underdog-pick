@@ -299,22 +299,12 @@ struct GamesView: View {
         .frame(width: 28, height: 28)
         .clipShape(RoundedRectangle(cornerRadius: 8))
       Spacer()
-      Menu {
-        ForEach(viewModel.availableWeeks, id: \.self) { wk in
-          Button { viewModel.selectedWeek = wk } label: {
-            Label("Week \(formatWeekLabel(wk))", systemImage: wk == viewModel.selectedWeek ? "checkmark" : "circle")
-          }
-        }
-      } label: {
-        // CFB and Pro Ball run on separate week numbering (offset by
-        // roughly a week), so the sport always rides along with the
-        // week number here rather than leaving it to the sport toggle
-        // below to imply -- otherwise switching sports and seeing the
-        // week number change on its own reads as a bug, not a feature.
-        Label("\(viewModel.sport == "cfb" ? "CFB" : "PRO BALL") · Week \(formatWeekLabel(viewModel.selectedWeek))", systemImage: "calendar")
-          .font(BoldTheme.Fonts.body(14, weight: .semibold))
-          .foregroundColor(BoldTheme.Colors.goldDeep)
-      }
+      // CFB and Pro Ball run on separate week numbering (offset by
+      // roughly a week), so the sport rides along with the week number.
+      // Picking the week happens in the pill row below.
+      Label("\(viewModel.sport == "cfb" ? "CFB" : "PRO BALL") · Week \(formatWeekLabel(viewModel.selectedWeek))", systemImage: "calendar")
+        .font(BoldTheme.Fonts.body(14, weight: .semibold))
+        .foregroundColor(BoldTheme.Colors.goldDeep)
         .onChange(of: viewModel.selectedWeek) {
           Task {
             try? await viewModel.loadGames()
@@ -804,6 +794,11 @@ struct GamesView: View {
           .padding(.bottom, 10)
         groupPicker
         groupModeBanner
+        if viewModel.availableWeeks.count > 1 {
+          WeekPills(weeks: viewModel.availableWeeks, selected: $viewModel.selectedWeek)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 10)
+        }
         searchField
         swipeHintBanner
         pickedBanner
