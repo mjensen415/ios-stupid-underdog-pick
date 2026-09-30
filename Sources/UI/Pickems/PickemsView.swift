@@ -24,6 +24,8 @@ final class PickemsViewModel: ObservableObject {
   // back to the shared pick for any game not yet customized there.
   @Published var activeGroupId: UUID?
   @Published var copyingPicks = false
+  /// profiles.is_admin -- site admins see each game's line on Pickems.
+  @Published var isSiteAdmin = false
 
   private var client: SupabaseClient?
   private var userId: UUID?
@@ -68,6 +70,15 @@ final class PickemsViewModel: ObservableObject {
   func loadInitial() async {
     guard let client else { return }
     isLoading = true
+    if let userId {
+      struct AdminRow: Decodable { let is_admin: Bool? }
+      let res = try? await client.from("profiles").select("is_admin").eq("user_id", value: userId).limit(1).execute()
+      isSiteAdmin = (res.flatMap { try? JSONDecoder().decode([AdminRow].self, from: $0.data) }?.first?.is_admin) ?? false
+    }
+    #if DEBUG
+    // Simulator preview of the admin view: SIMCTL_CHILD_SUP_FORCE_ADMIN=1
+    if ProcessInfo.processInfo.environment["SUP_FORCE_ADMIN"] == "1" { isSiteAdmin = true }
+    #endif
     do {
       let ctx = try await ContextService(client: client).getCurrentContext(sport: "nfl")
       season = ctx.season
@@ -664,7 +675,8 @@ struct PickemsView: View {
           PickemsGameRowView(
             game: game,
             myPick: viewModel.myPicks[game.id],
-            pickPcts: viewModel.pickPcts[game.id] ?? [:]
+            pickPcts: viewModel.pickPcts[game.id] ?? [:],
+            showLine: viewModel.isSiteAdmin
           ) { teamId in
             Task { await viewModel.pickTeam(game, teamId: teamId) }
           }
@@ -761,7 +773,17 @@ private struct PickemsGameRowView: View {
   let game: PickemsGameRow
   let myPick: UUID?
   let pickPcts: [UUID: (count: Int, total: Int)]
+  var showLine = false
   let onPick: (UUID) -> Void
+
+  /// "PIT -2.5" (favorite and its number), or "PK". Admin-only.
+  private var lineText: String? {
+    guard showLine, let s = game.latestSpread else { return nil }
+    if s == 0 { return "PK" }
+    let fav = (s < 0 ? game.homeName : game.awayName) ?? "Fav"
+    let n = abs(s) == abs(s).rounded() ? String(format: "%.0f", abs(s)) : String(format: "%.1f", abs(s))
+    return "\(fav) -\(n)"
+  }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 8) {
@@ -773,6 +795,16 @@ private struct PickemsGameRowView: View {
           .font(BoldTheme.Fonts.mono(9.5, weight: .bold))
           .tracking(0.8)
           .foregroundColor(game.isLive ? Color(hex: 0xC6402A) : BoldTheme.Colors.textFaint)
+        Spacer(minLength: 6)
+        if let lineText {
+          Text(verbatim: lineText)
+            .font(BoldTheme.Fonts.mono(10, weight: .semibold))
+            .foregroundColor(BoldTheme.Colors.goldDeep)
+            .padding(.horizontal, 7).padding(.vertical, 2)
+            .background(BoldTheme.Colors.gold.opacity(0.18))
+            .clipShape(Capsule())
+            .accessibilityLabel("Line \(lineText), admin only")
+        }
       }
       HStack(spacing: 10) {
         teamButton(teamId: game.awayTeamId, name: game.awayName, logo: game.awayLogoUrl, points: game.awayPoints)

@@ -18,9 +18,13 @@ struct PickemsGameRow: Decodable, Identifiable {
   let startTime: Date
   let homePoints: Int?
   let awayPoints: Int?
+  /// Home-relative spread -- shown to site admins only (Pickems is straight
+  /// winners, no spreads, for everyone else).
+  var latestSpread: Double? = nil
 
   enum CodingKeys: String, CodingKey {
     case id, status
+    case latestSpread = "latest_spread"
     case homeTeamId = "home_team_id"
     case awayTeamId = "away_team_id"
     case homeName = "home_name"
@@ -141,7 +145,7 @@ struct PickemsService {
   func fetchGames(season: Int, week: Int, sport: String = "nfl") async throws -> [PickemsGameRow] {
     let res = try await client
       .from("v_games_named")
-      .select("id, home_team_id, away_team_id, home_name, away_name, home_logo_url, away_logo_url, status, start_time, home_points, away_points")
+      .select("id, home_team_id, away_team_id, home_name, away_name, home_logo_url, away_logo_url, status, start_time, home_points, away_points, latest_spread")
       .eq("season", value: season)
       .eq("week", value: week)
       .eq("sport", value: sport)
