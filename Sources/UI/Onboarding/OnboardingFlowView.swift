@@ -68,7 +68,7 @@ struct OnboardingFlowView: View {
   // Group of 5 first, National catch-all last.
   private static let conferenceOrder = [
     "SEC", "Big Ten", "Big 12", "ACC",
-    "American Athletic", "Mountain West", "Sun Belt", "Conference USA", "MAC", "Independent",
+    "American Athletic", "Mountain West", "Pac-12", "Sun Belt", "Conference USA", "MAC", "Independent",
     "National",
   ]
 
