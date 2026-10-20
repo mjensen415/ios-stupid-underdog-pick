@@ -35,6 +35,9 @@ struct ProfileView: View {
   @State private var isDeletingAccount = false
   @State private var deleteError: String?
 
+  /// Legal/info page currently open in the in-app Safari sheet.
+  @State private var safariURL: IdentifiableURL?
+
   var body: some View {
     NavigationStack {
       Form {
@@ -223,6 +226,21 @@ struct ProfileView: View {
             .listRowBackground(BoldTheme.Colors.bgPage)
         }
 
+        // Outside the `if let profile` above so the links stay reachable even
+        // when the profile fails to load -- App Store guideline 5.1.1(i)
+        // wants the privacy policy reachable in the app, not only in the
+        // store listing.
+        Section {
+          legalLink("About SUP", SiteLinks.about)
+          legalLink("Terms of Service", SiteLinks.terms)
+          legalLink("Privacy Policy", SiteLinks.privacy)
+          legalLink("Responsible Gaming", SiteLinks.responsibleGaming)
+          legalLink("Disclosures", SiteLinks.disclosures)
+        } header: {
+          Label("About & Legal", systemImage: "doc.text")
+        }
+        .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
+
         Section {
           Button("Sign Out", role: .destructive) {
             Task {
@@ -273,8 +291,25 @@ struct ProfileView: View {
       // LeaderboardView.swift for the same fix and rationale.
       .toolbarColorScheme(.light, for: .navigationBar)
       .task { await load() }
+      .sheet(item: $safariURL) { item in
+        SafariView(url: item.url).ignoresSafeArea()
+      }
     }
     .tint(BoldTheme.Colors.gold)
+  }
+
+  private func legalLink(_ title: String, _ url: URL) -> some View {
+    Button {
+      safariURL = IdentifiableURL(url: url)
+    } label: {
+      HStack {
+        Text(title).foregroundColor(BoldTheme.Colors.text)
+        Spacer()
+        Image(systemName: "arrow.up.right")
+          .font(.system(size: 12, weight: .semibold))
+          .foregroundColor(BoldTheme.Colors.textFaint)
+      }
+    }
   }
 
   private var avatarPlaceholder: some View {
