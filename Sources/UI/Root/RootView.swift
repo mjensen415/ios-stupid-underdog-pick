@@ -3,6 +3,7 @@ import UIKit
 
 struct RootView: View {
   @EnvironmentObject var appState: AppState
+  @EnvironmentObject var featureFlags: FeatureFlagStore
   @Environment(\.scenePhase) private var scenePhase
   @State private var showOnboarding = false
   @State private var lastUpdateCheck: Date?
@@ -88,7 +89,11 @@ struct RootView: View {
     // with an existing session already restored -- .task(id:) only
     // re-fires when the id itself changes).
     .task(id: appState.session?.user.id) {
-      guard let client = appState.client, appState.session != nil else { return }
+      guard let client = appState.client else { return }
+      // Flags load for signed-out users too (anon can read them); the admin
+      // override is re-checked whenever the signed-in user changes.
+      await featureFlags.refresh(client: client, userId: appState.session?.user.id, force: true)
+      guard appState.session != nil else { return }
       let profile = try? await ProfilesService(client: client).fetchMyProfile()
       let needsOnboarding = profile?.has_onboarded == false
       // Clipboard invite check only for a brand-new account (see
@@ -117,7 +122,12 @@ struct RootView: View {
     // already dismissed that specific version.
     .task { await checkForUpdate(force: true) }
     .onChange(of: scenePhase) { _, phase in
-      if phase == .active { Task { await checkForUpdate() } }
+      guard phase == .active else { return }
+      Task { await checkForUpdate() }
+      // Cached for 5 minutes, so this only refetches when actually stale.
+      if let client = appState.client {
+        Task { await featureFlags.refresh(client: client, userId: appState.session?.user.id) }
+      }
     }
     .overlay {
       if let config = appState.updateRequired {
@@ -130,7 +140,7 @@ struct RootView: View {
 
 struct RootView_Previews: PreviewProvider {
   static var previews: some View {
-    RootView().environmentObject(AppState())
+    RootView().environmentObject(AppState()).environmentObject(FeatureFlagStore())
   }
 }
 

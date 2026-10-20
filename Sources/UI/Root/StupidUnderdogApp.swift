@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct StupidUnderdogApp: App {
   @StateObject private var appState = AppState()
+  @StateObject private var featureFlags = FeatureFlagStore()
   @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
   var body: some Scene {
@@ -20,6 +21,7 @@ struct StupidUnderdogApp: App {
         } else if let client = appState.client {
           RootView()
             .environmentObject(appState)
+            .environmentObject(featureFlags)
             .environment(\.supabaseClient, client)
         } else {
           ZStack {
