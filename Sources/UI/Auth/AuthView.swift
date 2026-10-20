@@ -3,7 +3,7 @@ import Supabase
 
 // .forgot mirrors the web Auth.tsx's third mode: same card, email only,
 // sends a password-reset link instead of signing in.
-private enum AuthMode { case signin, signup, forgot }
+enum AuthMode { case signin, signup, forgot }
 
 struct AuthView: View {
   @EnvironmentObject var appState: AppState
@@ -24,6 +24,12 @@ struct AuthView: View {
   /// Read once per appearance -- AuthView is rebuilt after every sign-out,
   /// so this is always the method from the most recent sign-in.
   @State private var lastUsed: LoginMethod? = LastLoginStore.lastMethod()
+
+  /// Defaults to sign-in. Taking a starting mode lets the snapshot tests
+  /// render the forgot-password card without driving taps.
+  init(initialMode: AuthMode = .signin) {
+    _mode = State(initialValue: initialMode)
+  }
 
   var body: some View {
     ZStack {
@@ -123,19 +129,19 @@ struct AuthView: View {
             .padding(.bottom, 7)
             BoldTextField(text: $password, placeholder: "••••••••", isSecure: !showPassword, textContentType: .password)
 
-            HStack(alignment: .top) {
+            // Stacked and right-aligned like the web's lone "Forgot it?" link;
+            // side by side, the two links wrapped mid-phrase on a phone.
+            VStack(alignment: .trailing, spacing: 10) {
               // Same copy as web. Only offered while signing in -- someone
               // creating an account has no password to forget yet.
               if mode == .signin {
                 Button("Forgot it? Happens to the best of us.") { setMode(.forgot) }
-                  .multilineTextAlignment(.leading)
               }
-              Spacer(minLength: 12)
               Button("Use a magic link instead") { showMagicLink = true }
-                .multilineTextAlignment(.trailing)
             }
             .font(BoldTheme.Fonts.body(13))
             .foregroundColor(BoldTheme.Colors.textDim)
+            .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(.top, 10)
             .padding(.bottom, 20)
           } else {
