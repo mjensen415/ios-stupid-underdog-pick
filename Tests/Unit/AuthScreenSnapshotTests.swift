@@ -38,6 +38,17 @@ final class AuthScreenSnapshotTests: XCTestCase {
     try await snapshot(AuthView(), name: "08-signin-last-used-apple")
   }
 
+  /// Native Sign in with Apple button, nothing tagged LAST USED.
+  func testSignInNativeAppleButton() async throws {
+    UserDefaults.standard.removeObject(forKey: lastLoginKey)
+    try await snapshot(AuthView(), name: "10-signin-native-apple")
+  }
+
+  func testSignUpNativeAppleButton() async throws {
+    UserDefaults.standard.removeObject(forKey: lastLoginKey)
+    try await snapshot(AuthView(initialMode: .signup), name: "10b-signup-native-apple")
+  }
+
   func testForgotPasswordCard() async throws {
     UserDefaults.standard.removeObject(forKey: lastLoginKey)
     try await snapshot(AuthView(initialMode: .forgot), name: "09-forgot-password")

@@ -131,36 +131,32 @@ struct AuthService {
     throw AuthError.noSessionReturned
   }
 
-  /// Apple OAuth (requires Supabase redirect URL: sup://underdog). Same
-  /// ASWebAuthenticationSession flow as Google -- Supabase's Apple provider
-  /// is already configured with the Services ID, so no native
-  /// AuthenticationServices/SIWA button is needed here.
+  /// Native Sign in with Apple: the ID token from the system Apple ID
+  /// sheet, verified by Supabase against the raw nonce. Needs the iOS bundle
+  /// id (com.stupidunderdogpick.app) in the Supabase Apple provider's
+  /// Client IDs, alongside the web Services ID. Apple user ids are
+  /// team-scoped, so accounts made through the web flow match.
   @MainActor
   @discardableResult
-  func signInWithApple(redirect: URL) async throws -> Session {
+  func signInWithApple(credential: AppleCredential) async throws -> Session {
+    let session = try await client.auth.signInWithIdToken(
+      credentials: OpenIDConnectCredentials(provider: .apple, idToken: credential.idToken, nonce: credential.rawNonce)
+    )
     #if DEBUG
-    print("[Auth][Apple] starting OAuth with redirect:", redirect.absoluteString)
+    print("[Auth][Apple] native sign-in ok. user:", session.user.id.uuidString)
     #endif
 
-    try await client.auth.signInWithOAuth(
-      provider: .apple,
-      redirectTo: redirect
-    )
-
-    for attempt in 0..<20 {
-      if let s = try? await client.auth.session {
-        #if DEBUG
-        print("[Auth][Apple] session ok after callback. attempts:", attempt)
-        #endif
-        return s
-      }
-      try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
+    // Apple's ID token never carries the name, and Apple only sends it the
+    // first time someone authorizes the app -- keep it, like the web flow
+    // does, unless the account already has one.
+    if let name = credential.displayName, session.user.userMetadata["full_name"]?.stringValue?.isEmpty ?? true {
+      _ = try? await client.auth.update(user: UserAttributes(data: ["full_name": .string(name)]))
     }
 
-    #if DEBUG
-    print("[Auth][Apple][ERR] no session after OAuth callback.")
-    #endif
-    throw AuthError.noSessionReturned
+    if let code = credential.authorizationCode {
+      Task.detached { await AppleTokenService.registerAuthorizationCode(code, client: client) }
+    }
+    return session
   }
 }
 

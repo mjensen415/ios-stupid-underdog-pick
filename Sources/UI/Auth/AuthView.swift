@@ -1,3 +1,4 @@
+import AuthenticationServices
 import SwiftUI
 import Supabase
 
@@ -16,6 +17,8 @@ struct AuthView: View {
   @State private var loading = false
   @State private var googleLoading = false
   @State private var appleLoading = false
+  /// Raw nonce for the Apple request in flight (Apple gets its SHA-256).
+  @State private var appleNonce: String?
   @State private var errorMessage: String?
   @State private var showMagicLink = false
   /// Set once a reset link was requested; the forgot card swaps its button
@@ -85,11 +88,27 @@ struct AuthView: View {
             .lastUsedTab(lastUsed == .google)
             .padding(.bottom, 10)
 
-            BoldOAuthButton(style: .glass, title: "Continue with Apple", isLoading: appleLoading) {
-              Task { await signInWithApple() }
-            } icon: {
-              AnyView(Image(systemName: "apple.logo").font(.system(size: 16)))
+            // Apple's own button (HIG: system button, not a look-alike).
+            // Black reads clearly on the light card; the app is light-only.
+            SignInWithAppleButton(mode == .signup ? .signUp : .continue) { request in
+              let nonce = AppleNonce.random()
+              appleNonce = nonce
+              configureAppleRequest(request, rawNonce: nonce, scopes: [.fullName, .email])
+            } onCompletion: { result in
+              Task { await finishAppleSignIn(result) }
             }
+            .signInWithAppleButtonStyle(.black)
+            // The system button keeps the label it was created with.
+            .id(mode == .signup)
+            .frame(height: 52)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+            .overlay {
+              if appleLoading {
+                RoundedRectangle(cornerRadius: 14).fill(.black)
+                ProgressView().tint(.white)
+              }
+            }
+            .allowsHitTesting(!appleLoading && client != nil)
             .lastUsedTab(lastUsed == .apple)
 
             HStack(spacing: 12) {
@@ -295,18 +314,32 @@ struct AuthView: View {
     }
   }
 
-  private func signInWithApple() async {
-    appleLoading = true
-    defer { appleLoading = false }
-    do {
-      guard let client else { throw URLError(.notConnectedToInternet) }
-      let auth = AuthService(client: client)
-      guard let redirect = URL(string: "sup://underdog") else { throw URLError(.badURL) }
-      let session = try await auth.signInWithApple(redirect: redirect)
-      LastLoginStore.remember(user: session.user)
-      appState.session = session
-    } catch {
-      errorMessage = "Apple sign-in didn't complete. Try again."
+  private func finishAppleSignIn(_ result: Result<ASAuthorization, Error>) async {
+    errorMessage = nil
+    let nonce = appleNonce
+    appleNonce = nil
+    switch result {
+    case .failure(let error):
+      // Closing the Apple sheet isn't an error worth showing.
+      if !AppleCredential.isCancel(error) {
+        errorMessage = "Apple sign-in didn't complete. Try again."
+      }
+    case .success(let authorization):
+      appleLoading = true
+      defer { appleLoading = false }
+      do {
+        guard let client else { throw URLError(.notConnectedToInternet) }
+        guard let nonce else { throw AppleCredential.Failure.missingToken }
+        let credential = try AppleCredential(authorization: authorization, rawNonce: nonce)
+        let session = try await AuthService(client: client).signInWithApple(credential: credential)
+        LastLoginStore.remember(user: session.user)
+        appState.session = session
+      } catch {
+        #if DEBUG
+        print("[Auth][Apple][ERR]", error.localizedDescription)
+        #endif
+        errorMessage = "Apple sign-in didn't complete. Try again."
+      }
     }
   }
 
@@ -333,8 +366,8 @@ struct AuthView: View {
 // "LAST USED" tab that sits on top of the sign-in button this device used
 // last -- the web's <LastUsed> wrapper: a green tab 22pt tall, inset 18pt
 // each side. Web tucks the tab's bottom under the button; here it stops at
-// the button's edge instead, since the Apple button's background is only 5%
-// opaque and an overlapping tab would show through it as a green strip.
+// the button's edge instead, so it never covers part of Apple's system
+// button (HIG: don't alter or obscure it) or the Google chip.
 private struct LastUsedTab: ViewModifier {
   let show: Bool
 
