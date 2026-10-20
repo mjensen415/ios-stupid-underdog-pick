@@ -26,7 +26,7 @@ struct MainTabView: View {
         .tag(0)
 
       GamesTab()
-        .tabItem { Label(appState.currentGame == .pickems ? "Pick" : "Games", systemImage: "sportscourt") }
+        .tabItem { Label(appState.hpSport == nil && appState.currentGame == .pickems ? "Pick" : "Games", systemImage: "sportscourt") }
         .tag(1)
 
       MyPicksView()
@@ -59,7 +59,10 @@ private struct GamesTab: View {
   @EnvironmentObject private var appState: AppState
   @Environment(\.supabaseClient) private var client
   var body: some View {
-    if appState.currentGame == .pickems {
+    if let hp = appState.hpSport {
+      SportLeagueView(sport: hp)
+        .id(hp)
+    } else if appState.currentGame == .pickems {
       PickemsView()
     } else if let client {
       GamesView(viewModel: .init(client: client))

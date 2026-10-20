@@ -61,6 +61,17 @@ final class AppState: ObservableObject {
     currentGame = .pickems
     requestedTab = 1
   }
+
+  /// Hoops / Pucks (pro basketball / pro hockey) groups. Separate products
+  /// with their own groups, so they don't change `currentGame` (CFB / Pro
+  /// Ball / Pickems) -- like the web, where picking one navigates to its own
+  /// page. Non-nil means the Games tab shows that sport's page.
+  @Published var hpSport: HpSport?
+
+  func goToHoopsPucks(_ sport: HpSport) {
+    hpSport = sport
+    requestedTab = 1
+  }
 }
 
 enum CurrentGame: String {
