@@ -45,6 +45,55 @@ struct AuthService {
     }
   }
 
+  // MARK: - Password reset
+  /// Emails a reset link that lands on the website's /set-new-password page
+  /// (same redirect as the web's Auth.tsx), where the new password is set.
+  ///
+  /// Deliberately bypasses client.auth.resetPasswordForEmail: this client
+  /// uses PKCE (supabase-swift's default), which would put a ?code= link in
+  /// the email whose code verifier only exists on this phone -- the web page
+  /// can't redeem it. The web client uses the implicit flow (tokens in the
+  /// URL hash, which SetNewPassword picks up), so send the same request the
+  /// web sends: POST /auth/v1/recover with no code_challenge.
+  ///
+  /// Supabase answers 200 whether or not the email has an account (no
+  /// account enumeration). Its built-in sender allows ~3 emails/hour for the
+  /// whole project, so a 429 here is expected now and then.
+  func sendPasswordReset(email: String) async throws {
+    guard let config = SupabaseClientProvider.projectConfig() else { throw AuthError.noClient }
+    var components = URLComponents(
+      url: config.url.appendingPathComponent("auth/v1/recover"),
+      resolvingAgainstBaseURL: false
+    )
+    components?.queryItems = [URLQueryItem(name: "redirect_to", value: SiteLinks.setNewPassword.absoluteString)]
+    guard let url = components?.url else { throw URLError(.badURL) }
+
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.setValue(config.anonKey, forHTTPHeaderField: "apikey")
+    request.setValue("Bearer \(config.anonKey)", forHTTPHeaderField: "Authorization")
+    request.httpBody = try JSONEncoder().encode(["email": email])
+
+    let (data, response) = try await URLSession.shared.data(for: request)
+    let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+    guard (200..<300).contains(status) else {
+      struct GoTrueError: Decodable { let msg: String?; let message: String?; let error_description: String? }
+      let body = try? JSONDecoder().decode(GoTrueError.self, from: data)
+      throw PasswordResetError(
+        status: status,
+        message: body?.msg ?? body?.message ?? body?.error_description ?? "Request failed (\(status))."
+      )
+    }
+  }
+
+  struct PasswordResetError: LocalizedError {
+    let status: Int
+    let message: String
+    var isRateLimited: Bool { status == 429 }
+    var errorDescription: String? { message }
+  }
+
   // MARK: - Magic Link / OAuth
   @MainActor
   func sendMagicLink(to email: String, redirectTo: URL?) async throws {

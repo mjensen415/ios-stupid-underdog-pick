@@ -82,6 +82,19 @@ final class SupabaseClientProvider {
     return config
   }
 
+  /// Project URL + anon key, resolved the same way makeClient does. For the
+  /// rare call that has to go straight to the Auth REST API instead of
+  /// through SupabaseClient (see AuthService.sendPasswordReset).
+  static func projectConfig() -> (url: URL, anonKey: String)? {
+    let (urlString, _) = resolveValue(keys: ["SUPABASE_URL"], overrides: ["supabase_url_override"])
+    let (anonKey, _) = resolveValue(keys: ["SUPABASE_ANON_KEY"], overrides: ["supabase_anon_override"])
+    guard let raw = urlString?.trimmingCharacters(in: .whitespacesAndNewlines),
+          let url = URL(string: raw),
+          let key = anonKey?.trimmingCharacters(in: .whitespacesAndNewlines), !key.isEmpty
+    else { return nil }
+    return (url, key)
+  }
+
   /// Try ENV → Info.plist → UserDefaults override
   private static func resolveValue(keys: [String], overrides: [String]) -> (String?, ConfigSource?) {
     // 1) ENV

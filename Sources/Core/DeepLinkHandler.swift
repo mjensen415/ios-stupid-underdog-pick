@@ -31,6 +31,8 @@ struct DeepLinkHandler {
     do {
       try await client.auth.session(from: url)
       let session = try? await client.auth.session
+      // Magic links land here; their identity is "email", same as the web.
+      if let user = session?.user { LastLoginStore.remember(user: user) }
       appState.session = session
       #if DEBUG
       print("[DeepLink] session restored via URL:", url.absoluteString)
