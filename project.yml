@@ -63,6 +63,9 @@ targets:
   Stupid Underdog PickTests:
     type: bundle.unit-test
     platform: iOS
+    # Same floor as the app -- without it the test bundle defaults to the
+    # newest SDK and won't run on an older simulator runtime.
+    deploymentTarget: "17.0"
     sources:
       - path: Tests
     dependencies:
