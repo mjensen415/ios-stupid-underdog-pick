@@ -719,11 +719,9 @@ private struct InviteManagementSection: View {
       let result = try await GroupsService(client: client).createInvite(
         groupId: group.id, maxUses: nil, expiresAt: nil, emails: emails.isEmpty ? nil : emails
       )
-      // www.stupidunderdogpick.com is the only domain that serves directly
-      // with no redirect -- sup.football and the bare stupidunderdogpick.com
-      // both redirect at the Vercel domain level, which breaks Apple's
-      // no-redirect apple-app-site-association fetch requirement.
-      justCreatedLink = "https://www.stupidunderdogpick.com\(result.joinUrl)"
+      // Built on the apex (see SiteLinks) -- the only host that serves the
+      // AASA file without a redirect, so the link opens the app.
+      justCreatedLink = SiteLinks.url(path: result.joinUrl)?.absoluteString
       justCreatedEmailResults = result.emailResults ?? []
       emailsInput = ""
       await viewModel.loadInvites()

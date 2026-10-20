@@ -443,7 +443,7 @@ struct HomeView: View {
     guard let client else { return }
     do {
       let result = try await GroupsService(client: client).createInvite(groupId: group.group_id, maxUses: nil, expiresAt: nil)
-      guard let url = URL(string: "https://www.stupidunderdogpick.com\(result.joinUrl)") else { return }
+      guard let url = SiteLinks.url(path: result.joinUrl) else { return }
       shareURL = url
       showShareSheet = true
     } catch {

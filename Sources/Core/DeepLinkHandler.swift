@@ -2,11 +2,13 @@ import Foundation
 import Supabase
 
 // Single entry point for every incoming URL: the sup://underdog custom
-// scheme (magic-link/OAuth callback) and https://www.stupidunderdogpick.com/...
-// universal links (group invites) -- sup.football and the bare
-// stupidunderdogpick.com both redirect at the Vercel domain level, which
-// breaks Apple's no-redirect apple-app-site-association fetch requirement,
-// so www.stupidunderdogpick.com is the only domain actually registered.
+// scheme (magic-link/OAuth callback) and https universal links (group
+// invites). Since Oct 19 2026 the apex stupidunderdogpick.com is canonical
+// and www/sup.football 308 to it; Apple won't follow a redirect when it
+// fetches apple-app-site-association, so the apex is the registered domain
+// that actually works. www stays in the entitlements for old links (harmless
+// -- iOS just can't verify it while it redirects). Routing below is by path
+// only, so links on either host behave the same.
 // Both StupidUnderdogApp.onOpenURL and any future universal-link entry
 // point should delegate here rather than re-implementing routing inline.
 @MainActor
