@@ -8,6 +8,8 @@ import Supabase
 /// LAST 3 and where-to-watch chips. The pick itself still goes through
 /// GamesViewModel.pickUnderdog / clearPickForWeek (same server calls).
 struct PickCardSheet: View {
+  /// The game as it was when the card opened. Everything on the card reads
+  /// `shown`, which picks up a moved line once the player confirms it.
   let game: Game
   let logoFor: (UUID?) -> URL?
   /// This game is already the user's pick for the week.
@@ -18,8 +20,11 @@ struct PickCardSheet: View {
   /// watch_links is on (or admin) and the game has an ESPN id.
   let watchEnabled: Bool
   let watchLinks: [WatchLink]
-  /// True when the pick saved.
-  let onLock: () async -> Bool
+  /// Re-reads the line just before locking (web parity: IndexBold's
+  /// fetchCurrentDogSpread). Defaults to "unchanged" for previews/tests.
+  var checkLine: (Game) async -> LineCheck = { _ in .unchanged }
+  /// Locks the given game (with the confirmed line). True when it saved.
+  let onLock: (Game) async -> Bool
   let onClear: () async -> Void
 
   @Environment(\.supabaseClient) private var client
@@ -28,18 +33,42 @@ struct PickCardSheet: View {
   @State private var loadingForm = false
   @State private var working = false
   @State private var lockedTick = 0
+  @State private var shown: Game
+  /// Set when the re-check found a new number for the same underdog.
+  @State private var movedSpread: Double?
+  @State private var lineFlipped = false
+  @State private var checkingLine = false
 
-  private var homeIsDog: Bool { game.derivedUnderdogTeamId != nil && game.derivedUnderdogTeamId == game.homeTeamId }
-  private var favName: String { homeIsDog ? (game.awayTeam ?? "Away") : (game.homeTeam ?? "Home") }
-  private var dogName: String { homeIsDog ? (game.homeTeam ?? "Home") : (game.awayTeam ?? "Away") }
-  private var favId: UUID? { homeIsDog ? game.awayTeamId : game.homeTeamId }
-  private var dogId: UUID? { homeIsDog ? game.homeTeamId : game.awayTeamId }
-  private var spread: String? { game.underdogSpread.map(jsNumber) }
+  init(game: Game, logoFor: @escaping (UUID?) -> URL?, isCurrentPick: Bool, hasOtherPick: Bool, isPro: Bool,
+       watchEnabled: Bool, watchLinks: [WatchLink], checkLine: @escaping (Game) async -> LineCheck = { _ in .unchanged },
+       onLock: @escaping (Game) async -> Bool, onClear: @escaping () async -> Void,
+       initialMovedSpread: Double? = nil) {
+    self.game = game
+    self.logoFor = logoFor
+    self.isCurrentPick = isCurrentPick
+    self.hasOtherPick = hasOtherPick
+    self.isPro = isPro
+    self.watchEnabled = watchEnabled
+    self.watchLinks = watchLinks
+    self.checkLine = checkLine
+    self.onLock = onLock
+    self.onClear = onClear
+    _shown = State(initialValue: game)
+    // Lets the snapshot test render the "line moved" state without a tap.
+    _movedSpread = State(initialValue: initialMovedSpread)
+  }
+
+  private var homeIsDog: Bool { shown.derivedUnderdogTeamId != nil && shown.derivedUnderdogTeamId == shown.homeTeamId }
+  private var favName: String { homeIsDog ? (shown.awayTeam ?? "Away") : (shown.homeTeam ?? "Home") }
+  private var dogName: String { homeIsDog ? (shown.homeTeam ?? "Home") : (shown.awayTeam ?? "Away") }
+  private var favId: UUID? { homeIsDog ? shown.awayTeamId : shown.homeTeamId }
+  private var dogId: UUID? { homeIsDog ? shown.homeTeamId : shown.awayTeamId }
+  private var spread: String? { shown.underdogSpread.map(jsNumber) }
 
   private var kickoffText: String {
     let f = DateFormatter()
     f.dateFormat = "EEE, MMM d · h:mm a"
-    return f.string(from: game.startTime).uppercased()
+    return f.string(from: shown.startTime).uppercased()
   }
 
   var body: some View {
@@ -98,7 +127,7 @@ struct PickCardSheet: View {
             .padding(.bottom, 14)
         }
 
-        if game.sport == "nfl" && !isCurrentPick {
+        if shown.sport == "nfl" && !isCurrentPick {
           Text("Pro Ball lines move during the week. Your line locks in when you pick.")
             .font(BoldTheme.Fonts.body(12))
             .foregroundColor(BoldTheme.Colors.textDim)
@@ -109,7 +138,7 @@ struct PickCardSheet: View {
           HStack {
             Spacer()
             if isPro {
-              WatchChips(links: watchLinks, live: game.status == "in_progress")
+              WatchChips(links: watchLinks, live: shown.status == "in_progress")
             } else {
               WatchProTeaser()
             }
@@ -142,16 +171,21 @@ struct PickCardSheet: View {
           .buttonStyle(.plain)
           .disabled(working)
         } else {
+          if let movedSpread {
+            movedLineConfirm(movedSpread)
+          } else if lineFlipped {
+            Text("The line flipped since you opened this game. \(dogName) isn't the underdog anymore. Close it and pick again.")
+              .font(BoldTheme.Fonts.body(13))
+              .foregroundColor(BoldTheme.Colors.text)
+              .multilineTextAlignment(.center)
+              .frame(maxWidth: .infinity)
+              .padding(.horizontal, 14).padding(.vertical, 12)
+              .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(BoldTheme.Colors.gold, lineWidth: 1))
+          } else {
           Button {
-            Task {
-              working = true
-              let saved = await onLock()
-              working = false
-              if saved { lockedTick += 1 }
-              dismiss()
-            }
+            Task { await lockIn() }
           } label: {
-            Text(working ? "LOCKING IN…" : "LOCK IN \(dogName.uppercased())")
+            Text(checkingLine ? "CHECKING LATEST LINE…" : working ? "LOCKING IN…" : "LOCK IN \(dogName.uppercased())")
               .font(BoldTheme.Fonts.display(22))
               .tracking(1)
               .lineLimit(1)
@@ -162,8 +196,9 @@ struct PickCardSheet: View {
               .background(RoundedRectangle(cornerRadius: 14).fill(BoldTheme.Colors.green))
           }
           .buttonStyle(.plain)
-          .disabled(working)
+          .disabled(working || checkingLine)
           .accessibilityHint(hasOtherPick ? "Replaces your current pick for this week" : "")
+          }
           if hasOtherPick {
             Text("This replaces your current pick for the week.")
               .font(BoldTheme.Fonts.body(11.5))
@@ -182,7 +217,7 @@ struct PickCardSheet: View {
     .presentationDragIndicator(.visible)
     .presentationBackground(BoldTheme.Colors.track)
     .sensoryFeedback(.success, trigger: lockedTick)
-    .task(id: game.id) { await loadForm() }
+    .task(id: shown.id) { await loadForm() }
   }
 
   @ViewBuilder
@@ -212,13 +247,70 @@ struct PickCardSheet: View {
     .frame(maxWidth: .infinity)
   }
 
+  /// Web's lockIn(): re-check the line, pause on a change, else commit.
+  private func lockIn() async {
+    checkingLine = true
+    let check = await checkLine(shown)
+    checkingLine = false
+    switch check {
+    case .unchanged: await commit(shown)
+    case .moved(let spread): movedSpread = spread
+    case .flipped: lineFlipped = true
+    }
+  }
+
+  /// Web's confirmMovedSpread(): take the new number (same underdog, so the
+  /// home-relative sign is unchanged) and lock in at it.
+  private func confirmMovedSpread() async {
+    guard let spread = movedSpread else { return }
+    let homeIsDogNow = homeIsDog
+    shown = shown.withLatestSpread(homeIsDogNow ? spread : -spread)
+    movedSpread = nil
+    await commit(shown)
+  }
+
+  private func commit(_ g: Game) async {
+    working = true
+    let saved = await onLock(g)
+    working = false
+    if saved { lockedTick += 1 }
+    dismiss()
+  }
+
+  /// Web's "The spread moved -- X is now +N. Confirm at the new number?" box.
+  private func movedLineConfirm(_ spread: Double) -> some View {
+    VStack(spacing: 10) {
+      (Text("The spread moved. \(dogName) is now ")
+        + Text(verbatim: "+\(jsNumber(spread))").font(BoldTheme.Fonts.display(17)).foregroundColor(BoldTheme.Colors.goldDeep)
+        + Text(". Confirm at the new number?"))
+        .font(BoldTheme.Fonts.body(13))
+        .foregroundColor(BoldTheme.Colors.text)
+        .multilineTextAlignment(.center)
+      Button {
+        Task { await confirmMovedSpread() }
+      } label: {
+        Text(working ? "LOCKING IN…" : "CONFIRM AT +\(jsNumber(spread))")
+          .font(BoldTheme.Fonts.display(22))
+          .tracking(1)
+          .foregroundColor(BoldTheme.Colors.green)
+          .frame(maxWidth: .infinity, minHeight: 54)
+          .background(RoundedRectangle(cornerRadius: 12).fill(BoldTheme.Colors.gold))
+      }
+      .buttonStyle(.plain)
+      .disabled(working)
+    }
+    .padding(.horizontal, 14).padding(.vertical, 12)
+    .frame(maxWidth: .infinity)
+    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(BoldTheme.Colors.gold, lineWidth: 1))
+  }
+
   private func loadForm() async {
     guard isPro, let client, form == nil else { return }
     loadingForm = true
     defer { loadingForm = false }
     let svc = ProDataService(client: client)
-    async let fav = svc.recentForm(sport: game.sport, teamId: favId, teamName: favName, before: game.startTime)
-    async let dog = svc.recentForm(sport: game.sport, teamId: dogId, teamName: dogName, before: game.startTime)
+    async let fav = svc.recentForm(sport: shown.sport, teamId: favId, teamName: favName, before: shown.startTime)
+    async let dog = svc.recentForm(sport: shown.sport, teamId: dogId, teamName: dogName, before: shown.startTime)
     form = await (fav, dog)
   }
 }

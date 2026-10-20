@@ -52,9 +52,23 @@ final class ProSnapshotTests: XCTestCase {
     pro._setForTesting(hasPro: true, optin: .none)
     let sheet = Color.clear.sheet(isPresented: .constant(true)) {
       PickCardSheet(game: g, logoFor: { $0.flatMap { logoMap[$0] } }, isCurrentPick: false, hasOtherPick: false, isPro: true,
-                    watchEnabled: ids[g.id] != nil, watchLinks: links, onLock: { false }, onClear: {})
+                    watchEnabled: ids[g.id] != nil, watchLinks: links, onLock: { _ in false }, onClear: {})
     }
     try await snapshot(sheet, pro: pro, name: "pro-06-pick-card-pro", wait: 5)
+  }
+
+  /// Lock-in re-check: the "spread moved, confirm at +X?" state, for a
+  /// real upcoming game with its line nudged 1.5 points (free tier).
+  func testPickCardLineMoved() async throws {
+    let client = try SupabaseClientProvider.makeClient()
+    let g = try await upcomingGame(client: client)
+    let logoMap = await logos(client: client)
+    let moved = (g.underdogSpread ?? 3) + 1.5
+    let sheet = Color.clear.sheet(isPresented: .constant(true)) {
+      PickCardSheet(game: g, logoFor: { $0.flatMap { logoMap[$0] } }, isCurrentPick: false, hasOtherPick: false, isPro: false,
+                    watchEnabled: false, watchLinks: [], onLock: { _ in false }, onClear: {}, initialMovedSpread: moved)
+    }
+    try await snapshot(sheet, pro: ProStore(), name: "11-pick-card-line-moved", wait: 4)
   }
 
   /// Layout A rows with Pro watch capsules, from this week's real games.

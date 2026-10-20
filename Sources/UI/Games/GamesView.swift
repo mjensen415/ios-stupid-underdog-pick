@@ -280,6 +280,17 @@ final class GamesViewModel: ObservableObject {
     }
   }
 
+  /// Lock-in re-check for the pick card. Also refreshes this game's row,
+  /// so the list and the post-pick banner show the line that was locked.
+  func recheckLine(for g: Game) async -> LineCheck {
+    let current = await LineRecheck.currentHomeSpread(gameId: g.id, client: client)
+    let check = LineRecheck.evaluate(shownHomeSpread: g.latestSpread, currentHomeSpread: current)
+    if check != .unchanged, let current, let i = games.firstIndex(where: { $0.id == g.id }) {
+      games[i] = games[i].withLatestSpread(current)
+    }
+    return check
+  }
+
   func clearPickForWeek() async {
     let previous = selectedGameId
     let previousPick = myPick
@@ -812,7 +823,8 @@ struct GamesView: View {
             isPro: isPro,
             watchEnabled: watchEnabled && viewModel.espnIds[g.id] != nil,
             watchLinks: viewModel.watchLinks(for: g),
-            onLock: { await viewModel.pickUnderdog(for: g, haptic: false) },
+            checkLine: { shown in await viewModel.recheckLine(for: shown) },
+            onLock: { locked in await viewModel.pickUnderdog(for: locked, haptic: false) },
             onClear: { await viewModel.clearPickForWeek() }
           )
         }

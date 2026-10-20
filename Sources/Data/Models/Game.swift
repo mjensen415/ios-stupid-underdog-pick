@@ -76,3 +76,14 @@ public struct Game: Decodable, Identifiable {
     return won ? .win : .loss
   }
 }
+
+extension Game {
+  /// Same game with a different home-relative line (the pick card's
+  /// lock-in re-check found the spread moved).
+  func withLatestSpread(_ spread: Double?) -> Game {
+    Game(id: id, season: season, week: week, homeTeam: homeTeam, awayTeam: awayTeam,
+         homeTeamId: homeTeamId, awayTeamId: awayTeamId, favoriteTeamId: favoriteTeamId,
+         startTime: startTime, bettingLine: bettingLine, latestSpread: spread, picksLocked: picksLocked,
+         status: status, homePoints: homePoints, awayPoints: awayPoints, sport: sport)
+  }
+}
