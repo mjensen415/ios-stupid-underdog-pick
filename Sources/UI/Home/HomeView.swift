@@ -266,6 +266,8 @@ struct RecapHit: Decodable, Identifiable {
 struct HomeView: View {
   @Environment(\.supabaseClient) private var client
   @EnvironmentObject var appState: AppState
+  @EnvironmentObject private var featureFlags: FeatureFlagStore
+  @EnvironmentObject private var proStore: ProStore
   @StateObject private var viewModel = HomeViewModel()
   // Follows the shared CFB | PRO BALL | PICKEMS switcher (Pickems is NFL).
   private var sport: Sport { appState.currentGame == .cfb ? .cfb : .nfl }
@@ -363,6 +365,11 @@ struct HomeView: View {
             topRow
             if viewModel.hasLoaded {
               contestsSection
+              if proStore.showEntry(flags: featureFlags) {
+                NavigationLink { ProView() } label: { ProEntryCard() }
+                  .buttonStyle(.plain)
+                  .padding(.top, 14)
+              }
               groupsSection
               discoverSection
               recapSection

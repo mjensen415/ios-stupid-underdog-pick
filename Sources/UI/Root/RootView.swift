@@ -4,6 +4,7 @@ import UIKit
 struct RootView: View {
   @EnvironmentObject var appState: AppState
   @EnvironmentObject var featureFlags: FeatureFlagStore
+  @EnvironmentObject var pro: ProStore
   @Environment(\.scenePhase) private var scenePhase
   @State private var showOnboarding = false
   @State private var lastUpdateCheck: Date?
@@ -94,6 +95,8 @@ struct RootView: View {
       // flags aren't per-user, and this task re-runs as soon as the saved
       // session restores. The admin override is re-checked per user anyway.
       await featureFlags.refresh(client: client, userId: appState.session?.user.id)
+      // Pro status + free opt-in eligibility (fail closed: not Pro).
+      await pro.refresh(client: client, userId: appState.session?.user.id)
       guard appState.session != nil else { return }
       let profile = try? await ProfilesService(client: client).fetchMyProfile()
       let needsOnboarding = profile?.has_onboarded == false
@@ -127,7 +130,10 @@ struct RootView: View {
       Task { await checkForUpdate() }
       // Cached for 5 minutes, so this only refetches when actually stale.
       if let client = appState.client {
-        Task { await featureFlags.refresh(client: client, userId: appState.session?.user.id) }
+        Task {
+          await featureFlags.refresh(client: client, userId: appState.session?.user.id)
+          await pro.refresh(client: client, userId: appState.session?.user.id)
+        }
       }
     }
     .overlay {
@@ -141,7 +147,7 @@ struct RootView: View {
 
 struct RootView_Previews: PreviewProvider {
   static var previews: some View {
-    RootView().environmentObject(AppState()).environmentObject(FeatureFlagStore())
+    RootView().environmentObject(AppState()).environmentObject(FeatureFlagStore()).environmentObject(ProStore())
   }
 }
 

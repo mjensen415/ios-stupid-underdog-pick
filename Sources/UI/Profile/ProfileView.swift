@@ -5,6 +5,8 @@ import UserNotifications
 
 struct ProfileView: View {
   @EnvironmentObject var appState: AppState
+  @EnvironmentObject private var featureFlags: FeatureFlagStore
+  @EnvironmentObject private var pro: ProStore
   @Environment(\.supabaseClient) private var client
   // Uses ProfilesService's ProfileRow directly (id/user_id/display_name/
   // avatar_url/email) instead of mapping into a separate local type -- the
@@ -224,6 +226,26 @@ struct ProfileView: View {
         } else {
           ProgressView().tint(BoldTheme.Colors.gold)
             .listRowBackground(BoldTheme.Colors.bgPage)
+        }
+
+        // SUP Pro (free tier only -- no prices or purchases on iOS) and the
+        // public model track record, each behind its own flag.
+        if pro.showEntry(flags: featureFlags) || featureFlags.isVisible(FeatureFlagKey.trackRecord) {
+          Section {
+            if pro.showEntry(flags: featureFlags) {
+              NavigationLink(destination: ProView()) {
+                Label(pro.optin.eligible && !pro.optin.claimed ? "SUP Pro · free for you" : "SUP Pro", systemImage: "star.circle")
+              }
+            }
+            if featureFlags.isVisible(FeatureFlagKey.trackRecord) {
+              NavigationLink(destination: TrackRecordView()) {
+                Label("Model track record", systemImage: "chart.bar")
+              }
+            }
+          } header: {
+            Label("Pro tools", systemImage: "sparkles")
+          }
+          .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
         }
 
         // Outside the `if let profile` above so the links stay reachable even
