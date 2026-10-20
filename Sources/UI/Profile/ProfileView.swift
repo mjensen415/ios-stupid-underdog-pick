@@ -439,8 +439,22 @@ struct ProfileView: View {
     isDeletingAccount = true
     deleteError = nil
     defer { isDeletingAccount = false }
+    let service = ProfilesService(client: client)
     do {
-      try await ProfilesService(client: client).deleteAccount()
+      do {
+        try await service.deleteAccount()
+      } catch is ProfilesService.AppleReauthRequired {
+        // Signed in with Apple and the server has no token to revoke yet:
+        // confirm with Apple once so it can revoke access (5.1.1(v)).
+        let credential: AppleCredential
+        do {
+          credential = try await AppleReauthorizer().authorize()
+        } catch {
+          deleteError = "Confirm with Apple to finish deleting your account."
+          return
+        }
+        try await service.deleteAccount(appleAuthorizationCode: credential.authorizationCode ?? "")
+      }
       // Account is gone server-side; the local session is no longer valid
       // either way, so just drop it and let RootView route back to Auth.
       await MainActor.run { appState.session = nil }

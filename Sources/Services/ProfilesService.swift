@@ -166,14 +166,35 @@ struct ProfilesService {
     var errorDescription: String? { message }
   }
 
-  private struct DeleteAccountResponse: Decodable { let success: Bool }
-  private struct DeleteAccountErrorBody: Decodable { let success: Bool; let error: String? }
+  /// The account signed in with Apple but the server has no Apple token to
+  /// revoke (e.g. it only ever used the old web sign-in) -- get a fresh
+  /// authorization code from Apple and call deleteAccount again with it.
+  struct AppleReauthRequired: Error {}
 
-  func deleteAccount() async throws {
+  private struct DeleteAccountResponse: Decodable { let success: Bool }
+  private struct DeleteAccountErrorBody: Decodable { let success: Bool; let error: String?; let code: String? }
+  private struct DeleteAccountBody: Encodable {
+    // Tells delete-account this client can answer apple_reauth_required.
+    let apple_reauth_supported = true
+    let apple_authorization_code: String?
+  }
+
+  /// `appleAuthorizationCode` is only passed on the retry after
+  /// AppleReauthRequired; delete-account exchanges it and revokes the
+  /// resulting Apple token before deleting the user. (A delete-account
+  /// that predates Apple revocation ignores the body and deletes as before.)
+  func deleteAccount(appleAuthorizationCode: String? = nil) async throws {
     do {
-      let _: DeleteAccountResponse = try await client.functions.invoke("delete-account", options: .init(method: .post))
+      let _: DeleteAccountResponse = try await client.functions.invoke(
+        "delete-account",
+        options: .init(method: .post, body: DeleteAccountBody(apple_authorization_code: appleAuthorizationCode))
+      )
     } catch let FunctionsError.httpError(_, data) {
-      if let body = try? JSONDecoder().decode(DeleteAccountErrorBody.self, from: data), let message = body.error {
+      let body = try? JSONDecoder().decode(DeleteAccountErrorBody.self, from: data)
+      if body?.code == "apple_reauth_required", appleAuthorizationCode == nil {
+        throw AppleReauthRequired()
+      }
+      if let message = body?.error {
         throw DeleteAccountError(message: message)
       }
       throw DeleteAccountError(message: "Couldn't delete account. Try again.")
