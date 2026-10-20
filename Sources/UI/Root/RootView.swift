@@ -90,9 +90,10 @@ struct RootView: View {
     // re-fires when the id itself changes).
     .task(id: appState.session?.user.id) {
       guard let client = appState.client else { return }
-      // Flags load for signed-out users too (anon can read them); the admin
-      // override is re-checked whenever the signed-in user changes.
-      await featureFlags.refresh(client: client, userId: appState.session?.user.id, force: true)
+      // Flags load for signed-out users too (anon can read them). Not forced:
+      // flags aren't per-user, and this task re-runs as soon as the saved
+      // session restores. The admin override is re-checked per user anyway.
+      await featureFlags.refresh(client: client, userId: appState.session?.user.id)
       guard appState.session != nil else { return }
       let profile = try? await ProfilesService(client: client).fetchMyProfile()
       let needsOnboarding = profile?.has_onboarded == false

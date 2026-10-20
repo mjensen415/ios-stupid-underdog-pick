@@ -60,6 +60,12 @@ final class FeatureFlagStore: ObservableObject {
   static let cacheTTL: TimeInterval = 5 * 60
   private var fetchedAt: Date?
   private var adminCheckedFor: UUID?
+  /// The in-flight fetch, shared by every caller. Launch fires several
+  /// refreshes at once (session restore, foreground), so they join one fetch
+  /// instead of each hitting the table. Unstructured on purpose: RootView's
+  /// .task(id:) is cancelled the moment the saved session restores, and a
+  /// fetch tied to that task would be cancelled with it.
+  private var flagsTask: Task<Void, Never>?
 
   /// The raw flag, like the web's useFlag: true only once loaded and on --
   /// off while loading or if the fetch failed.
@@ -73,15 +79,23 @@ final class FeatureFlagStore: ObservableObject {
 
     let stale = fetchedAt.map { Date().timeIntervalSince($0) > Self.cacheTTL } ?? true
     if force || stale {
-      // On failure keep the last good set rather than flipping features off
-      // mid-session over one network blip.
-      if let fresh = try? await service.fetchFlags() {
-        flags = fresh
-        fetchedAt = Date()
-        #if DEBUG
-        print("[Flags] loaded:", fresh.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " "))
-        #endif
+      if flagsTask == nil {
+        flagsTask = Task { [weak self] in
+          // On failure keep the last good set rather than flipping features
+          // off mid-session over one network blip.
+          let fresh = try? await service.fetchFlags()
+          guard let self else { return }
+          if let fresh {
+            self.flags = fresh
+            self.fetchedAt = Date()
+            #if DEBUG
+            print("[Flags] loaded:", fresh.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: " "))
+            #endif
+          }
+          self.flagsTask = nil
+        }
       }
+      await flagsTask?.value
     }
 
     // Admin status only changes with the signed-in user, so check it once
@@ -91,7 +105,9 @@ final class FeatureFlagStore: ObservableObject {
       adminCheckedFor = nil
       return
     }
-    if force || adminCheckedFor != userId, let admin = await service.fetchIsAdmin(userId: userId) {
+    // The cancellation check drops a result that arrives after the user
+    // changed (RootView cancels this task on sign-in/out).
+    if force || adminCheckedFor != userId, let admin = await service.fetchIsAdmin(userId: userId), !Task.isCancelled {
       isAdmin = admin
       adminCheckedFor = userId
       #if DEBUG
