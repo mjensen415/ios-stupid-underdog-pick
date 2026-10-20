@@ -33,6 +33,12 @@ final class GamesViewModel: ObservableObject {
   @Published var activeGroupId: UUID?
   @Published var copyingPicks = false
 
+  /// Where to watch (SUP Pro): ESPN event id per game, and networks per
+  /// event id from game_broadcasts. Only loaded while watch_links is on.
+  @Published var espnIds: [UUID: String] = [:]
+  @Published var broadcasts: [String: [BroadcastNetwork]] = [:]
+  var watchEnabled = false
+
   var underdogGroups: [MyGroup] {
     myGroups.filter { $0.game_type != .pickems && ($0.sport.rawValue == sport || $0.sport == .both) }
   }
@@ -100,6 +106,23 @@ final class GamesViewModel: ObservableObject {
     errorText = nil
     let svc = GamesService(client: client)
     games = try await svc.fetch(season: season, week: selectedWeek, sport: sport)
+    await loadWatch()
+  }
+
+  /// Networks for this week's games. Public data, read-only; failures just
+  /// leave the capsules off.
+  func loadWatch() async {
+    guard watchEnabled, !games.isEmpty else { espnIds = [:]; broadcasts = [:]; return }
+    let data = ProDataService(client: client)
+    let ids = await data.espnIds(gameIds: games.map(\.id), sport: sport)
+    espnIds = ids
+    broadcasts = await data.broadcasts(eventIds: Array(ids.values))
+  }
+
+  /// The links for one game, national first (empty when none).
+  func watchLinks(for g: Game) -> [WatchLink] {
+    guard let eid = espnIds[g.id], let nets = broadcasts[eid], !nets.isEmpty else { return [] }
+    return WatchLinks.links(sport: sport == "nfl" ? .nfl : .cfb, eventId: eid, networks: nets)
   }
 
   func loadExistingPick() async throws {
@@ -212,16 +235,19 @@ final class GamesViewModel: ObservableObject {
     return "Locked"
   }
 
-  func pickUnderdog(for g: Game) async {
+  /// `haptic` is off for the pick card, which plays its own
+  /// .sensoryFeedback on lock-in. Returns whether the pick saved.
+  @discardableResult
+  func pickUnderdog(for g: Game, haptic: Bool = true) async -> Bool {
     #if DEBUG
     print("[pickUnderdog] BUTTON FIRED for \(g.awayTeam ?? "?") @ \(g.homeTeam ?? "?"), canPick=\(canPick(g))")
     #endif
-    guard canPick(g) else { return }
+    guard canPick(g) else { return false }
     guard let pickedId = g.derivedUnderdogTeamId else {
       #if DEBUG
       print("[pickUnderdog] BLOCKED: derivedUnderdogTeamId is nil")
       #endif
-      return
+      return false
     }
     let previous = selectedGameId
     let previousPick = myPick
@@ -232,7 +258,7 @@ final class GamesViewModel: ObservableObject {
       _ = try await PicksService(client: client)
         .upsertPick(gameId: g.id, pickedTeamId: pickedId, season: season, week: selectedWeek, groupId: activeGroupId)
       flashToast("Picked \(g.awayTeam ?? "") @ \(g.homeTeam ?? "")")
-      Haptics.success()
+      if haptic { Haptics.success() }
       pickCelebrationTrigger = UUID()
       // They just used the swipe gesture successfully -- the hint banner
       // has nothing left to teach them. Written directly to UserDefaults
@@ -242,6 +268,7 @@ final class GamesViewModel: ObservableObject {
       #if DEBUG
       print("[pickUnderdog] SUCCESS, toast=\(toastMessage ?? "")")
       #endif
+      return true
     } catch {
       selectedGameId = previous
       myPick = previousPick
@@ -249,6 +276,7 @@ final class GamesViewModel: ObservableObject {
       #if DEBUG
       print("[pickUnderdog] SAVE FAILED: \(error)")
       #endif
+      return false
     }
   }
 
@@ -278,6 +306,11 @@ private let textOnGreen = Color(hex: 0xF2EFE3)
 struct GamesView: View {
   @StateObject var viewModel: GamesViewModel
   @EnvironmentObject var appState: AppState
+  @EnvironmentObject private var featureFlags: FeatureFlagStore
+  @EnvironmentObject private var pro: ProStore
+
+  private var isPro: Bool { pro.isPro(admin: featureFlags.isAdmin) }
+  private var watchEnabled: Bool { featureFlags.isVisible(FeatureFlagKey.watchLinks) }
   @State private var shareImage: Image?
   @State private var searchQuery: String = ""
   @State private var showGroupPicker = false
@@ -502,15 +535,6 @@ struct GamesView: View {
     }
   }
 
-  private var tapDialogTitle: String {
-    guard let g = tappedGame else { return "" }
-    if viewModel.selectedGameId == g.id { return "Your pick" }
-    let dog = g.derivedUnderdogTeamId == g.homeTeamId ? g.homeTeam : g.awayTeam
-    guard let sp = g.underdogSpread else { return dog ?? "Pick this upset?" }
-    let n = sp == sp.rounded() ? String(format: "%.0f", sp) : String(format: "%.1f", sp)
-    return "\(dog ?? "Underdog") +\(n)"
-  }
-
   @ViewBuilder
   private var swipeHintBanner: some View {
     if !hasSeenSwipeHint {
@@ -728,7 +752,12 @@ struct GamesView: View {
                   logoFor: { id in viewModel.logoURL(for: id) },
                   isSelected: viewModel.selectedGameId == g.id,
                   isFirstInDay: g.id == day.games.first?.id,
-                  isLastInDay: g.id == day.games.last?.id
+                  isLastInDay: g.id == day.games.last?.id,
+                  actionable: viewModel.canPick(g) && viewModel.selectedGameId != g.id
+                    && viewModel.selectedWeek == viewModel.currentWeek,
+                  hasPickThisWeek: viewModel.selectedGameId != nil,
+                  // Pro only: the first linked network as a middle-column capsule.
+                  watch: isPro && watchEnabled ? viewModel.watchLinks(for: g).first(where: { $0.url != nil }) : nil
                 )
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                   if viewModel.selectedGameId == g.id {
@@ -755,8 +784,8 @@ struct GamesView: View {
                     .disabled(!viewModel.canPick(g))
                   }
                 }
-                // Tap is the second way in (swipe stays): opens a confirm
-                // sheet with the same actions the swipe would offer.
+                // Tap is the second way in (swipe stays): opens the pick
+                // card, the native take on the web's pick sheet.
                 .contentShape(Rectangle())
                 .onTapGesture {
                   guard viewModel.canPick(g) else { return }
@@ -774,26 +803,18 @@ struct GamesView: View {
         .scrollContentBackground(.hidden)
         .background(BoldTheme.Colors.bgPage)
         .dismissKeyboardOnTap()
-        .confirmationDialog(
-          tapDialogTitle,
-          isPresented: Binding(get: { tappedGame != nil }, set: { if !$0 { tappedGame = nil } }),
-          titleVisibility: .visible,
-          presenting: tappedGame
-        ) { g in
-          if viewModel.selectedGameId == g.id {
-            Button("Clear pick", role: .destructive) {
-              Task { await viewModel.clearPickForWeek() }
-            }
-          } else {
-            Button(viewModel.swipeActionLabel(for: g)) {
-              Task { await viewModel.pickUnderdog(for: g) }
-            }
-          }
-          Button("Cancel", role: .cancel) {}
-        } message: { g in
-          if viewModel.selectedGameId != g.id, g.sport == "nfl" {
-            Text("Pro Ball lines move during the week. Your line locks in when you pick.")
-          }
+        .sheet(item: $tappedGame) { g in
+          PickCardSheet(
+            game: g,
+            logoFor: { id in viewModel.logoURL(for: id) },
+            isCurrentPick: viewModel.selectedGameId == g.id,
+            hasOtherPick: viewModel.selectedGameId != nil && viewModel.selectedGameId != g.id,
+            isPro: isPro,
+            watchEnabled: watchEnabled && viewModel.espnIds[g.id] != nil,
+            watchLinks: viewModel.watchLinks(for: g),
+            onLock: { await viewModel.pickUnderdog(for: g, haptic: false) },
+            onClear: { await viewModel.clearPickForWeek() }
+          )
         }
         // A week spans both already-played and upcoming days -- opening on
         // the earliest day means scrolling past everything already final
@@ -935,7 +956,13 @@ struct GamesView: View {
         // No hand-off: land on whatever the shared switcher says.
         viewModel.sport = appState.currentGame.rawValue
       }
+      viewModel.watchEnabled = watchEnabled
       await viewModel.loadInitial()
+    }
+    // watch_links can load (or the admin check land) after the first fetch.
+    .onChange(of: watchEnabled) { _, on in
+      viewModel.watchEnabled = on
+      Task { await viewModel.loadWatch() }
     }
     // .task only runs once per view identity, which persists across tab
     // switches (StateObject) -- this catches later hand-offs from Home too,
