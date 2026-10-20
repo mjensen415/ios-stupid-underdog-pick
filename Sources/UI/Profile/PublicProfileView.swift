@@ -76,7 +76,9 @@ struct PublicProfileView: View {
             Spacer()
             if let w = careerTotals?.wins, let l = careerTotals?.losses, w + l > 0 {
               VStack(alignment: .trailing, spacing: 2) {
-                Text("COVER RATE").font(BoldTheme.Fonts.mono(10)).foregroundColor(BoldTheme.Colors.textFaint)
+                // Wins / (wins + losses). SUP scores outright wins only -- covering
+                // the spread isn't enough -- so this is a win rate, not a cover rate.
+                Text("WIN RATE").font(BoldTheme.Fonts.mono(10)).foregroundColor(BoldTheme.Colors.textFaint)
                 Text(verbatim: "\(Int((Double(w) / Double(w + l) * 100).rounded()))%")
                   .font(BoldTheme.Fonts.display(22))
                   .foregroundColor(BoldTheme.Colors.green)
