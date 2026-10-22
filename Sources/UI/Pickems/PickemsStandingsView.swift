@@ -49,6 +49,8 @@ struct PickemsStandingsView: View {
   // membership fetch, no group picker, no "no groups yet" empty state.
   // Used when this view is embedded on a specific group's own detail page.
   let fixedGroupId: UUID?
+  /// Only the Global board, no group picker (the Groups tab's Global card).
+  let globalOnly: Bool
 
   @Environment(\.supabaseClient) private var client
   @State private var myGroups: [MyGroup]?
@@ -60,14 +62,19 @@ struct PickemsStandingsView: View {
   @State private var matrixGames: [UUID: MatrixGameInfo] = [:]
   @State private var gameOrder: [UUID] = []
 
-  init(season: Int?, week: Int?, lastGame: PickemsGameRow?, fixedGroupId: UUID? = nil) {
+  init(season: Int?, week: Int?, lastGame: PickemsGameRow?, fixedGroupId: UUID? = nil, globalOnly: Bool = false) {
     self.season = season
     self.week = week
     self.lastGame = lastGame
     self.fixedGroupId = fixedGroupId
+    self.globalOnly = globalOnly
     self._selectedGroupId = State(initialValue: fixedGroupId)
-    self._myGroups = State(initialValue: fixedGroupId != nil ? [] : nil)
+    self._myGroups = State(initialValue: fixedGroupId != nil || globalOnly ? [] : nil)
   }
+
+  /// The Global board (everyone's shared picks): the default when not
+  /// embedded on a group's page, so nobody needs a group to see standings.
+  private var isGlobal: Bool { fixedGroupId == nil && selectedGroupId == nil }
 
   private var lastGameActualTotal: Int? {
     guard let lastGame, lastGame.isFinal, let h = lastGame.homePoints, let a = lastGame.awayPoints else { return nil }
@@ -78,10 +85,13 @@ struct PickemsStandingsView: View {
     VStack(alignment: .leading, spacing: 12) {
       if fixedGroupId == nil && myGroups == nil {
         Text("Loading…").font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Colors.textFaint).padding(.top, 40)
-      } else if fixedGroupId == nil && myGroups?.isEmpty == true {
-        emptyState
       } else {
-        if fixedGroupId == nil, (myGroups?.count ?? 0) > 1 { groupPicker }
+        if fixedGroupId == nil, !globalOnly, !(myGroups ?? []).isEmpty { groupPicker }
+        if isGlobal && !globalOnly {
+          Text(GlobalGroups.tagline)
+            .font(BoldTheme.Fonts.body(12))
+            .foregroundColor(BoldTheme.Colors.textDim)
+        }
         scopeToggle
         if scope == .week, let lastGame {
           Text("Tiebreaker: combined score, \(lastGame.awayName ?? "") @ \(lastGame.homeName ?? "")\(lastGameActualTotal.map { " — final: \($0)" } ?? "")")
@@ -103,32 +113,20 @@ struct PickemsStandingsView: View {
     }
   }
 
-  private var emptyState: some View {
-    VStack(spacing: 10) {
-      Text("NO GROUPS YET").font(BoldTheme.Fonts.display(22)).foregroundColor(BoldTheme.Colors.text)
-      Text("Pickems standings are group-only — join or start a group to see where you stack up.")
-        .font(BoldTheme.Fonts.body(13))
-        .foregroundColor(BoldTheme.Colors.textDim)
-        .multilineTextAlignment(.center)
-      NavigationLink(destination: GroupsListView()) {
-        Text("Find a group")
-          .font(BoldTheme.Fonts.body(13, weight: .bold))
-          .foregroundColor(BoldTheme.Colors.text)
-          .padding(.horizontal, 20).padding(.vertical, 10)
-          .background(BoldTheme.Colors.gold)
-          .clipShape(Capsule())
-      }
-    }
-    .frame(maxWidth: .infinity)
-    .padding(32)
-    .background(BoldTheme.Colors.glassStrong)
-    .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
-    .clipShape(RoundedRectangle(cornerRadius: 14))
-  }
-
   private var groupPicker: some View {
     ScrollView(.horizontal, showsIndicators: false) {
       HStack(spacing: 6) {
+        Button {
+          selectedGroupId = nil
+        } label: {
+          Text(GlobalGroups.title)
+            .font(BoldTheme.Fonts.body(12.5, weight: .bold))
+            .padding(.horizontal, 16).padding(.vertical, 7)
+            .background(isGlobal ? BoldTheme.Colors.gold : BoldTheme.Colors.track)
+            .foregroundColor(isGlobal ? BoldTheme.Colors.text : BoldTheme.Colors.textDim)
+            .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
         ForEach(myGroups ?? []) { g in
           let active = g.group_id == selectedGroupId
           Button {
@@ -178,7 +176,7 @@ struct PickemsStandingsView: View {
     if isLoading {
       Text("Loading standings…").font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Colors.textFaint).padding(.top, 24)
     } else if ranked.isEmpty {
-      Text("No picks yet in this group.").font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Colors.textFaint).padding(.top, 24)
+      Text(isGlobal ? "No picks yet." : "No picks yet in this group.").font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Colors.textFaint).padding(.top, 24)
     } else {
       HStack(alignment: .top, spacing: 0) {
         // Pinned rank/entry/pts column
@@ -247,7 +245,7 @@ struct PickemsStandingsView: View {
   }
 
   private func loadGroups() async {
-    guard fixedGroupId == nil else { return }
+    guard fixedGroupId == nil, !globalOnly else { return }
     guard let client else { return }
     do {
       // Only groups actually playing Pickems -- an underdog-only group's
@@ -255,18 +253,20 @@ struct PickemsStandingsView: View {
       let groups = try await GroupsService(client: client).fetchMyGroups()
         .filter { $0.game_type == .pickems || $0.game_type == .both }
       myGroups = groups
-      if selectedGroupId == nil {
-        selectedGroupId = groups.first?.group_id
-      }
     } catch {
       myGroups = []
     }
   }
 
   private func loadStandings() async {
-    guard let client, let groupId = selectedGroupId, let season else { return }
+    guard let client, let season else { return }
     isLoading = true
     defer { isLoading = false }
+    guard let groupId = selectedGroupId else {
+      // Global board.
+      rows = (try? await PickemsService(client: client).fetchGlobalLeaderboard(season: season, week: scope == .week ? week : nil)) ?? []
+      return
+    }
     do {
       rows = try await PickemsService(client: client).fetchGroupLeaderboard(
         groupId: groupId, season: season, week: scope == .week ? week : nil

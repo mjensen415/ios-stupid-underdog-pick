@@ -284,4 +284,47 @@ struct PickemsService {
       .execute()
     return try JSONDecoder().decode([GroupPickemsRow].self, from: res.data)
   }
+
+  /// The Global Pickems board: everyone's shared picks (no group), from
+  /// get_pickems_weekly_leaderboard (week) or get_pickems_season_leaderboard
+  /// (week nil), mapped onto the group row shape so one table serves both.
+  func fetchGlobalLeaderboard(season: Int, sport: String = "nfl", week: Int?) async throws -> [GroupPickemsRow] {
+    let res: PostgrestResponse<Void>
+    if let week {
+      struct P: Encodable { let p_season: Int; let p_week: Int; let p_sport: String }
+      res = try await client.rpc("get_pickems_weekly_leaderboard", params: P(p_season: season, p_week: week, p_sport: sport)).execute()
+    } else {
+      struct P: Encodable { let p_season: Int; let p_sport: String }
+      res = try await client.rpc("get_pickems_season_leaderboard", params: P(p_season: season, p_sport: sport)).execute()
+    }
+    let raw = try JSONDecoder().decode([GlobalPickemsRaw].self, from: res.data)
+    return GlobalPickemsRaw.rows(raw, scope: week == nil ? .season : .week)
+  }
+}
+
+/// Row from get_pickems_weekly_leaderboard / get_pickems_season_leaderboard.
+struct GlobalPickemsRaw: Decodable {
+  let user_id: UUID
+  let display_name: String?
+  let correct: Int?
+  let total_picks: Int?
+  let guessed_total_points: Int?
+
+  /// Maps global rows onto GroupPickemsRow (same as the web's globalPickemsRows).
+  static func rows(_ raw: [GlobalPickemsRaw], scope: PickemsScope) -> [GroupPickemsRow] {
+    raw.map { r in
+      let correct = r.correct ?? 0
+      let total = r.total_picks ?? 0
+      let name = (r.display_name ?? "").isEmpty ? "Player" : r.display_name!
+      return GroupPickemsRow(
+        groupId: GlobalPickemsRaw.globalId, userId: r.user_id, displayName: name, role: "member",
+        seasonCorrect: scope == .season ? correct : 0, seasonTotalPicks: scope == .season ? total : 0,
+        weekCorrect: scope == .week ? correct : 0, weekTotalPicks: scope == .week ? total : 0,
+        guessedTotalPoints: scope == .week ? r.guessed_total_points : nil
+      )
+    }
+  }
+
+  /// Stand-in group id for Global rows (there's no groups row for it).
+  static let globalId = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
 }

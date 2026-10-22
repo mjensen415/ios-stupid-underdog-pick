@@ -89,6 +89,9 @@ struct GroupsListView: View {
           VStack(alignment: .leading, spacing: 18) {
             header
             GameSwitcher()
+            // Everyone is already in the Global group: picks without a
+            // group score on the global standings. Always listed first.
+            GlobalGroupCard(game: appState.currentGame)
 
             if client == nil {
               Text("Client not available").foregroundColor(BoldTheme.Colors.textDim)
@@ -296,7 +299,9 @@ struct GroupsListView: View {
       Text("Play against friends")
         .font(BoldTheme.Fonts.body(16, weight: .bold))
         .foregroundColor(BoldTheme.Colors.text)
-      Text("Create a \(contextDisplayName) group or join one with an invite code.")
+      Text(viewModel.myGroups.isEmpty
+           ? "You're on the global board already. Create a group for your friends, office, or fantasy chat for a private board too."
+           : "You're on the \(contextDisplayName) global board already. Want a private board too? Create a group or join with an invite code.")
         .font(BoldTheme.Fonts.body(13))
         .foregroundColor(BoldTheme.Colors.textDim)
         .multilineTextAlignment(.center)

@@ -178,11 +178,18 @@ final class PickemsViewModel: ObservableObject {
     }
   }
 
-  // At-a-glance record/rank/pts for the header strip.
-  func loadStanding(groupId: UUID) async {
+  // At-a-glance record/rank/pts for the header strip. No Pickems group:
+  // your standing on the Global board.
+  func loadStanding(groupId: UUID?) async {
     guard let client, let season, let week, let userId else { myStanding = nil; return }
     do {
-      let rows = try await PickemsService(client: client).fetchGroupLeaderboard(groupId: groupId, season: season, sport: "nfl", week: week)
+      let svc = PickemsService(client: client)
+      let rows: [GroupPickemsRow]
+      if let groupId {
+        rows = try await svc.fetchGroupLeaderboard(groupId: groupId, season: season, sport: "nfl", week: week)
+      } else {
+        rows = try await svc.fetchGlobalLeaderboard(season: season, week: week)
+      }
       let ranked = rankRows(rows, scope: .week, actualTotal: nil)
       let mineId = actingAs?.id ?? userId
       if let mine = ranked.first(where: { $0.row.userId == mineId }) {
@@ -252,6 +259,9 @@ struct PickemsView: View {
   @State private var newChildName = ""
   @State private var showGroupPicker = false
   @State private var showCopyPicksSheet = false
+  /// "Join the global group" on the welcome screen. Shared picks (no group)
+  /// already score on the global Pickems board, so this only skips the intro.
+  @AppStorage("sup-pickems-play-global") private var playGlobal = false
 
   private enum Tab { case pick, standings }
 
@@ -278,8 +288,8 @@ struct PickemsView: View {
         BoldTheme.Colors.bgPage.ignoresSafeArea()
         if myGroups == nil {
           Color.clear
-        } else if !hasEligibleGroup {
-          PickemsWelcomeView { await loadMyGroups() }
+        } else if !hasEligibleGroup && !playGlobal {
+          PickemsWelcomeView(onPlayGlobal: { playGlobal = true }) { await loadMyGroups() }
         } else {
           ScrollView {
             VStack(alignment: .leading, spacing: 0) {
@@ -328,8 +338,8 @@ struct PickemsView: View {
       .onChange(of: viewModel.actingAs) { _, _ in Task { await viewModel.loadWeek() } }
       .onChange(of: viewModel.activeGroupId) { _, _ in Task { await viewModel.loadWeek() } }
       .task(id: "\(pickemsGroupId?.uuidString ?? "")|\(viewModel.season ?? 0)|\(viewModel.week ?? 0)") {
+        await viewModel.loadStanding(groupId: pickemsGroupId)
         if let pickemsGroupId {
-          await viewModel.loadStanding(groupId: pickemsGroupId)
           await viewModel.loadPickPcts(groupId: pickemsGroupId)
         }
       }
@@ -353,7 +363,7 @@ struct PickemsView: View {
         manageProfilesSheet
       }
       .confirmationDialog("Picking for", isPresented: $showGroupPicker, titleVisibility: .visible) {
-        Button("My Shared Picks") { viewModel.activeGroupId = nil }
+        Button("Global · my shared picks") { viewModel.activeGroupId = nil }
         ForEach(pickemsGroups) { g in
           Button(g.name) { viewModel.activeGroupId = g.group_id }
         }
@@ -425,7 +435,7 @@ struct PickemsView: View {
         Text("Picking for")
           .font(BoldTheme.Fonts.body(11, weight: .semibold))
           .foregroundColor(BoldTheme.Colors.textFaint)
-        Text(activeGroupName ?? "My Shared Picks")
+        Text(activeGroupName ?? "Global · my shared picks")
           .font(BoldTheme.Fonts.body(12.5, weight: .bold))
           .foregroundColor(BoldTheme.Colors.text)
         Image(systemName: "chevron.down")
@@ -474,7 +484,7 @@ struct PickemsView: View {
             .foregroundColor(BoldTheme.Colors.textDim)
         }
         Section {
-          Button("My Shared Picks") {
+          Button("Global · my shared picks") {
             Task {
               if let result = await viewModel.copyPicks(from: nil) {
                 showCopyPicksSheet = false

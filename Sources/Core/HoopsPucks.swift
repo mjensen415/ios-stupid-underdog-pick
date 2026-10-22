@@ -67,12 +67,34 @@ struct HpLeague: Decodable, Identifiable, Equatable {
   let picks_per_week: Int
   let join_code: String
   let is_private: Bool
-  /// From hp_members (not a column on hp_leagues).
-  var role: String = "member"
+  /// The sport's one Global league (open to everyone, one-tap join).
+  var is_global: Bool = false
+  /// From hp_members (not a column on hp_leagues). Nil only for the sport's
+  /// Global league when you haven't joined it yet.
+  var role: String?
 
-  enum CodingKeys: String, CodingKey { case id, name, sport, picks_per_week, join_code, is_private }
+  enum CodingKeys: String, CodingKey { case id, name, sport, picks_per_week, join_code, is_private, is_global }
+
+  init(id: UUID, name: String, sport: HpSport, picks_per_week: Int, join_code: String, is_private: Bool,
+       is_global: Bool = false, role: String? = "member") {
+    self.id = id; self.name = name; self.sport = sport; self.picks_per_week = picks_per_week
+    self.join_code = join_code; self.is_private = is_private; self.is_global = is_global; self.role = role
+  }
+
+  init(from decoder: Decoder) throws {
+    let c = try decoder.container(keyedBy: CodingKeys.self)
+    id = try c.decode(UUID.self, forKey: .id)
+    name = try c.decode(String.self, forKey: .name)
+    sport = try c.decode(HpSport.self, forKey: .sport)
+    picks_per_week = try c.decode(Int.self, forKey: .picks_per_week)
+    join_code = try c.decode(String.self, forKey: .join_code)
+    is_private = try c.decode(Bool.self, forKey: .is_private)
+    is_global = try c.decodeIfPresent(Bool.self, forKey: .is_global) ?? false
+    role = nil
+  }
 
   var isAdmin: Bool { role == "admin" }
+  var isMember: Bool { role != nil }
 }
 
 struct HpPick: Decodable, Equatable {
@@ -298,6 +320,7 @@ enum HP {
     "bad_name": "Group name must be 1–60 characters.",
     "too_many_leagues": "You've created the max number of groups.",
     "not_league_admin": "Only the group admin can do that.",
+    "global_admin_only": "Only SUP admins can change the global group.",
     "league_not_found": "Group not found.",
     "week_in_progress": "Underdogs per week can't change once someone has picked this week. Try again next Monday.",
     "bad_code": "No group with that code.",

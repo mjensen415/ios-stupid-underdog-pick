@@ -14,6 +14,9 @@ import Supabase
 final class SportLeagueViewModel: ObservableObject {
   let sport: HpSport
   @Published var leagues: [HpLeague] = []
+  /// This sport's Global league, readable by everyone (role nil).
+  @Published var globalLeague: HpLeague?
+  @Published var joiningGlobal = false
   @Published var leagueId: UUID?
   @Published var weekStart: String
   @Published var games: [HpGame] = []
@@ -36,8 +39,12 @@ final class SportLeagueViewModel: ObservableObject {
     self.weekStart = HP.weekStartET(Date())
   }
 
-  var sportLeagues: [HpLeague] { leagues.filter { $0.sport == sport } }
-  var league: HpLeague? { sportLeagues.first { $0.id == leagueId } ?? sportLeagues.first }
+  /// Global first, then your own groups. Global is listed even before you join it.
+  var sportLeagues: [HpLeague] { GlobalGroups.buildHpLeagueList(mine: leagues, global: globalLeague, sport: sport) }
+  var league: HpLeague? { GlobalGroups.pickDefaultHpLeague(sportLeagues, requested: leagueId) }
+  /// Viewing Global without being in it yet: a dog tap joins and picks.
+  var globalGuest: Bool { GlobalGroups.needsGlobalJoin(league) }
+  var inAnyGroup: Bool { sportLeagues.contains(where: \.isMember) }
   var currentWeek: String { HP.weekStartET(now) }
   var isPast: Bool { weekStart < currentWeek }
 
@@ -77,11 +84,13 @@ final class SportLeagueViewModel: ObservableObject {
 
   func loadLeagues(client: SupabaseClient, userId: UUID?) async {
     guard let userId else { return }
+    let svc = HoopsPucksService(client: client)
     do {
-      leagues = try await HoopsPucksService(client: client).myLeagues(userId: userId)
+      leagues = try await svc.myLeagues(userId: userId)
     } catch {
       flash("Couldn't load groups", HoopsPucksService.friendly(error))
     }
+    globalLeague = await svc.globalLeague(sport: sport)
   }
 
   func loadWeek(client: SupabaseClient, userId: UUID?) async {
@@ -93,7 +102,8 @@ final class SportLeagueViewModel: ObservableObject {
       flash("Couldn't load games", HoopsPucksService.friendly(error))
     }
     if let league, let userId {
-      async let picks = try? svc.myPicks(leagueId: league.id, userId: userId)
+      let guest = globalGuest
+      async let picks: [HpPick]? = guest ? [] : (try? svc.myPicks(leagueId: league.id, userId: userId))
       async let wb = try? svc.weeklyBoard(leagueId: league.id, weekStart: weekStart)
       async let sb = try? svc.seasonBoard(leagueId: league.id)
       let (p, w, s) = await (picks, wb, sb)
@@ -123,16 +133,36 @@ final class SportLeagueViewModel: ObservableObject {
     }
     busyGame = g.id
     defer { busyGame = nil }
+    let svc = HoopsPucksService(client: client)
+    // Not in the global group yet and looking at it: one tap joins it and picks.
+    let joining = globalGuest
+    if joining {
+      do {
+        _ = try await svc.joinGlobal(sport: sport)
+      } catch {
+        flash("Couldn't join the global group", HoopsPucksService.friendly(error))
+        return false
+      }
+    }
+    var pickError: Error?
     do {
-      try await HoopsPucksService(client: client).makePick(leagueId: league.id, gameId: g.id, side: side)
+      try await svc.makePick(leagueId: league.id, gameId: g.id, side: side)
     } catch {
-      flash("Pick not saved", HoopsPucksService.friendly(error))
+      pickError = error
+    }
+    if joining {
+      leagueId = league.id
+      await loadLeagues(client: client, userId: userId)
+    }
+    if let pickError {
+      flash(joining ? "You're in \(league.name), but the pick didn't save" : "Pick not saved", HoopsPucksService.friendly(pickError))
+      if joining { await loadWeek(client: client, userId: userId) }
       return false
     }
     let ml = g.ml(side)
     let pts = HP.pickPoints(sport: g.sport, lockedMl: ml, lockedSpread: g.spread)
     let at = g.sport == .nba ? "\(HP.sideLine(g.spread, side: side)) (\(HP.fmtMl(ml)))" : HP.fmtMl(ml)
-    flash("Locked \(g.name(side)) at \(at)", "If they win: +\(HP.fmtPts(pts)) pts")
+    flash("Locked \(g.name(side)) at \(at)", "\(joining ? "You're in \(league.name). " : "")If they win: +\(HP.fmtPts(pts)) pts")
     await loadWeek(client: client, userId: userId)
     return true
   }
@@ -149,6 +179,20 @@ final class SportLeagueViewModel: ObservableObject {
       return
     }
     await loadWeek(client: client, userId: userId)
+  }
+
+  func joinGlobal(client: SupabaseClient, userId: UUID?) async {
+    joiningGlobal = true
+    defer { joiningGlobal = false }
+    do {
+      let id = try await HoopsPucksService(client: client).joinGlobal(sport: sport)
+      leagueId = id
+      await loadLeagues(client: client, userId: userId)
+      await loadWeek(client: client, userId: userId)
+      flash("You're in \(globalLeague?.name ?? "the global group").", "Pick up to \(globalLeague?.picks_per_week ?? GlobalGroups.picksPerWeek) underdogs this week.")
+    } catch {
+      flash("Couldn't join the global group", HoopsPucksService.friendly(error))
+    }
   }
 
   func create(name: String, picksPerWeek: Int, client: SupabaseClient, userId: UUID?) async -> Bool {
@@ -330,7 +374,9 @@ struct SportLeagueView: View {
       }
       Button("Cancel", role: .cancel) {}
     } message: {
-      Text("Your picks in this group stay on its boards.")
+      Text(vm.league?.is_global == true
+           ? "Your picks aren't deleted. You can rejoin any time with one tap, and your picks come back with you."
+           : "Your picks in this group stay on its boards.")
     }
   }
 
@@ -351,7 +397,7 @@ struct SportLeagueView: View {
       Text(sport.name.uppercased())
         .font(BoldTheme.Fonts.display(46))
         .foregroundColor(sport == .nba ? BoldTheme.Colors.green : BoldTheme.Colors.text)
-      Text("Start or join a group, pick underdogs from any \(sport.noun) game this week, and climb the weekly board. "
+      Text("Join the global group (\(GlobalGroups.picksPerWeek) dogs a week), or start your own. Pick underdogs from any \(sport.noun) game, Monday to Sunday, and climb the weekly board. "
            + (sport == .nba
               ? "A dog that wins outright banks the points it was getting: +3.5 = 3.5 pts. Covering isn't enough."
               : "A dog that wins outright pays its moneyline: +150 = 1.50 pts.")
@@ -364,16 +410,19 @@ struct SportLeagueView: View {
 
   // MARK: Group card
 
+  /// Global: site admins only. Your own group: its admins.
+  private var canEdit: Bool { GlobalGroups.canEdit(vm.league, isSiteAdmin: featureFlags.isAdmin) }
+
   private var groupCard: some View {
     BoldTheme.GlassCard(strong: true, radius: 18, padding: 16) {
       VStack(alignment: .leading, spacing: 12) {
         if let league = vm.league {
           HStack(spacing: 8) {
-            Image(systemName: "person.3.fill").foregroundColor(BoldTheme.Colors.green).font(.system(size: 14))
+            Image(systemName: league.is_global ? "globe" : "person.3.fill").foregroundColor(BoldTheme.Colors.green).font(.system(size: 14))
             if vm.sportLeagues.count > 1 {
               Menu {
                 ForEach(vm.sportLeagues) { l in
-                  Button(l.name) { vm.leagueId = l.id }
+                  Button(l.is_global ? "\(l.name) · everyone" : l.name) { vm.leagueId = l.id }
                 }
               } label: {
                 HStack(spacing: 4) {
@@ -385,35 +434,50 @@ struct SportLeagueView: View {
               Text(league.name.uppercased()).font(BoldTheme.Fonts.display(22)).foregroundColor(BoldTheme.Colors.text)
             }
             Spacer(minLength: 4)
-            Menu {
-              Button { UIPasteboard.general.string = league.join_code; vm.flash("Copied join code \(league.join_code)") } label: {
-                Label("Copy join code", systemImage: "doc.on.doc")
+            if !league.is_global || canEdit || league.isMember {
+              Menu {
+                if !league.is_global {
+                  Button { UIPasteboard.general.string = league.join_code; vm.flash("Copied join code \(league.join_code)") } label: {
+                    Label("Copy join code", systemImage: "doc.on.doc")
+                  }
+                  ShareLink(item: "Join my \(sport.name) group on Stupid Underdog Pick. Code: \(league.join_code)") {
+                    Label("Share join code", systemImage: "square.and.arrow.up")
+                  }
+                }
+                if canEdit {
+                  Button { editPpw = Double(league.picks_per_week) } label: { Label("Edit underdogs per week", systemImage: "slider.horizontal.3") }
+                }
+                if league.isMember {
+                  Button(role: .destructive) { confirmLeave = true } label: { Label("Leave group", systemImage: "rectangle.portrait.and.arrow.right") }
+                }
+              } label: {
+                Image(systemName: "ellipsis.circle").font(.system(size: 20)).foregroundColor(BoldTheme.Colors.textDim)
               }
-              ShareLink(item: "Join my \(sport.name) group on Stupid Underdog Pick. Code: \(league.join_code)") {
-                Label("Share join code", systemImage: "square.and.arrow.up")
-              }
-              if league.isAdmin {
-                Button { editPpw = Double(league.picks_per_week) } label: { Label("Edit underdogs per week", systemImage: "slider.horizontal.3") }
-              }
-              Button(role: .destructive) { confirmLeave = true } label: { Label("Leave group", systemImage: "rectangle.portrait.and.arrow.right") }
-            } label: {
-              Image(systemName: "ellipsis.circle").font(.system(size: 20)).foregroundColor(BoldTheme.Colors.textDim)
+              .accessibilityLabel("Group options")
             }
-            .accessibilityLabel("Group options")
           }
           HStack(spacing: 8) {
-            Button {
-              UIPasteboard.general.string = league.join_code
-              vm.flash("Copied join code \(league.join_code)")
-            } label: {
-              Label(league.join_code, systemImage: "doc.on.doc")
-                .font(BoldTheme.Fonts.mono(12, weight: .semibold))
-                .foregroundColor(BoldTheme.Colors.text)
+            if league.is_global {
+              Text("EVERYONE")
+                .font(BoldTheme.Fonts.mono(10.5, weight: .bold))
+                .tracking(0.8)
+                .foregroundColor(.white)
                 .padding(.horizontal, 10).padding(.vertical, 5)
-                .overlay(Capsule().strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
+                .background(Capsule().fill(BoldTheme.Colors.green))
+            } else {
+              Button {
+                UIPasteboard.general.string = league.join_code
+                vm.flash("Copied join code \(league.join_code)")
+              } label: {
+                Label(league.join_code, systemImage: "doc.on.doc")
+                  .font(BoldTheme.Fonts.mono(12, weight: .semibold))
+                  .foregroundColor(BoldTheme.Colors.text)
+                  .padding(.horizontal, 10).padding(.vertical, 5)
+                  .overlay(Capsule().strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
+              }
+              .buttonStyle(.plain)
+              .accessibilityLabel("Copy join code \(league.join_code)")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Copy join code \(league.join_code)")
             Spacer()
             chip("\(league.picks_per_week) \(league.picks_per_week == 1 ? "DOG" : "DOGS") / WEEK", dark: true)
           }
@@ -431,8 +495,38 @@ struct SportLeagueView: View {
                 }
                 secondaryButton("Cancel") { editPpw = nil }
               }
-              Text("Can only change before anyone in the group picks this week.")
+              Text("Can only change before anyone in the group picks this week." + (league.is_global ? " This is the global group: the change applies to everyone." : ""))
                 .font(BoldTheme.Fonts.body(11)).foregroundColor(BoldTheme.Colors.textFaint)
+            }
+          }
+          if league.is_global {
+            Text("\(GlobalGroups.tagline) \(league.picks_per_week) underdogs a week, Monday to Sunday ET. Free to play.")
+              .font(BoldTheme.Fonts.body(13))
+              .foregroundColor(BoldTheme.Colors.textDim)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+          if vm.globalGuest {
+            VStack(spacing: 6) {
+              Button {
+                Task { if let client { await vm.joinGlobal(client: client, userId: userId) } }
+              } label: {
+                HStack(spacing: 8) {
+                  if vm.joiningGlobal { ProgressView().tint(BoldTheme.Colors.text) } else { Image(systemName: "person.3.fill") }
+                  Text(GlobalGroups.joinCTA)
+                }
+                .font(BoldTheme.Fonts.body(15, weight: .bold))
+                .foregroundColor(BoldTheme.Colors.text)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 13)
+                .background(GoldHatchBackground(radius: 12))
+              }
+              .buttonStyle(.plain)
+              .disabled(vm.joiningGlobal)
+              .accessibilityIdentifier("joinGlobalButton")
+              Text("Or just tap a dog below: that joins you and makes the pick.")
+                .font(BoldTheme.Fonts.body(11.5))
+                .foregroundColor(BoldTheme.Colors.textFaint)
+                .frame(maxWidth: .infinity)
             }
           }
         } else {
@@ -445,6 +539,11 @@ struct SportLeagueView: View {
             .fixedSize(horizontal: false, vertical: true)
         }
 
+        if vm.league != nil && !vm.inAnyGroup {
+          Text("Want your own? Pick how many dogs your friends play (1 to 10).")
+            .font(BoldTheme.Fonts.body(12))
+            .foregroundColor(BoldTheme.Colors.textDim)
+        }
         HStack(spacing: 8) {
           togglePanelButton("Start a group", systemImage: "plus", panel: .create)
           togglePanelButton("Join with a code", systemImage: nil, panel: .join)

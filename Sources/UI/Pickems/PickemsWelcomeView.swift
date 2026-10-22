@@ -1,10 +1,11 @@
 import SwiftUI
 
 // Shown at the Pickems entry point for anyone not yet in a group that
-// plays Pickems -- picking isn't group-gated server-side, but the product
-// intent is that the first thing you do here is get into a group, not
-// stumble into a pick grid with nowhere for it to show up.
+// plays Pickems. Picking isn't group-gated server-side: shared picks (no
+// group) score on the global Pickems board, so the first choice is the
+// Global group (one tap, onPlayGlobal), with Create/Join below it.
 struct PickemsWelcomeView: View {
+  var onPlayGlobal: (() -> Void)? = nil
   var onJoinedOrCreated: () async -> Void
 
   @State private var showCreate = false
@@ -13,7 +14,7 @@ struct PickemsWelcomeView: View {
   private let bullets = [
     "Pick a winner for every game on the board, every week.",
     "Score 1 point for each correct pick.",
-    "Standings are per-group -- no site-wide leaderboard, just bragging rights among your crew.",
+    "Everyone who plays is on the Global board. A group adds a private board for your crew.",
     "Weekly ties break on a tiebreaker guess: the combined score of that week's last game, closest without going over.",
   ]
 
@@ -59,12 +60,24 @@ struct PickemsWelcomeView: View {
           .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
           .clipShape(RoundedRectangle(cornerRadius: 16))
 
-          Text("Pickems is played in groups. Create one and invite your friends, or join one that's already playing.")
+          Text("\(GlobalGroups.tagline) Or create a group and invite your friends, or join one that's already playing.")
             .font(BoldTheme.Fonts.body(13))
             .foregroundColor(BoldTheme.Colors.textDim)
             .multilineTextAlignment(.center)
 
           VStack(spacing: 10) {
+            if let onPlayGlobal {
+              Button(action: onPlayGlobal) {
+                Text(GlobalGroups.joinCTA)
+                  .font(BoldTheme.Fonts.display(18))
+                  .foregroundColor(.white)
+                  .frame(maxWidth: .infinity)
+                  .frame(height: 50)
+                  .background(BoldTheme.Colors.green)
+                  .clipShape(RoundedRectangle(cornerRadius: 12))
+              }
+              .accessibilityIdentifier("pickemsPlayGlobalButton")
+            }
             Button {
               showCreate = true
             } label: {

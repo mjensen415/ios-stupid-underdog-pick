@@ -36,6 +36,22 @@ struct HoopsPucksService {
     }
   }
 
+  /// The sport's Global league (hp_leagues.is_global). Readable by every
+  /// signed-in user, member or not; role is nil here.
+  func globalLeague(sport: HpSport) async -> HpLeague? {
+    guard let res = try? await client.from("hp_leagues").select("*")
+      .eq("sport", value: sport.rawValue).eq("is_global", value: true).limit(1).execute()
+    else { return nil }
+    return (try? decoder.decode([HpLeague].self, from: res.data))?.first
+  }
+
+  /// Joins the caller to the sport's Global league (idempotent). Returns its id.
+  func joinGlobal(sport: HpSport) async throws -> UUID {
+    struct P: Encodable { let p_sport: String }
+    let res = try await client.rpc("hp_join_global", params: P(p_sport: sport.rawValue)).execute()
+    return try decoder.decode(UUID.self, from: res.data)
+  }
+
   /// One ET week's slate (Monday 00:00 to Sunday 23:59 ET).
   func games(sport: HpSport, weekStart: String) async throws -> [HpGame] {
     let b = HP.weekBoundsUtc(weekStart)

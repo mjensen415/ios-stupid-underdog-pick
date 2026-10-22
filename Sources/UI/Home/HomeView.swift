@@ -275,6 +275,7 @@ struct HomeView: View {
   @State private var showJoinGroup = false
   @State private var showInvitePicker = false
   @State private var pushGroupSlug: String?
+  @State private var pushGlobalBoard: CurrentGame?
   @State private var shareURL: URL?
   @State private var showShareSheet = false
   @State private var dismissingIntro = false
@@ -407,6 +408,9 @@ struct HomeView: View {
       }
       .navigationDestination(item: $pushGroupSlug) { slug in
         GroupDetailView(slug: slug)
+      }
+      .navigationDestination(item: $pushGlobalBoard) { game in
+        GlobalBoardView(game: game)
       }
       .sheet(isPresented: $showCreateGroup) {
         CreateGroupView {
@@ -711,9 +715,13 @@ struct HomeView: View {
         }
       }
 
+      // The Global group: everyone's in it, no group needed.
+      GlobalGroupsRow { pushGlobalBoard = $0 }
+        .padding(.bottom, viewModel.myGroups.isEmpty ? 0 : 8)
+
       if viewModel.myGroups.isEmpty {
         BoldTheme.GlassCard(radius: 16, padding: 24) {
-          Text("You're not in any groups yet.")
+          Text("No private groups yet. Start one for your friends, or join with a code.")
             .font(BoldTheme.Fonts.body(13))
             .foregroundColor(BoldTheme.Colors.textDim)
             .frame(maxWidth: .infinity)
