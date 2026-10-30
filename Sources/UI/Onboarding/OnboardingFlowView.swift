@@ -334,7 +334,7 @@ struct OnboardingFlowView: View {
         }
         .buttonStyle(GoldButtonStyle())
       } else {
-        Text("Pick one underdog. If they win outright, you bank points equal to the spread toward the season leaderboard.")
+        Text("Pick one underdog. If they win outright, you get points equal to the spread toward the season leaderboard.")
           .font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
 
         Button {

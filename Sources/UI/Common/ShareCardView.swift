@@ -36,8 +36,8 @@ struct ShareCardView: View {
       Text(verbatim: "+\(String(format: "%.1f", spread))")
         .font(BoldTheme.Fonts.display(88))
         .foregroundColor(BoldTheme.Colors.goldDeep)
-      // Outright wins only: covering isn't enough to bank the spread.
-      Text("POINTS BANKED IF IT WINS OUTRIGHT")
+      // Outright wins only: covering isn't enough to win the points.
+      Text("POINTS IF IT WINS OUTRIGHT")
         .font(BoldTheme.Fonts.mono(13, weight: .semibold))
         .foregroundColor(BoldTheme.Colors.textFaint)
 

@@ -3,7 +3,7 @@ import Supabase
 
 // My Picks, one section per contest (CFB / Pro Ball / Pickems):
 //   - "This week" hero card: current pick + live status + pick/change CTA
-//   - season stat strip (record, points banked, hit rate / accuracy)
+//   - season stat strip (record, points won, hit rate / accuracy)
 //   - week-by-week history timeline
 // Replaces the old flat ledger that mixed every sport's Underdog picks in
 // one list and never showed Pickems history at all.
@@ -431,7 +431,7 @@ struct MyPicksView: View {
           Spacer(minLength: 0)
         }
       } else {
-        Text(status == .missed ? "Every game has kicked off. Catch the next one." : "Pick one underdog. If they win outright, you bank the spread.")
+        Text(status == .missed ? "Every game has kicked off. Catch the next one." : "Pick one underdog. If they win outright, you get points equal to the spread.")
           .font(BoldTheme.Fonts.body(14))
           .foregroundColor(BoldTheme.Colors.textDim)
       }

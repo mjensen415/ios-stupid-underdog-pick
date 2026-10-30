@@ -222,7 +222,7 @@ struct AuthView: View {
   private var subtitle: String {
     switch mode {
     case .signin: return "Your streak missed you."
-    case .signup: return "Bank the points. Brag forever. Free, always."
+    case .signup: return "Win the points. Brag forever. Free, always."
     case .forgot: return "Drop your email. We'll send a reset link so you can get back to losing responsibly."
     }
   }

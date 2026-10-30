@@ -399,7 +399,7 @@ struct SportLeagueView: View {
         .foregroundColor(sport == .nba ? BoldTheme.Colors.green : BoldTheme.Colors.text)
       Text("Join the global group (\(GlobalGroups.picksPerWeek) dogs a week), or start your own. Pick underdogs from any \(sport.noun) game, Monday to Sunday, and climb the weekly board. "
            + (sport == .nba
-              ? "A dog that wins outright banks the points it was getting: +3.5 = 3.5 pts. Covering isn't enough."
+              ? "If a dog wins outright, you get the points it was getting: +3.5 = 3.5 pts. Covering isn't enough."
               : "A dog that wins outright pays its moneyline: +150 = 1.50 pts.")
            + " Your line locks when you pick. Free to play.")
         .font(BoldTheme.Fonts.body(13))
