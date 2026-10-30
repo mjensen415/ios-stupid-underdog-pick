@@ -15,7 +15,7 @@ struct MagicLinkView: View {
         .ignoresSafeArea()
 
       ScrollView {
-        BoldTheme.GlassCard(radius: 28, padding: 32) {
+        BoldTheme.GlassCard(radius: BoldTheme.Radius.card, padding: 24) {
         VStack(alignment: .leading, spacing: 0) {
           Button {
             dismiss()

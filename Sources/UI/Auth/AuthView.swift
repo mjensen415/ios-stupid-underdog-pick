@@ -40,7 +40,7 @@ struct AuthView: View {
         .ignoresSafeArea()
 
       ScrollView {
-        BoldTheme.GlassCard(radius: 28, padding: 32) {
+        BoldTheme.GlassCard(radius: BoldTheme.Radius.card, padding: 24) {
         VStack(alignment: .leading, spacing: 0) {
           if mode == .forgot {
             Button {
