@@ -222,26 +222,29 @@ struct ProEntryCard: View {
   var body: some View {
     let isPro = pro.isPro(admin: featureFlags.isAdmin)
     let offer = pro.optin.eligible && !pro.optin.claimed
-    HStack(spacing: 12) {
-      Text("PRO")
-        .font(BoldTheme.Fonts.mono(11, weight: .bold))
-        .foregroundColor(BoldTheme.Colors.text)
-        .padding(.horizontal, 8).padding(.vertical, 3)
-        .background(GoldHatchBackground(radius: 6))
+    HStack(spacing: 10) {
       VStack(alignment: .leading, spacing: 2) {
-        Text(offer ? "PRO IS FREE FOR YOU" : isPro ? "YOUR PRO TOOLS" : "SUP PRO")
-          .font(BoldTheme.Fonts.display(20))
+        Text(offer ? "Pro is free for you this season" : isPro ? "Your Pro tools" : "SUP Pro")
+          .font(BoldTheme.Fonts.body(15, weight: .semibold))
           .foregroundColor(BoldTheme.Colors.text)
-        Text(offer ? "Thanks for playing this season. Turn it on when you want." : "Underdog Board, last 3 and where to watch.")
-          .font(BoldTheme.Fonts.body(12))
+        Text("Underdog Board, last 3 and where to watch")
+          .font(BoldTheme.Fonts.body(13))
           .foregroundColor(BoldTheme.Colors.textDim)
-          .lineLimit(2)
+          .fixedSize(horizontal: false, vertical: true)
       }
       Spacer(minLength: 4)
-      Image(systemName: "chevron.right").foregroundColor(BoldTheme.Colors.textFaint)
+      if offer {
+        SupPill(text: "Turn on", kind: .green)
+      } else {
+        Image(systemName: "chevron.right")
+          .font(.system(size: 13, weight: .bold))
+          .foregroundColor(BoldTheme.Colors.textFaint)
+      }
     }
-    .padding(14)
-    .background(RoundedRectangle(cornerRadius: 16).fill(BoldTheme.Colors.glassStrong))
-    .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(offer ? BoldTheme.Colors.goldDeep.opacity(0.5) : BoldTheme.Colors.border, lineWidth: 1))
+    .padding(.horizontal, BoldTheme.Space.cardPad)
+    .padding(.vertical, BoldTheme.Space.s3)
+    .frame(minHeight: 52)
+    .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
+    .contentShape(Rectangle())
   }
 }

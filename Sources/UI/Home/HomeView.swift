@@ -323,33 +323,6 @@ struct HomeView: View {
     return profile.has_onboarded && !profile.pickems_intro_dismissed && !pickemsActive
   }
 
-  /// Follows the games you actually play, not the last-used switcher: a
-  /// Pro-Ball-only player shouldn't see "WEEK 5 · CFB". Pickems counts as
-  /// Pro Ball. Playing both shows both weeks (they differ -- CFB starts a
-  /// week earlier).
-  private var headerLine: String {
-    guard viewModel.hasLoaded else { return " " }
-    let playsCfb = underdogCfbActive
-    let playsPro = underdogProBallActive || pickemsActive
-    let cfb = viewModel.cfbOffseason ? nil : viewModel.cfbContext
-    let pro = viewModel.nflOffseason ? nil : viewModel.nflContext
-    if playsCfb && playsPro, let cfb, let pro {
-      return "CFB WK \(formatWeekLabel(cfb.week)) · PRO BALL WK \(formatWeekLabel(pro.week)) · \(max(cfb.season, pro.season))"
-    }
-    if playsPro && !playsCfb {
-      if let pro { return "WEEK \(formatWeekLabel(pro.week)) · PRO BALL \(pro.season)" }
-      return "PRO BALL · OFFSEASON"
-    }
-    if playsCfb && !playsPro {
-      if let cfb { return "WEEK \(formatWeekLabel(cfb.week)) · CFB \(cfb.season)" }
-      return "CFB · OFFSEASON"
-    }
-    // No contests yet (or one side in its offseason): whatever's in season.
-    if let cfb { return "WEEK \(formatWeekLabel(cfb.week)) · CFB \(cfb.season)" }
-    if let pro { return "WEEK \(formatWeekLabel(pro.week)) · PRO BALL \(pro.season)" }
-    return viewModel.week == nil ? " " : "OFFSEASON"
-  }
-
   private var initials: String {
     let email = appState.session?.user.email ?? "??"
     return String(email.prefix(2)).uppercased()
@@ -359,17 +332,17 @@ struct HomeView: View {
     NavigationStack {
       ZStack {
         BoldTheme.Colors.bgPage.ignoresSafeArea()
-        BoldTheme.AmbientBlobs().ignoresSafeArea()
 
         ScrollView {
           VStack(alignment: .leading, spacing: 0) {
             topRow
             if viewModel.hasLoaded {
+              statsRow
               contestsSection
               if proStore.showEntry(flags: featureFlags) {
+                sectionHeader("Pro")
                 NavigationLink { ProView() } label: { ProEntryCard() }
                   .buttonStyle(.plain)
-                  .padding(.top, 14)
               }
               groupsSection
               discoverSection
@@ -377,15 +350,23 @@ struct HomeView: View {
               quickActionsRow
             } else {
               ProgressView()
-                .tint(BoldTheme.Colors.goldDeep)
+                .tint(BoldTheme.Colors.text)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 80)
             }
           }
-          .padding(18)
+          .padding(.horizontal, BoldTheme.Space.margin)
+          .padding(.top, BoldTheme.Space.s2)
+          .padding(.bottom, BoldTheme.Space.s5)
         }
       }
       .navigationBarHidden(true)
+      // No nav bar here, so give the status bar its own page-coloured strip --
+      // otherwise cards scroll up under the clock.
+      .safeAreaInset(edge: .top, spacing: 0) {
+        Color.clear.frame(height: 0)
+          .background(BoldTheme.Colors.bgPage.opacity(0.94), ignoresSafeAreaEdges: .top)
+      }
       // onAppear (not .task) so returning from Games/Pickems after making a
       // pick refreshes the This Week rows.
       .onAppear {
@@ -469,13 +450,13 @@ struct HomeView: View {
       Rectangle().fill(BoldTheme.Colors.border).frame(height: 1)
         .padding(.bottom, 20)
       HStack(spacing: 34) {
-        quickAction(label: "Create Group", systemImage: "plus", gold: true) { showCreateGroup = true }
-        quickAction(label: "Join Group", systemImage: "link", gold: false) { showJoinGroup = true }
-        quickAction(label: "Invite Friends", systemImage: "square.and.arrow.up", gold: false, action: handleInviteTap)
+        quickAction(label: "Create group", systemImage: "plus", gold: false) { showCreateGroup = true }
+        quickAction(label: "Join group", systemImage: "link", gold: false) { showJoinGroup = true }
+        quickAction(label: "Invite friends", systemImage: "square.and.arrow.up", gold: false, action: handleInviteTap)
       }
     }
-    .padding(.top, 4)
-    .padding(.bottom, 8)
+    .padding(.top, BoldTheme.Space.s5)
+    .padding(.bottom, BoldTheme.Space.s2)
   }
 
   private func quickAction(label: String, systemImage: String, gold: Bool, action: @escaping () -> Void) -> some View {
@@ -483,11 +464,8 @@ struct HomeView: View {
       VStack(spacing: 8) {
         ZStack {
           Circle()
-            .fill(gold ? BoldTheme.Colors.gold : Color.white.opacity(0.7))
+            .fill(gold ? BoldTheme.Colors.gold : BoldTheme.Colors.card)
             .frame(width: 50, height: 50)
-            .overlay(gold ? nil : Circle().strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
-            .overlay { if gold { BoldTheme.HatchOverlay().clipShape(Circle()) } }
-            .shadow(color: Color(hex: 0x142A1C).opacity(gold ? 0.22 : 0.08), radius: 8, y: 4)
           Image(systemName: systemImage)
             .font(.system(size: 18, weight: .semibold))
             .foregroundColor(BoldTheme.Colors.text)
@@ -497,50 +475,64 @@ struct HomeView: View {
     }
   }
 
-  private var topRow: some View {
-    HStack(spacing: 10) {
-      SupIcon(variant: .monogram)
-        .frame(width: 38, height: 38)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .shadow(color: Color(hex: 0x142A1C).opacity(0.3), radius: 6, y: 4)
+  // ── Greeting (de-slop #16/#17): two lines, no "WELCOME BACK." ───────
+  private var greeting: String {
+    let h = Calendar.current.component(.hour, from: Date())
+    let part = h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"
+    guard let first = viewModel.profile?.display_name?
+      .split(separator: " ").first.map(String.init), !first.isEmpty else { return part }
+    return "\(part), \(first)"
+  }
 
+  /// The contest Home leads with (the yellow block): CFB if you play it,
+  /// else Pro Ball Underdog. Nil = no Underdog contest yet.
+  private var primarySport: String? {
+    if underdogCfbActive { return "cfb" }
+    if underdogProBallActive { return "nfl" }
+    return nil
+  }
+
+  /// Next kickoff you can still pick for the lead contest.
+  private var primaryKickoff: Date? {
+    primarySport == "cfb" ? viewModel.nextOpenKickoffCfb : primarySport == "nfl" ? viewModel.nextOpenKickoffNfl : nil
+  }
+
+  private var countdownLine: Text? {
+    guard let k = primaryKickoff else { return nil }
+    let secs = max(0, Int(k.timeIntervalSinceNow))
+    let d = secs / 86_400, h = (secs % 86_400) / 3600, m = (secs % 3600) / 60
+    let txt = d > 0 ? "\(d)d \(h)h" : h > 0 ? "\(h)h \(m)m" : "\(max(m, 1))m"
+    return Text("Picks lock in ") + Text(verbatim: txt).foregroundColor(BoldTheme.Colors.text).font(BoldTheme.Fonts.body(15, weight: .semibold))
+  }
+
+  private var topRow: some View {
+    HStack(alignment: .center, spacing: BoldTheme.Space.s3) {
       VStack(alignment: .leading, spacing: 2) {
-        Text(verbatim: headerLine)
-          .font(BoldTheme.Fonts.mono(10, weight: .semibold))
-          .foregroundColor(BoldTheme.Colors.green)
-        HStack(spacing: 8) {
-          Text("WELCOME BACK.")
-            .font(BoldTheme.Fonts.display(19))
-            .foregroundColor(BoldTheme.Colors.text)
-          if viewModel.streak > 0 {
-            Text(verbatim: "🔥 \(viewModel.streak)-week streak")
-              .font(BoldTheme.Fonts.mono(11, weight: .semibold))
-              .foregroundColor(BoldTheme.Colors.goldDeep)
-              .padding(.horizontal, 9).padding(.vertical, 3)
-              .background(BoldTheme.Colors.goldDeep.opacity(0.1))
-              .clipShape(Capsule())
-          }
+        Text(verbatim: greeting)
+          .font(BoldTheme.Fonts.body(22, weight: .bold))
+          .foregroundColor(BoldTheme.Colors.text)
+        if viewModel.hasLoaded, let countdownLine {
+          countdownLine
+            .font(BoldTheme.Fonts.body(15))
+            .foregroundColor(BoldTheme.Colors.textDim)
         }
       }
-
       Spacer()
-
       Button {
         showProfile = true
       } label: {
         Circle()
           .fill(BoldTheme.Colors.text)
-          .frame(width: 34, height: 34)
+          .frame(width: 36, height: 36)
           .overlay(
             Text(initials)
-              .font(BoldTheme.Fonts.display(13))
+              .font(BoldTheme.Fonts.display(17))
               .foregroundColor(BoldTheme.Colors.gold)
           )
-          .overlay(Circle().strokeBorder(Color.white.opacity(0.7), lineWidth: 2))
       }
       .accessibilityLabel("Profile")
     }
-    .padding(.bottom, 16)
+    .padding(.top, BoldTheme.Space.s2)
     // Presented as a sheet rather than a NavigationLink push -- ProfileView
     // has its own internal NavigationStack (it's also a standalone tab
     // root), and nesting that inside Home's NavigationStack would double
@@ -550,11 +542,65 @@ struct HomeView: View {
     }
   }
 
+  // ── Big numbers (de-slop #18): dog wins, points, best group rank -- all
+  // from data Home already loads (get_my_rank + my groups). ─────────────
+  @ViewBuilder private var statsRow: some View {
+    let rank = viewModel.myRank
+    let sportKey = sport.rawValue
+    let bestGroup = viewModel.myGroups
+      .filter { $0.rank != nil && $0.game_type != .pickems && ($0.sport.rawValue == sportKey || $0.sport == .both) }
+      .min { ($0.rank ?? .max) < ($1.rank ?? .max) }
+    if hasAnyContest && (rank != nil || bestGroup != nil) {
+      HStack(alignment: .top, spacing: BoldTheme.Space.s2) {
+        bigStat(String(rank?.wins ?? 0), label: "dog wins this season")
+        bigStat(formatSpread(rank?.points ?? 0), label: "points")
+        if let g = bestGroup, let r = g.rank {
+          bigStat("#\(r)", label: "of \(g.player_count ?? g.member_count) in \(g.name)")
+        } else if let rank, rank.totalPlayers > 0 {
+          bigStat("#\(rank.rank)", label: "of \(rank.totalPlayers) overall")
+        } else if viewModel.streak > 0 {
+          bigStat(String(viewModel.streak), label: "week streak")
+        }
+      }
+      .padding(.top, 20)
+    }
+  }
+
+  private func bigStat(_ value: String, label: String) -> some View {
+    VStack(alignment: .leading, spacing: 2) {
+      Text(verbatim: value)
+        .font(BoldTheme.Fonts.display(46))
+        .foregroundColor(BoldTheme.Colors.text)
+        .lineLimit(1)
+        .minimumScaleFactor(0.6)
+      Text(verbatim: label)
+        .font(BoldTheme.Fonts.body(13))
+        .foregroundColor(BoldTheme.Colors.textDim)
+        .lineLimit(2)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+    .frame(maxWidth: .infinity, alignment: .leading)
+  }
+
+  private func sectionHeader(_ title: String, link: String? = nil, action: (() -> Void)? = nil) -> some View {
+    HStack(alignment: .firstTextBaseline) {
+      Text(title).font(BoldTheme.Fonts.body(16, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
+      Spacer()
+      if let link, let action {
+        Button(action: action) {
+          Text(link).font(BoldTheme.Fonts.body(14, weight: .semibold)).foregroundColor(BoldTheme.Colors.green)
+        }
+      }
+    }
+    .padding(.top, BoldTheme.Space.s5)
+    .padding(.bottom, BoldTheme.Space.s2)
+  }
+
   // ── Your Contests -- one row per game this account is actually playing,
   // so someone in only one game never has to wade through the others to
   // find their pick. Mirrors web's Home.tsx exactly. ──────────────────────
   private var contestsSection: some View {
-    VStack(alignment: .leading, spacing: 10) {
+    VStack(alignment: .leading, spacing: 0) {
       if showPickemsIntroBanner {
         PickemsIntroBanner(dismissing: dismissingIntro) {
           Task { await dismissPickemsIntro() }
@@ -562,73 +608,63 @@ struct HomeView: View {
         } onDismiss: {
           Task { await dismissPickemsIntro() }
         }
+        .padding(.top, BoldTheme.Space.s4)
       }
 
-      Text(hasAnyContest ? "THIS WEEK" : "GET STARTED")
-        .font(BoldTheme.Fonts.mono(10, weight: .semibold))
-        .foregroundColor(BoldTheme.Colors.textFaint)
-
       if hasAnyContest {
-        VStack(spacing: 10) {
-          if underdogCfbActive {
-            ContestRow(
-              kind: .underdog,
-              sport: "CFB",
-              week: weekShort(viewModel.cfbContext),
-              status: underdogStatus(pick: viewModel.myPickCfb, detail: viewModel.pickDetailCfb, kickoff: viewModel.nextOpenKickoffCfb, upcoming: viewModel.cfbWeekUpcoming, loaded: viewModel.cfbWindowLoaded, offseason: viewModel.cfbOffseason),
-              detail: viewModel.pickDetailCfb
-            ) {
-              appState.goToUnderdog(sport: "cfb")
-            }
+        // This week's pick: the one solid-yellow block on the screen (#19).
+        if let primarySport {
+          let isCfb = primarySport == "cfb"
+          PickBlock(
+            sport: isCfb ? "CFB" : "Pro Ball",
+            week: isCfb ? viewModel.cfbContext?.week : viewModel.nflContext?.week,
+            status: isCfb
+              ? underdogStatus(pick: viewModel.myPickCfb, detail: viewModel.pickDetailCfb, kickoff: viewModel.nextOpenKickoffCfb, upcoming: viewModel.cfbWeekUpcoming, loaded: viewModel.cfbWindowLoaded, offseason: viewModel.cfbOffseason)
+              : underdogStatus(pick: viewModel.myPickNfl, detail: viewModel.pickDetailNfl, kickoff: viewModel.nextOpenKickoffNfl, upcoming: viewModel.nflWeekUpcoming, loaded: viewModel.nflWindowLoaded, offseason: viewModel.nflOffseason),
+            detail: isCfb ? viewModel.pickDetailCfb : viewModel.pickDetailNfl,
+            kickoff: primaryKickoff
+          ) {
+            appState.goToUnderdog(sport: primarySport)
           }
-          if underdogProBallActive {
-            ContestRow(
-              kind: .underdog,
-              sport: "Pro Ball",
-              week: weekShort(viewModel.nflContext),
-              status: underdogStatus(pick: viewModel.myPickNfl, detail: viewModel.pickDetailNfl, kickoff: viewModel.nextOpenKickoffNfl, upcoming: viewModel.nflWeekUpcoming, loaded: viewModel.nflWindowLoaded, offseason: viewModel.nflOffseason),
-              detail: viewModel.pickDetailNfl
-            ) {
-              appState.goToUnderdog(sport: "nfl")
-            }
-          }
-          if pickemsActive {
-            ContestRow(
-              kind: .pickems,
-              sport: "Pro Ball",
-              week: weekShort(viewModel.nflContext),
-              status: pickemsStatus,
-              progress: viewModel.pickemsPicked > 0 && viewModel.pickemsTotal > 0 ? (viewModel.pickemsPicked, viewModel.pickemsTotal) : nil
-            ) {
-              appState.goToPickems()
-            }
-          }
+          .padding(.top, BoldTheme.Space.s4)
         }
-      }
 
-      if hasAnyContest {
+        // Every other contest you play, as compact rows (#20).
+        let others: [AnyView] = [
+          (primarySport != "nfl" && underdogProBallActive) ? AnyView(ContestRow(
+            kind: .underdog, sport: "Pro Ball", week: weekShort(viewModel.nflContext),
+            status: underdogStatus(pick: viewModel.myPickNfl, detail: viewModel.pickDetailNfl, kickoff: viewModel.nextOpenKickoffNfl, upcoming: viewModel.nflWeekUpcoming, loaded: viewModel.nflWindowLoaded, offseason: viewModel.nflOffseason),
+            detail: viewModel.pickDetailNfl, kickoff: viewModel.nextOpenKickoffNfl
+          ) { appState.goToUnderdog(sport: "nfl") }) : nil,
+          pickemsActive ? AnyView(ContestRow(
+            kind: .pickems, sport: "Pro Ball", week: weekShort(viewModel.nflContext),
+            status: pickemsStatus,
+            progress: viewModel.pickemsTotal > 0 ? (viewModel.pickemsPicked, viewModel.pickemsTotal) : nil
+          ) { appState.goToPickems() }) : nil,
+        ].compactMap { $0 }
+        if !others.isEmpty {
+          sectionHeader("This week")
+          ListCard(rows: others)
+        }
+
         // Every contest you're not in yet gets a one-tap way in -- a
         // Pro-Ball-only player still sees College Underdog here, etc.
         let joinable: [(key: String, kind: JoinContestRow.Kind, sport: String, blurb: String)] = [
-          underdogCfbActive ? nil : ("cfb_underdog", .underdog, "CFB", "One underdog a week. Win outright, bank the spread."),
-          underdogProBallActive ? nil : ("proball_underdog", .underdog, "Pro Ball", "One underdog a week. Win outright, bank the spread."),
+          underdogCfbActive ? nil : ("cfb_underdog", .underdog, "CFB", "One underdog a week. If they win outright, you win the points."),
+          underdogProBallActive ? nil : ("proball_underdog", .underdog, "Pro Ball", "One underdog a week. If they win outright, you win the points."),
           pickemsActive ? nil : ("pickems", .pickems, "Pro Ball", "Pick every game's winner. 1 point each."),
         ].compactMap { $0 }
         if !joinable.isEmpty {
-          Text("JOIN ANOTHER CONTEST")
-            .font(BoldTheme.Fonts.mono(10, weight: .semibold))
-            .foregroundColor(BoldTheme.Colors.textFaint)
-            .padding(.top, 4)
-          VStack(spacing: 10) {
-            ForEach(joinable, id: \.key) { c in
-              JoinContestRow(kind: c.kind, sport: c.sport, blurb: c.blurb) {
-                Task { await joinContest(c.key) }
-              }
-            }
-          }
+          sectionHeader("Join another contest")
+          ListCard(rows: joinable.map { c in
+            AnyView(JoinContestRow(kind: c.kind, sport: c.sport, blurb: c.blurb) {
+              Task { await joinContest(c.key) }
+            })
+          })
         }
       } else {
-        VStack(spacing: 10) {
+        sectionHeader("Get started")
+        VStack(spacing: BoldTheme.Space.cardGap) {
           GameCardView(game: .underdog, compact: true) {
             appState.requestedTab = 1
           }
@@ -638,7 +674,6 @@ struct HomeView: View {
         }
       }
     }
-    .padding(.bottom, 22)
   }
 
   /// Record the contest on the profile (so it shows under This Week from
@@ -655,9 +690,9 @@ struct HomeView: View {
     }
   }
 
-  /// "WEEK 3", or blank until the context loads.
+  /// "Week 3", or blank until the context loads.
   private func weekShort(_ ctx: CurrentContext?) -> String {
-    ctx.map { "WEEK \(formatWeekLabel($0.week))" } ?? ""
+    ctx.map { "Week \(formatWeekLabel($0.week))" } ?? ""
   }
 
   /// Picked (or its result once played); otherwise "Pick now" while any
@@ -704,88 +739,80 @@ struct HomeView: View {
   }
 
   private var groupsSection: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      HStack {
-        Text("YOUR GROUPS").font(BoldTheme.Fonts.display(20)).foregroundColor(BoldTheme.Colors.text)
-        Spacer()
-        Button {
-          appState.requestedTab = 4 // Groups tab
-        } label: {
-          Text("Discover public groups →").font(BoldTheme.Fonts.body(12, weight: .bold)).foregroundColor(BoldTheme.Colors.green)
-        }
+    VStack(alignment: .leading, spacing: 0) {
+      sectionHeader("Your groups", link: "Find a group") {
+        appState.requestedTab = 4 // Groups tab
       }
 
       // The Global group: everyone's in it, no group needed.
       GlobalGroupsRow { pushGlobalBoard = $0 }
-        .padding(.bottom, viewModel.myGroups.isEmpty ? 0 : 8)
+        .padding(.bottom, viewModel.myGroups.isEmpty ? 0 : BoldTheme.Space.cardGap)
 
       if viewModel.myGroups.isEmpty {
-        BoldTheme.GlassCard(radius: 16, padding: 24) {
+        BoldTheme.FlatCard {
           Text("No private groups yet. Start one for your friends, or join with a code.")
-            .font(BoldTheme.Fonts.body(13))
+            .font(BoldTheme.Fonts.body(14))
             .foregroundColor(BoldTheme.Colors.textDim)
-            .frame(maxWidth: .infinity)
         }
       } else {
-        ForEach(viewModel.myGroups) { g in
-          Button { pushGroupSlug = g.slug } label: {
-            BoldTheme.GlassCard(strong: true, radius: 14, padding: 16) {
-              HStack {
-                VStack(alignment: .leading, spacing: 3) {
-                  HStack(spacing: 8) {
-                    Text(g.name).font(BoldTheme.Fonts.body(14, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
-                    if g.my_role != .member { RoleBadge(role: g.my_role) }
-                  }
-                  Text(verbatim: "\(g.member_count) member\(g.member_count == 1 ? "" : "s")")
-                    .font(BoldTheme.Fonts.body(11.5))
-                    .foregroundColor(BoldTheme.Colors.textDim)
-                }
-                Spacer()
-                if let rank = g.rank {
-                  Text(verbatim: "#\(rank)").font(BoldTheme.Fonts.mono(13, weight: .semibold)).foregroundColor(BoldTheme.Colors.goldDeep)
-                }
+        ListCard(rows: viewModel.myGroups.map { g in
+          AnyView(Button { pushGroupSlug = g.slug } label: {
+            HStack(spacing: 10) {
+              VStack(alignment: .leading, spacing: 2) {
+                Text(g.name)
+                  .font(BoldTheme.Fonts.body(15, weight: .semibold))
+                  .foregroundColor(BoldTheme.Colors.text)
+                Text(verbatim: "\(g.member_count) member\(g.member_count == 1 ? "" : "s")" + (g.my_role == .owner ? " · you own it" : g.my_role == .admin ? " · you're an admin" : ""))
+                  .font(BoldTheme.Fonts.body(13))
+                  .foregroundColor(BoldTheme.Colors.textDim)
               }
+              Spacer(minLength: 0)
+              if let rank = g.rank {
+                Text(verbatim: "#\(rank)").font(BoldTheme.Fonts.display(24)).foregroundColor(BoldTheme.Colors.text)
+              }
+              Image(systemName: "chevron.right")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundColor(BoldTheme.Colors.textFaint)
             }
+            .contentShape(Rectangle())
           }
-          .padding(.bottom, 8)
-        }
+          .buttonStyle(.plain))
+        })
       }
     }
-    .padding(.bottom, 22)
   }
 
   private var discoverSection: some View {
     Group {
       if !viewModel.discoverGroups.isEmpty {
-        VStack(alignment: .leading, spacing: 10) {
-          Text("DISCOVER").font(BoldTheme.Fonts.mono(10, weight: .semibold)).foregroundColor(BoldTheme.Colors.textFaint)
+        VStack(alignment: .leading, spacing: 0) {
+          sectionHeader("Public groups")
           ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
+            HStack(spacing: BoldTheme.Space.s2) {
               ForEach(viewModel.discoverGroups) { g in
-                BoldTheme.GlassCard(strong: true, radius: 14, padding: 12) {
-                  VStack(alignment: .leading, spacing: 8) {
-                    Text(g.name).font(BoldTheme.Fonts.body(12.5, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
+                Button { appState.requestedTab = 4 } label: {
+                  VStack(alignment: .leading, spacing: 4) {
+                    Text(g.name)
+                      .font(BoldTheme.Fonts.body(14, weight: .semibold))
+                      .foregroundColor(BoldTheme.Colors.text)
+                      .lineLimit(2)
+                      .multilineTextAlignment(.leading)
+                      .frame(maxWidth: .infinity, alignment: .leading)
                     Text(verbatim: "\(g.member_count) member\(g.member_count == 1 ? "" : "s")")
-                      .font(BoldTheme.Fonts.mono(9.5))
+                      .font(BoldTheme.Fonts.body(13))
                       .foregroundColor(BoldTheme.Colors.textDim)
-                    Button { appState.requestedTab = 4 } label: {
-                      Text("View")
-                        .font(BoldTheme.Fonts.body(11, weight: .bold))
-                        .foregroundColor(BoldTheme.Colors.green)
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 6)
-                        .background(BoldTheme.Colors.green.opacity(0.08))
-                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(BoldTheme.Colors.green.opacity(0.35)))
-                        .cornerRadius(8)
-                    }
+                    Spacer(minLength: 0)
                   }
+                  .padding(BoldTheme.Space.s3)
+                  .frame(width: 148, height: 88, alignment: .topLeading)
+                  .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
                 }
-                .frame(width: 148)
+                .buttonStyle(.plain)
               }
             }
           }
+          .scrollClipDisabled()
         }
-        .padding(.bottom, 22)
       }
     }
   }
@@ -793,38 +820,135 @@ struct HomeView: View {
   private var recapSection: some View {
     Group {
       if !viewModel.recap.isEmpty {
-        VStack(alignment: .leading, spacing: 10) {
-          Text("DOGS THAT HIT LAST WEEK").font(BoldTheme.Fonts.mono(10, weight: .semibold)).foregroundColor(BoldTheme.Colors.textFaint)
-          BoldTheme.GlassCard(strong: true, radius: 16, padding: 6) {
-            VStack(spacing: 0) {
-              ForEach(Array(viewModel.recap.enumerated()), id: \.element.id) { index, hit in
-                HStack(spacing: 10) {
-                  Circle().fill(BoldTheme.Colors.gold).frame(width: 8, height: 8)
-                    .overlay(Circle().stroke(BoldTheme.Colors.gold.opacity(0.22), lineWidth: 3).scaleEffect(1.6))
-                  VStack(alignment: .leading, spacing: 1) {
-                    Text(hit.match_description ?? "").font(BoldTheme.Fonts.body(12.5, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
-                    Text(verbatim: "Final: \(hit.score_display ?? "")").font(BoldTheme.Fonts.body(11)).foregroundColor(BoldTheme.Colors.textDim)
-                  }
-                  Spacer()
-                  Text(hit.line_display ?? "").font(BoldTheme.Fonts.display(17)).foregroundColor(BoldTheme.Colors.green)
-                }
-                .padding(.vertical, 10)
-                .overlay(alignment: .top) {
-                  if index > 0 { Rectangle().fill(BoldTheme.Colors.border).frame(height: 1) }
-                }
+        VStack(alignment: .leading, spacing: 0) {
+          sectionHeader("Dogs that won last week")
+          ListCard(rows: viewModel.recap.map { hit in
+            AnyView(HStack(spacing: 10) {
+              VStack(alignment: .leading, spacing: 2) {
+                Text(hit.match_description ?? "")
+                  .font(BoldTheme.Fonts.body(15, weight: .semibold))
+                  .foregroundColor(BoldTheme.Colors.text)
+                Text(verbatim: "Final: \(hit.score_display ?? "")")
+                  .font(BoldTheme.Fonts.body(13))
+                  .foregroundColor(BoldTheme.Colors.textDim)
               }
-            }
-            .padding(.horizontal, 8)
-          }
+              Spacer()
+              Text(hit.line_display ?? "").font(BoldTheme.Fonts.display(22)).foregroundColor(BoldTheme.Colors.green)
+            })
+          })
         }
       }
     }
   }
 }
 
-// ── Your Contests row ────────────────────────────────────────────────────
-/// A contest you're not in yet: same card shape as ContestRow, with a
-/// "Join" pill instead of a status.
+/// Flat card holding compact rows with hairlines between them (#20).
+private struct ListCard: View {
+  let rows: [AnyView]
+  var body: some View {
+    VStack(spacing: 0) {
+      ForEach(Array(rows.enumerated()), id: \.offset) { i, row in
+        row
+          .padding(.horizontal, BoldTheme.Space.cardPad)
+          .padding(.vertical, BoldTheme.Space.s3)
+          .frame(minHeight: 52)
+          .overlay(alignment: .top) {
+            if i > 0 { Rectangle().fill(BoldTheme.Colors.border).frame(height: 1) }
+          }
+      }
+    }
+    .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
+    .clipShape(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous))
+  }
+}
+
+/// This week's pick for the lead contest -- the one yellow block (#19),
+/// with the ink-on-yellow primary button.
+private struct PickBlock: View {
+  let sport: String
+  let week: Int?
+  let status: ContestRow.Status
+  let detail: HomePickDetail?
+  let kickoff: Date?
+  let action: () -> Void
+
+  private var headline: String {
+    switch status {
+    case .offseason: return "Offseason"
+    case .won(let pts): return "\(detail?.teamName ?? "Your dog") won \(pts)".trimmingCharacters(in: .whitespaces)
+    case .lost: return "\(detail?.teamName ?? "Your dog") lost"
+    case .missed: return "No pick this week"
+    case .picked, .live:
+      guard let detail else { return "You're picked" }
+      return detail.teamName + (detail.spread.map { " +\(jsNumber($0))" } ?? "")
+    default: return "You haven't picked yet"
+    }
+  }
+
+  private var subline: String? {
+    if let detail {
+      if let note = detail.lineNote { return "\(detail.subline) · \(note)" }
+      return detail.subline
+    }
+    if status == .missed { return "Every game has kicked off. Catch the next one." }
+    guard let kickoff else { return nil }
+    let f = DateFormatter()
+    f.dateFormat = "EEE h:mm a"
+    return "Next game kicks off \(f.string(from: kickoff))"
+  }
+
+  private var buttonLabel: String {
+    switch status {
+    case .picked: return "Change pick"
+    case .cta, .neutral: return "Pick your dog"
+    default: return "See games"
+    }
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: BoldTheme.Space.s3) {
+      VStack(alignment: .leading, spacing: 2) {
+        Text(verbatim: "\(sport)\(week.map { " · Week \(formatWeekLabel($0))" } ?? "") · underdog pick")
+          .font(BoldTheme.Fonts.body(13, weight: .semibold))
+          .foregroundColor(BoldTheme.Colors.text.opacity(0.7))
+        HStack(alignment: .center, spacing: 10) {
+          if let detail {
+            RetryingAsyncImage(url: detail.logoURL) { img in
+              img.resizable().scaledToFit()
+            } placeholder: {
+              Image(systemName: "football").resizable().scaledToFit().padding(5).foregroundColor(BoldTheme.Colors.text.opacity(0.4))
+            }
+            .frame(width: 34, height: 34)
+          }
+          Text(verbatim: headline)
+            .font(BoldTheme.Fonts.display(34))
+            .foregroundColor(BoldTheme.Colors.text)
+            .lineLimit(2)
+            .minimumScaleFactor(0.8)
+          if detail?.isLocked == true {
+            Image(systemName: "lock.fill")
+              .font(.system(size: 12, weight: .semibold))
+              .foregroundColor(BoldTheme.Colors.text.opacity(0.6))
+              .accessibilityLabel("Line locked")
+          }
+        }
+        if let subline {
+          Text(verbatim: subline)
+            .font(BoldTheme.Fonts.body(14))
+            .foregroundColor(BoldTheme.Colors.text.opacity(0.75))
+        }
+      }
+      Button(buttonLabel, action: action)
+        .buttonStyle(SupInkButtonStyle())
+    }
+    .padding(BoldTheme.Space.cardPad)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.gold))
+  }
+}
+
+// ── Compact contest rows (de-slop #20) ─────────────────────────────────
+/// A contest you're not in yet: compact row with an outline "Join" pill.
 private struct JoinContestRow: View {
   enum Kind { case underdog, pickems }
   let kind: Kind
@@ -832,172 +956,116 @@ private struct JoinContestRow: View {
   let blurb: String
   let action: () -> Void
 
-  private var gameLabel: String { kind == .pickems ? "PICKEMS" : "UNDERDOG PICK" }
-  private var gameColor: Color { kind == .pickems ? BoldTheme.Colors.pickemsAccent : BoldTheme.Colors.goldDeep }
+  private var gameLabel: String { kind == .pickems ? "Pickems" : "Underdog pick" }
 
   var body: some View {
     Button(action: action) {
-      BoldTheme.GlassCard(strong: false, radius: 16, padding: 14) {
-        HStack(alignment: .center, spacing: 12) {
-          VStack(alignment: .leading, spacing: 2) {
-            Text(gameLabel)
-              .font(BoldTheme.Fonts.mono(10, weight: .semibold))
-              .tracking(0.6)
-              .foregroundColor(gameColor)
-            Text(sport)
-              .font(BoldTheme.Fonts.display(22))
-              .foregroundColor(BoldTheme.Colors.text)
-            Text(blurb)
-              .font(BoldTheme.Fonts.body(12))
-              .foregroundColor(BoldTheme.Colors.textDim)
-              .lineLimit(2)
-          }
-          Spacer(minLength: 8)
-          Text("Join →")
-            .font(BoldTheme.Fonts.body(13, weight: .bold))
-            .foregroundColor(BoldTheme.Colors.green)
-            .padding(.horizontal, 14).padding(.vertical, 7)
-            .overlay(Capsule().strokeBorder(BoldTheme.Colors.green.opacity(0.55), lineWidth: 1.5))
+      HStack(alignment: .center, spacing: 10) {
+        VStack(alignment: .leading, spacing: 2) {
+          Text(verbatim: "\(sport) · \(gameLabel)")
+            .font(BoldTheme.Fonts.body(15, weight: .semibold))
+            .foregroundColor(BoldTheme.Colors.text)
+          Text(blurb)
+            .font(BoldTheme.Fonts.body(13))
+            .foregroundColor(BoldTheme.Colors.textDim)
+            .fixedSize(horizontal: false, vertical: true)
         }
+        Spacer(minLength: 8)
+        SupPill(text: "Join", kind: .outline)
       }
+      .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
   }
 }
 
+/// "Pro Ball · Underdog pick" / "Week 8 · locks Sun 1:00 PM" / one pill.
 private struct ContestRow: View {
   enum Kind { case underdog, pickems }
   enum Status: Equatable {
     case offseason, picked, live, lost, missed
     case won(String)
     case partial(Int, Int)
-    /// Gold call-to-action chip ("Pick now →", "Make picks →").
+    /// Still to do ("Pick now", "Make picks").
     case cta(String)
-    /// Plain text CTA while status is still loading.
+    /// Still loading.
     case neutral(String)
   }
 
   let kind: Kind
-  /// Primary label -- the sport ("CFB" / "Pro Ball").
+  /// The sport ("CFB" / "Pro Ball").
   let sport: String
-  /// "WEEK 3" (blank while loading).
+  /// "Week 3" (blank while loading).
   let week: String
   let status: Status
   var detail: HomePickDetail? = nil
+  var kickoff: Date? = nil
   var progress: (picked: Int, total: Int)? = nil
   let action: () -> Void
 
-  private var gameLabel: String { kind == .pickems ? "PICKEMS" : "UNDERDOG PICK" }
-  private var gameColor: Color { kind == .pickems ? BoldTheme.Colors.pickemsAccent : BoldTheme.Colors.goldDeep }
+  private var gameLabel: String { kind == .pickems ? "Pickems" : "Underdog pick" }
+
+  private var subline: String {
+    var parts: [String] = []
+    if !week.isEmpty { parts.append(week) }
+    if let detail {
+      parts.append(detail.teamName + (detail.spread.map { " +\(jsNumber($0))" } ?? ""))
+    } else if let progress {
+      parts.append("\(progress.picked) of \(progress.total) picked")
+    } else if let kickoff, case .cta = status {
+      let f = DateFormatter()
+      f.dateFormat = "EEE h:mm a"
+      parts.append("locks \(f.string(from: kickoff))")
+    }
+    return parts.joined(separator: " · ")
+  }
 
   var body: some View {
     Button(action: action) {
-      BoldTheme.GlassCard(strong: true, radius: 16, padding: 14) {
-        VStack(alignment: .leading, spacing: 10) {
-          HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 1) {
-              Text(week.isEmpty ? gameLabel : "\(gameLabel) · \(week)")
-                .font(BoldTheme.Fonts.mono(10, weight: .semibold))
-                .tracking(0.6)
-                .foregroundColor(gameColor)
-              Text(sport)
-                .font(BoldTheme.Fonts.display(26))
-                .foregroundColor(BoldTheme.Colors.text)
-            }
-            Spacer()
-            statusView
+      HStack(alignment: .center, spacing: 10) {
+        if let detail {
+          RetryingAsyncImage(url: detail.logoURL) { img in
+            img.resizable().scaledToFit()
+          } placeholder: {
+            Image(systemName: "football").resizable().scaledToFit().padding(5).foregroundColor(BoldTheme.Colors.textFaint)
           }
-
-          if let detail {
-            Rectangle().fill(BoldTheme.Colors.border).frame(height: 1)
-            HStack(spacing: 10) {
-              RetryingAsyncImage(url: detail.logoURL) { img in
-                img.resizable().scaledToFit()
-              } placeholder: {
-                Image(systemName: "football").resizable().scaledToFit().padding(5).foregroundColor(BoldTheme.Colors.textFaint)
-              }
-              .frame(width: 30, height: 30)
-              VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 6) {
-                  Text(detail.teamName)
-                    .font(BoldTheme.Fonts.body(15, weight: .bold))
-                    .foregroundColor(BoldTheme.Colors.text)
-                    .lineLimit(1)
-                  if let sp = detail.spread {
-                    Text(verbatim: "+\(sp == sp.rounded() ? String(format: "%.0f", sp) : String(format: "%.1f", sp))")
-                      .font(BoldTheme.Fonts.mono(13, weight: .semibold))
-                      .foregroundColor(BoldTheme.Colors.goldDeep)
-                    if detail.isLocked {
-                      Image(systemName: "lock.fill")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundColor(BoldTheme.Colors.textFaint)
-                        .accessibilityLabel("Line locked")
-                    }
-                  }
-                }
-                Text(detail.subline)
-                  .font(BoldTheme.Fonts.body(12))
-                  .foregroundColor(BoldTheme.Colors.textDim)
-                  .lineLimit(1)
-                if let note = detail.lineNote {
-                  Text(note)
-                    .font(BoldTheme.Fonts.body(11, weight: .semibold))
-                    .foregroundColor(BoldTheme.Colors.goldDeep)
-                    .lineLimit(2)
-                }
-              }
-              Spacer(minLength: 0)
-            }
-          }
-
-          if let progress {
-            VStack(alignment: .leading, spacing: 5) {
-              GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                  Capsule().fill(BoldTheme.Colors.track)
-                  Capsule().fill(BoldTheme.Colors.pickemsAccent)
-                    .frame(width: geo.size.width * CGFloat(min(progress.picked, progress.total)) / CGFloat(max(progress.total, 1)))
-                }
-              }
-              .frame(height: 5)
-              Text(verbatim: "\(progress.picked) of \(progress.total) picked")
-                .font(BoldTheme.Fonts.body(12))
-                .foregroundColor(BoldTheme.Colors.textDim)
-            }
+          .frame(width: 28, height: 28)
+        }
+        VStack(alignment: .leading, spacing: 2) {
+          Text(verbatim: "\(sport) · \(gameLabel)")
+            .font(BoldTheme.Fonts.body(15, weight: .semibold))
+            .foregroundColor(BoldTheme.Colors.text)
+          if !subline.isEmpty {
+            Text(verbatim: subline)
+              .font(BoldTheme.Fonts.body(13))
+              .foregroundColor(BoldTheme.Colors.textDim)
           }
         }
+        Spacer(minLength: 8)
+        statusView
       }
+      .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
   }
 
   @ViewBuilder private var statusView: some View {
     switch status {
-    case .offseason: chip("Offseason", fg: BoldTheme.Colors.textDim, bg: BoldTheme.Colors.track)
-    case .picked: chip("Picked ✓", fg: BoldTheme.Colors.green, bg: BoldTheme.Colors.green.opacity(0.13))
-    case .live: chip("Live", fg: Color(hex: 0xA6402A), bg: Color(hex: 0xC6402A).opacity(0.13))
-    case .won(let pts): chip(pts.isEmpty ? "Won" : "Won \(pts)", fg: BoldTheme.Colors.text, bg: BoldTheme.Colors.gold)
-    case .lost: chip("Lost", fg: BoldTheme.Colors.textDim, bg: BoldTheme.Colors.track)
-    case .missed: chip("Missed", fg: BoldTheme.Colors.textDim, bg: BoldTheme.Colors.track)
-    case .partial(let p, let t): chip("\(p) of \(t)", fg: BoldTheme.Colors.textDim, bg: BoldTheme.Colors.track)
-    case .cta(let label): chip(label, fg: BoldTheme.Colors.text, bg: BoldTheme.Colors.gold)
-    case .neutral(let label):
-      Text(label).font(BoldTheme.Fonts.display(15)).foregroundColor(BoldTheme.Colors.goldDeep)
+    case .offseason: SupPill(text: "Offseason", kind: .gray)
+    case .picked: SupPill(text: "Picked", kind: .green)
+    case .live: SupPill(text: "Live", kind: .gray)
+    case .won(let pts): SupPill(text: pts.isEmpty ? "Won" : "Won \(pts)", kind: .green)
+    case .lost: SupPill(text: "Lost", kind: .gray)
+    // Neutral gray, not red (de-slop #21).
+    case .missed: SupPill(text: "Missed", kind: .gray)
+    case .partial(let p, let t): SupPill(text: "\(p) of \(t)", kind: .gray)
+    // Outline so it doesn't compete with the yellow block.
+    case .cta, .neutral: SupPill(text: "Pick", kind: .outline)
     }
-  }
-
-  private func chip(_ text: String, fg: Color, bg: Color) -> some View {
-    Text(text)
-      .font(BoldTheme.Fonts.body(11.5, weight: .bold))
-      .foregroundColor(fg)
-      .padding(.horizontal, 10).padding(.vertical, 4)
-      .background(bg)
-      .clipShape(Capsule())
-      .fixedSize()
   }
 }
 
-// ── "Which game" card -- landing-style card reused for Explore. ─────────
+// ── "Which game" card -- shown before you're in any contest. ───────────
 enum GameCardKey { case underdog, pickems }
 
 private struct GameCardView: View {
@@ -1005,50 +1073,35 @@ private struct GameCardView: View {
   var compact: Bool = false
   let action: () -> Void
 
-  private var eyebrow: String { game == .underdog ? "UNDERDOG PICK" : "PRO BALL PICKEMS" }
-  private var headline: String { game == .underdog ? "PICK THE DOG. BANK THE POINTS." : "PICK EVERY WINNER. NO SPREADS." }
+  private var eyebrow: String { game == .underdog ? "Underdog pick · CFB and Pro Ball · free" : "Pro Ball Pickems · free" }
+  private var headline: String { game == .underdog ? "Pick the dog. Win the points." : "Pick every winner. No spreads." }
   private var body_: String {
     game == .underdog
-      ? "One pick every week. Take the underdog — if they win outright, you bank the spread."
+      ? "One pick every week. Take the underdog. If they win outright, you get points equal to the spread."
       : "Straight-up picks on every Pro Ball game, every week. Play in a group, chase the leaderboard."
   }
-  private var badges: [String] { game == .underdog ? ["CFB · Free", "Pro Ball · Free"] : ["Pro Ball · Free"] }
   private var cta: String { game == .underdog ? "Play Underdog Pick" : "Play Pickems" }
 
   var body: some View {
-    Button(action: action) {
-      BoldTheme.GlassCard(strong: true, radius: 18, padding: compact ? 16 : 22) {
-        VStack(alignment: .leading, spacing: compact ? 8 : 10) {
-          Text(eyebrow).font(BoldTheme.Fonts.mono(10, weight: .bold)).foregroundColor(BoldTheme.Colors.green)
-          Text(headline).font(BoldTheme.Fonts.display(compact ? 19 : 26)).foregroundColor(BoldTheme.Colors.text)
-          if !compact {
-            Text(body_).font(BoldTheme.Fonts.body(13.5)).foregroundColor(BoldTheme.Colors.textDim)
-          }
-          HStack(spacing: 6) {
-            ForEach(badges, id: \.self) { b in
-              Text(b)
-                .font(BoldTheme.Fonts.mono(10, weight: .semibold))
-                .foregroundColor(BoldTheme.Colors.textDim)
-                .padding(.horizontal, 9).padding(.vertical, 3)
-                .background(BoldTheme.Colors.track)
-                .overlay(Capsule().strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
-                .clipShape(Capsule())
-            }
-          }
-          ZStack {
-            BoldTheme.HatchOverlay()
-            Text(verbatim: "\(cta) →").font(BoldTheme.Fonts.body(13, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
-          }
-          .padding(.horizontal, 16).padding(.vertical, 9)
-          .background(LinearGradient(colors: [Color(hex: 0xFFDD5C), Color(hex: 0xFFD23A)], startPoint: .top, endPoint: .bottom))
-          .clipShape(RoundedRectangle(cornerRadius: 10))
-          .fixedSize()
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    BoldTheme.FlatCard {
+      VStack(alignment: .leading, spacing: BoldTheme.Space.s2) {
+        Text(eyebrow).font(BoldTheme.Fonts.body(13, weight: .semibold)).foregroundColor(BoldTheme.Colors.textDim)
+        Text(headline).font(BoldTheme.Fonts.body(20, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
+        Text(body_).font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Colors.textDim)
+          .fixedSize(horizontal: false, vertical: true)
+        Button(cta, action: action)
+          .buttonStyle(game == .underdog ? AnyButtonStyle(SupPrimaryButtonStyle()) : AnyButtonStyle(SupSecondaryButtonStyle()))
+          .padding(.top, BoldTheme.Space.s1)
       }
     }
-    .buttonStyle(.plain)
   }
+}
+
+/// Type-erased ButtonStyle so one view can switch primary / secondary.
+private struct AnyButtonStyle: ButtonStyle {
+  private let make: (Configuration) -> AnyView
+  init<S: ButtonStyle>(_ style: S) { make = { AnyView(style.makeBody(configuration: $0)) } }
+  func makeBody(configuration: Configuration) -> some View { make(configuration) }
 }
 
 // ── One-time re-intro banner for accounts that onboarded before Pickems
@@ -1060,10 +1113,10 @@ private struct PickemsIntroBanner: View {
   let onDismiss: () -> Void
 
   var body: some View {
-    BoldTheme.GlassCard(strong: true, radius: 16, padding: 16) {
+    BoldTheme.FlatCard {
       VStack(alignment: .leading, spacing: 6) {
         HStack {
-          Text("NEW").font(BoldTheme.Fonts.mono(10, weight: .bold)).foregroundColor(BoldTheme.Colors.green)
+          Text("New").font(BoldTheme.Fonts.body(13, weight: .bold)).foregroundColor(BoldTheme.Colors.green)
           Spacer()
           Button(action: onDismiss) {
             Image(systemName: "xmark")
@@ -1075,20 +1128,11 @@ private struct PickemsIntroBanner: View {
           }
           .disabled(dismissing)
         }
-        Text("PRO BALL PICKEMS IS HERE").font(BoldTheme.Fonts.display(20)).foregroundColor(BoldTheme.Colors.text)
+        Text("Pro Ball Pickems is here").font(BoldTheme.Fonts.body(18, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
         Text("Pick every Pro Ball game's winner each week — no spreads, just wins. Play in a group, chase the leaderboard.")
           .font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
-        Button(action: onCheckItOut) {
-          ZStack {
-            BoldTheme.HatchOverlay()
-            Text("Check it out →").font(BoldTheme.Fonts.body(13, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
-          }
-          .padding(.horizontal, 16).padding(.vertical, 9)
-          .background(LinearGradient(colors: [Color(hex: 0xFFDD5C), Color(hex: 0xFFD23A)], startPoint: .top, endPoint: .bottom))
-          .clipShape(RoundedRectangle(cornerRadius: 10))
-          .fixedSize()
-        }
-        .buttonStyle(.plain)
+        Button("Check it out", action: onCheckItOut)
+          .buttonStyle(SupSecondaryButtonStyle(fullWidth: false))
         .padding(.top, 4)
       }
     }
