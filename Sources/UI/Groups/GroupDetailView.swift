@@ -22,6 +22,17 @@ final class GroupDetailViewModel: ObservableObject {
   @Published fileprivate var group: GroupRow?
   @Published var myRole: GroupRole?
   @Published var memberCount = 0
+  /// Pro or admin-made group: no 10-member cap. Nil = unknown (no cap shown).
+  @Published var uncapped: Bool?
+
+  /// "12 members" for uncapped groups; "7 of 10 members" for capped ones.
+  var memberLabel: String {
+    let n = memberCount
+    if uncapped == false { return "\(n) of \(GroupsService.freeMemberCap) members" }
+    return "\(n) member\(n == 1 ? "" : "s")"
+  }
+  /// Capped group already at its limit (same rule as the label).
+  var isFull: Bool { uncapped == false && memberCount >= GroupsService.freeMemberCap }
   @Published var members: [GroupMember] = []
   @Published var leaderboard: [GroupLeaderboardEntry] = []
   @Published var invites: [GroupInvite] = []
@@ -89,6 +100,7 @@ final class GroupDetailViewModel: ObservableObject {
       }
 
       if let group {
+        uncapped = await GroupsService(client: client).isUncapped(groupId: group.id)
         await loadMembers()
         if group.game_type != .pickems {
           await loadAvailableWeeks()
@@ -297,7 +309,7 @@ struct GroupDetailView: View {
             HStack(spacing: 6) {
               if let role = viewModel.myRole { RoleBadge(role: role) }
               PrivacyChip(isPrivate: group.is_private)
-              Text(verbatim: "\(viewModel.memberCount) member\(viewModel.memberCount == 1 ? "" : "s")")
+              Text(verbatim: viewModel.memberLabel)
                 .font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
             }
           }
@@ -313,8 +325,14 @@ struct GroupDetailView: View {
           BoldTheme.FlatCard {
             VStack(alignment: .leading, spacing: BoldTheme.Space.s3) {
               Text("Join this group").font(BoldTheme.Fonts.body(16, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
-              Button("Request to join") { Task { await viewModel.join() } }
-                .buttonStyle(SupPrimaryButtonStyle())
+              if viewModel.isFull {
+                // No prices or upgrade prompts on iOS -- just the fact.
+                Text("This group is full (\(GroupsService.freeMemberCap) members).")
+                  .font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Colors.textDim)
+              } else {
+                Button("Request to join") { Task { await viewModel.join() } }
+                  .buttonStyle(SupPrimaryButtonStyle())
+              }
             }
           }
         }

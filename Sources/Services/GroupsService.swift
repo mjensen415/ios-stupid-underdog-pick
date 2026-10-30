@@ -189,4 +189,32 @@ struct GroupsService {
   func fetchGroupInvites(groupId: UUID) async throws -> GroupInvitesResult {
     try await invoke("groups-invites", method: .get, query: [URLQueryItem(name: "groupId", value: groupId.uuidString)])
   }
+
+  // MARK: - Member cap
+
+  /// Free groups top out at this many members.
+  static let freeMemberCap = 10
+  /// Set once the backend is known not to have group_is_uncapped yet.
+  static var uncappedRpcMissing = false
+
+  /// Owner rule: "Pro is needed for groups over 10. Unless an Admin made the
+  /// group." Asks group_is_uncapped(p_group) (Pro OR made by a site admin);
+  /// until that RPC ships, falls back to group_is_pro. Nil when neither can
+  /// answer -- callers then show no cap at all rather than guess.
+  func isUncapped(groupId: UUID) async -> Bool? {
+    struct P: Encodable { let p_group: UUID }
+    if !Self.uncappedRpcMissing {
+      do {
+        let res = try await client.rpc("group_is_uncapped", params: P(p_group: groupId)).execute()
+        return try JSONDecoder().decode(Bool.self, from: res.data)
+      } catch {
+        // PGRST202 = function not found (not deployed yet).
+        if let e = error as? PostgrestError, e.code == "PGRST202" { Self.uncappedRpcMissing = true }
+        else if String(describing: error).contains("PGRST202") { Self.uncappedRpcMissing = true }
+        else { return nil }
+      }
+    }
+    guard let res = try? await client.rpc("group_is_pro", params: P(p_group: groupId)).execute() else { return nil }
+    return try? JSONDecoder().decode(Bool.self, from: res.data)
+  }
 }

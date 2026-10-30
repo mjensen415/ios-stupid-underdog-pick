@@ -61,10 +61,15 @@ struct GameRowView: View {
   /// text to the dim gray (still >= 4.5:1) and fading only the logos, not by
   /// fading the whole row (that took text below WCAG contrast).
   private var dimmed: Bool {
-    if isSelected { return false }
+    if isSelected || liveNow { return false }
     let noLine = !hasLine && !isLocked && !isFinal
-    return isLocked || isLive || isFinal || noLine
+    return isLocked || isFinal || noLine
   }
+
+  /// In progress, or kickoff passed before the score sync flips the status
+  /// (same rule as the web). Live rows stay bright: they carry the red
+  /// "Watch now" capsule, which looked washed out when the row dimmed.
+  private var liveNow: Bool { !isFinal && (isLive || (isLocked && (game.status == nil || game.status == "scheduled"))) }
 
   // Picked row floods green, so text flips light there.
   private var ink: Color { isSelected ? SUPColors.textOnGreen : dimmed ? BoldTheme.Colors.textDim : BoldTheme.Colors.text }
@@ -113,6 +118,10 @@ struct GameRowView: View {
       .background(RoundedRectangle(cornerRadius: 10).fill(showScore && dogAhead && !isSelected ? BoldTheme.Role.wonTint : .clear))
     }
     .padding(.vertical, 14)
+    // Thin red edge marks a game in progress (web parity).
+    .overlay(alignment: .leading) {
+      if liveNow && !isSelected { Rectangle().fill(SUPColors.liveRed).frame(width: 3).padding(.leading, -12) }
+    }
     // 12pt inside the day card; the row carries its own card background so
     // the swipe-to-pick slide moves the whole row (GamesView.SwipeToPickRow).
     .padding(.horizontal, 12)
@@ -132,7 +141,7 @@ struct GameRowView: View {
         Text(dogWonOutright ? "Upset \(spreadText ?? "")".trimmingCharacters(in: .whitespaces) : (spreadText ?? "—"))
           .font(BoldTheme.Fonts.body(12, weight: dogWonOutright ? .bold : .medium))
           .foregroundColor(dogWonOutright ? goldText : BoldTheme.Colors.textFaint)
-        if isLive { LiveDot(color: isSelected ? SUPColors.textOnGreen : Color(hex: 0xC6402A)) }
+        if isLive { LiveDot(color: isSelected ? SUPColors.textOnGreen : SUPColors.liveRed) }
       } else {
         Text(spreadText ?? "—")
           .font(BoldTheme.TypeRole.line(30))
@@ -142,7 +151,7 @@ struct GameRowView: View {
           .foregroundColor(quiet)
       }
       if let watch, !isFinal {
-        WatchPill(link: watch, live: isLive || (isLocked && !isFinal))
+        WatchPill(link: watch, live: liveNow)
           .padding(.top, 2)
       }
     }
