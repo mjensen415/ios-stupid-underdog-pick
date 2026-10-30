@@ -17,6 +17,10 @@ struct LiveTickerItem: Identifiable, Equatable {
   let text: String
   /// The underdog is ahead right now.
   let dogLeads: Bool
+  /// Kickoff, for ordering.
+  var start: Date = .distantPast
+  /// Has a line (spread, or moneylines for Pucks).
+  var hasLine: Bool = true
 
   /// One live game -> one item. Spreads are home-relative (positive = home
   /// is the dog); Pucks uses moneylines (dog = plus money). With no line:
@@ -61,53 +65,61 @@ final class LiveTickerModel: ObservableObject {
 
   func load(client: SupabaseClient, hoops: Bool, pucks: Bool) async {
     struct FB: Decodable {
-      let id: UUID; let sport: String; let week: Int?
+      let id: UUID; let sport: String; let week: Int?; let start_time: Date
       let home_name: String?; let away_name: String?
       let home_short: String?; let away_short: String?
       let home_points: Int?; let away_points: Int?; let latest_spread: Double?
     }
     struct Daily: Decodable {
-      let id: UUID; let sport: String; let status_detail: String?
+      let id: UUID; let sport: String; let status_detail: String?; let start_time: Date
       let home_name: String?; let away_name: String?
       let home_score: Int?; let away_score: Int?
       let spread: Double?; let home_ml: Double?; let away_ml: Double?
     }
     var out: [LiveTickerItem] = []
     // Short-name columns may not exist on every backend; fall back without.
-    let base = "id, sport, week, home_name, away_name, home_points, away_points, latest_spread"
+    let base = "id, sport, week, start_time, home_name, away_name, home_points, away_points, latest_spread"
     var fbData: Data?
     for cols in [base + ", home_short, away_short", base] {
       if let res = try? await client.from("v_games_named").select(cols)
-        .eq("status", value: "in_progress").in("sport", values: ["cfb", "nfl"]).limit(80).execute() {
+        // Lined games only: most live Saturday CFB games are lower
+        // divisions with no spread, and they aren't on the Games screen.
+        .eq("status", value: "in_progress").in("sport", values: ["cfb", "nfl"])
+        .not("latest_spread", operator: .is, value: "null")
+        .order("start_time", ascending: true).limit(60).execute() {
         fbData = res.data; break
       }
     }
-    if let fbData, let rows = try? JSONDecoder().decode([FB].self, from: fbData) {
+    let dec = JSONDecoder()
+    dec.dateDecodingStrategy = .iso8601withFallback
+    if let fbData, let rows = try? dec.decode([FB].self, from: fbData) {
       out += rows.map { g in
-        LiveTickerItem.make(id: g.id, sport: g.sport == "nfl" ? .nfl : .cfb, week: g.week,
-                            home: g.home_short ?? g.home_name ?? "Home", away: g.away_short ?? g.away_name ?? "Away",
-                            homeScore: g.home_points, awayScore: g.away_points, spread: g.latest_spread)
+        var it = LiveTickerItem.make(id: g.id, sport: g.sport == "nfl" ? .nfl : .cfb, week: g.week,
+                                     home: g.home_short ?? g.home_name ?? "Home", away: g.away_short ?? g.away_name ?? "Away",
+                                     homeScore: g.home_points, awayScore: g.away_points, spread: g.latest_spread)
+        it.start = g.start_time
+        return it
       }
     }
     let daily = [hoops ? "nba" : nil, pucks ? "nhl" : nil].compactMap { $0 }
     if !daily.isEmpty,
        let res = try? await client.from("daily_games")
-        .select("id, sport, status_detail, home_name, away_name, home_score, away_score, spread, home_ml, away_ml")
-        .eq("status", value: "in_progress").in("sport", values: daily).limit(80).execute(),
-       let rows = try? JSONDecoder().decode([Daily].self, from: res.data) {
-      out += rows.map { g in
-        LiveTickerItem.make(id: g.id, sport: g.sport == "nhl" ? .nhl : .nba, week: nil,
-                            home: g.home_name ?? "Home", away: g.away_name ?? "Away",
-                            homeScore: g.home_score, awayScore: g.away_score, spread: g.spread,
-                            homeMl: g.home_ml, awayMl: g.away_ml, detail: g.status_detail)
+        .select("id, sport, start_time, status_detail, home_name, away_name, home_score, away_score, spread, home_ml, away_ml")
+        .eq("status", value: "in_progress").in("sport", values: daily).limit(60).execute(),
+       let rows = try? dec.decode([Daily].self, from: res.data) {
+      out += rows.compactMap { g in
+        let lined = g.sport == "nhl" ? (g.home_ml != nil && g.away_ml != nil) : g.spread != nil
+        guard lined else { return nil }
+        var it = LiveTickerItem.make(id: g.id, sport: g.sport == "nhl" ? .nhl : .nba, week: nil,
+                                     home: g.home_name ?? "Home", away: g.away_name ?? "Away",
+                                     homeScore: g.home_score, awayScore: g.away_score, spread: g.spread,
+                                     homeMl: g.home_ml, awayMl: g.away_ml, detail: g.status_detail)
+        it.start = g.start_time
+        return it
       }
     }
-    // Dogs ahead first, then CFB, Pro Ball, Hoops, Pucks.
-    let order: [LiveTickerItem.Sport] = [.cfb, .nfl, .nba, .nhl]
-    items = out.sorted {
-      $0.dogLeads != $1.dogLeads ? $0.dogLeads
-        : (order.firstIndex(of: $0.sport)!, $0.text) < (order.firstIndex(of: $1.sport)!, $1.text)
-    }
+    // By kickoff, capped so the marquee stays readable.
+    items = Array(out.sorted { ($0.start, $0.text) < ($1.start, $1.text) }.prefix(30))
   }
 }
 
@@ -197,8 +209,10 @@ struct LiveTickerBar: View {
     .frame(height: 36)
     .background(Capsule().fill(BoldTheme.Colors.card))
     .clipShape(Capsule())
-    .accessibilityElement(children: .contain)
-    .accessibilityLabel("Live games")
+    // Short label: "Live games, 12", not every score read out.
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("Live games, \(items.count)")
+    .accessibilityHint("Shows live scores. Open Games to see them all.")
   }
 
   private var row: some View {

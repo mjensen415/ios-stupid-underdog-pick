@@ -14,8 +14,11 @@ enum BoldTheme {
     static let goldDeep  = Color(hex: 0x7A5009) // Deep Gold -- same hue as gold, ~5.4:1 contrast on bgPage. Use for gold-meaning TEXT (spreads, "you're #1", stat highlights) on light/glass backgrounds.
     static let green     = Color(hex: 0x0E5A3A) // Field Green -- unchanged, links/accents
     static let text       = Color(hex: 0x0A1A10) // Ink
-    static let textDim    = Color(hex: 0x16241B).opacity(0.62)
-    static let textFaint  = Color(hex: 0x16241B).opacity(0.4)
+    // Contrast (Oct 30): dim/faint text must be >= 4.5:1 on the page, card
+    // and track fills. 0.62 was ~4.15:1 on the page; 0.70 is ~5.3:1 and
+    // 0.66 ~4.7:1 (worst case, Fog Gray page).
+    static let textDim    = Color(hex: 0x16241B).opacity(0.70)
+    static let textFaint  = Color(hex: 0x16241B).opacity(0.66)
     static let border     = Color(hex: 0x16241B).opacity(0.14)
     static let surface    = Color(hex: 0x16241B).opacity(0.04)
     static let track      = Color(hex: 0xEDEAE0) // light wall -- logo-fallback circles, muted chips

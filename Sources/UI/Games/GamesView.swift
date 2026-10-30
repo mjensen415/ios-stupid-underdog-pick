@@ -771,6 +771,7 @@ struct GamesView: View {
   }
 
   @State private var openSwipeId: UUID?
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   /// Handles appState.requestedGame once its sport is showing. Returns
   /// true when it scrolled.
@@ -995,7 +996,8 @@ struct GamesView: View {
       slate
       // A fresh trigger only fires on a just-now successful pick (see
       // pickCelebrationTrigger's doc comment).
-      if let trigger = viewModel.pickCelebrationTrigger {
+      // No confetti with Reduce Motion on.
+      if let trigger = viewModel.pickCelebrationTrigger, !reduceMotion {
         ConfettiView(trigger: trigger, count: 50)
       }
     }
@@ -1095,14 +1097,25 @@ struct SwipeToPickRow<Content: View>: View {
   let onTap: () -> Void
   @ViewBuilder var content: Content
 
-  @State private var drag: CGFloat = 0
-  @State private var axis: Axis?
+  /// Live drag; @GestureState resets on its own when the touch ends or is
+  /// cancelled (e.g. the list takes over to scroll), so a row can't get
+  /// stuck half open.
+  /// Axis locks once the finger has moved ~10pt: horizontal only when the
+  /// sideways move clearly beats the vertical one. Vertical/diagonal flicks
+  /// never open, commit or switch a pick.
+  private struct DragState { var axis: Axis?; var x: CGFloat = 0 }
+  @GestureState private var gesture = DragState()
+  private var drag: CGFloat { gesture.x }
   private let width: CGFloat = 132
 
   private var isOpen: Bool { openId == id }
   private var offset: CGFloat {
     let base: CGFloat = isOpen ? -width : 0
     return min(0, base + drag)
+  }
+
+  private static func lockAxis(_ t: CGSize) -> Axis {
+    abs(t.width) > abs(t.height) * 2 ? .horizontal : .vertical
   }
 
   var body: some View {
@@ -1119,7 +1132,9 @@ struct SwipeToPickRow<Content: View>: View {
             .multilineTextAlignment(.center)
             .lineLimit(3)
             .minimumScaleFactor(0.8)
-            .padding(.horizontal, 10)
+            // Wrap inside the panel instead of running past its edge.
+            .frame(width: width - 20)
+            .fixedSize(horizontal: false, vertical: true)
             .frame(width: width)
             .frame(maxHeight: .infinity)
             // The panel grows with the drag; the label keeps its own width
@@ -1143,28 +1158,26 @@ struct SwipeToPickRow<Content: View>: View {
     }
     .clipShape(GameRowView.cardShape(isLastInDay: isLast))
     .simultaneousGesture(
-      DragGesture(minimumDistance: 12)
-        .onChanged { v in
-          guard action != nil else { return }
-          if axis == nil {
-            axis = abs(v.translation.width) > abs(v.translation.height) * 1.3 ? .horizontal : .vertical
-          }
-          guard axis == .horizontal else { return }
-          if openId != nil && openId != id { openId = nil }
-          drag = v.translation.width
+      DragGesture(minimumDistance: 10)
+        .updating($gesture) { v, state, _ in
+          if state.axis == nil { state.axis = Self.lockAxis(v.translation) }
+          guard action != nil, state.axis == .horizontal else { return }
+          state.x = v.translation.width
         }
         .onEnded { v in
-          defer { axis = nil }
-          guard axis == .horizontal, let action else { return }
-          let end = (isOpen ? -width : 0) + v.predictedEndTranslation.width
+          // Decide on the real translation, not the predicted flick end.
+          guard let action, Self.lockAxis(v.translation) == .horizontal else { return }
+          let end = (isOpen ? -width : 0) + v.translation.width
           withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-            drag = 0
-            if action.enabled && end < -width * 2.2 {
-              // Full swipe fires the action.
+            if action.enabled && end < -width * 1.9 {
+              // A deliberate full swipe fires the action, then the row
+              // snaps shut and shows its normal picked state.
               openId = nil
               action.run()
-            } else {
-              openId = end < -width / 2 ? id : (isOpen && end > -width / 2 ? nil : openId == id ? nil : openId)
+            } else if end < -width / 2 {
+              openId = id
+            } else if isOpen {
+              openId = nil
             }
           }
         }
@@ -1176,6 +1189,6 @@ struct SwipeToPickRow<Content: View>: View {
   }
 
   private func close() {
-    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { openId = nil; drag = 0 }
+    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { openId = nil }
   }
 }

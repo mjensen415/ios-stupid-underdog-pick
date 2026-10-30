@@ -57,16 +57,21 @@ struct GameRowView: View {
     return f.string(from: game.startTime)
   }
 
-  // Picked row floods green, so text flips light there.
-  private var ink: Color { isSelected ? SUPColors.textOnGreen : BoldTheme.Colors.text }
-  /// The +line is bold ink (de-slop #5); light on the green picked row.
-  private var goldText: Color { isSelected ? SUPColors.textOnGreen : BoldTheme.Role.line }
-
-  private var rowOpacity: Double {
-    if isSelected { return 1 }
+  /// Locked, live, finished or unlined rows read quieter -- by switching
+  /// text to the dim gray (still >= 4.5:1) and fading only the logos, not by
+  /// fading the whole row (that took text below WCAG contrast).
+  private var dimmed: Bool {
+    if isSelected { return false }
     let noLine = !hasLine && !isLocked && !isFinal
-    return (isLocked || isLive || isFinal || noLine) ? 0.55 : 1
+    return isLocked || isLive || isFinal || noLine
   }
+
+  // Picked row floods green, so text flips light there.
+  private var ink: Color { isSelected ? SUPColors.textOnGreen : dimmed ? BoldTheme.Colors.textDim : BoldTheme.Colors.text }
+  /// The +line is bold ink (de-slop #5); light on the green picked row.
+  private var goldText: Color { isSelected ? SUPColors.textOnGreen : dimmed ? BoldTheme.Colors.textDim : BoldTheme.Role.line }
+  /// Secondary text in the row (kickoff time, losing score).
+  private var quiet: Color { isSelected ? SUPColors.textOnGreen.opacity(0.8) : BoldTheme.Colors.textDim }
 
   var body: some View {
     HStack(spacing: 8) {
@@ -107,7 +112,6 @@ struct GameRowView: View {
       .padding(showScore && dogAhead && !isSelected ? 5 : 0)
       .background(RoundedRectangle(cornerRadius: 10).fill(showScore && dogAhead && !isSelected ? BoldTheme.Role.wonTint : .clear))
     }
-    .opacity(rowOpacity)
     .padding(.vertical, 14)
     // 12pt inside the day card; the row carries its own card background so
     // the swipe-to-pick slide moves the whole row (GamesView.SwipeToPickRow).
@@ -120,9 +124,9 @@ struct GameRowView: View {
     VStack(spacing: 3) {
       if showScore {
         HStack(spacing: 1) {
-          Text("\(favScore ?? 0)").foregroundColor(favAhead ? (isSelected ? ink : BoldTheme.Colors.green) : ink.opacity(0.4))
-          Text("–").foregroundColor(ink.opacity(0.35))
-          Text("\(dogScore ?? 0)").foregroundColor(dogAhead ? goldText : ink.opacity(0.4))
+          Text("\(favScore ?? 0)").foregroundColor(favAhead ? (isSelected ? ink : BoldTheme.Colors.green) : quiet)
+          Text("–").foregroundColor(quiet)
+          Text("\(dogScore ?? 0)").foregroundColor(dogAhead ? (isSelected ? ink : BoldTheme.Colors.text) : quiet)
         }
         .font(BoldTheme.Fonts.display(28))
         Text(dogWonOutright ? "Upset \(spreadText ?? "")".trimmingCharacters(in: .whitespaces) : (spreadText ?? "—"))
@@ -135,7 +139,7 @@ struct GameRowView: View {
           .foregroundColor(hasLine ? goldText : BoldTheme.Colors.textFaint)
         Text(timeText)
           .font(BoldTheme.Fonts.body(12, weight: .medium))
-          .foregroundColor(ink.opacity(0.62))
+          .foregroundColor(quiet)
       }
       if let watch, !isFinal {
         WatchPill(link: watch, live: isLive || (isLocked && !isFinal))
@@ -151,7 +155,7 @@ struct GameRowView: View {
     if isSelected {
       Text(isFinal ? (dogWonOutright ? "✓ Won \(spreadText ?? "")" : "No win") : "✓ Your pick")
         .font(BoldTheme.Fonts.body(11, weight: .bold))
-        .foregroundColor(SUPColors.textOnGreen.opacity(isFinal && !dogWonOutright ? 0.6 : 1))
+        .foregroundColor(SUPColors.textOnGreen.opacity(isFinal && !dogWonOutright ? 0.8 : 1))
         .padding(.top, 3)
     } else if !hasLine && !isLocked {
       Text("Line not posted")
@@ -191,20 +195,22 @@ struct GameRowView: View {
       Image(systemName: "football").resizable().scaledToFit().opacity(0.3).foregroundColor(BoldTheme.Colors.textFaint)
     }
     .frame(width: 30, height: 30)
+    .opacity(dimmed ? 0.55 : 1)
   }
 }
 
 /// Small pulsing dot + "LIVE".
 private struct LiveDot: View {
   var color: Color
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var pulsing = false
   var body: some View {
     HStack(spacing: 4) {
       Circle().fill(color).frame(width: 6, height: 6)
         .opacity(pulsing ? 0.35 : 1)
-        .animation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true), value: pulsing)
-      Text("LIVE").font(BoldTheme.Fonts.mono(9.5, weight: .bold)).foregroundColor(color)
+        .animation(reduceMotion ? nil : .easeInOut(duration: 0.7).repeatForever(autoreverses: true), value: pulsing)
+      Text("Live").font(BoldTheme.Fonts.body(12, weight: .bold)).foregroundColor(color)
     }
-    .onAppear { pulsing = true }
+    .onAppear { if !reduceMotion { pulsing = true } }
   }
 }

@@ -162,7 +162,7 @@ final class SportLeagueViewModel: ObservableObject {
     let ml = g.ml(side)
     let pts = HP.pickPoints(sport: g.sport, lockedMl: ml, lockedSpread: g.spread)
     let at = g.sport == .nba ? "\(HP.sideLine(g.spread, side: side)) (\(HP.fmtMl(ml)))" : HP.fmtMl(ml)
-    flash("Locked \(g.name(side)) at \(at)", "\(joining ? "You're in \(league.name). " : "")If they win: +\(HP.fmtPts(pts)) pts")
+    flash("Locked \(g.name(side)) at \(at)", "\(joining ? "You're in \(league.name). " : "")If they win outright: +\(HP.fmtPts(pts)) pts")
     await loadWeek(client: client, userId: userId)
     return true
   }
@@ -910,7 +910,7 @@ struct HpGameCard: View {
           let pts = isPicked
             ? HP.pickPoints(sport: game.sport, lockedMl: pick?.locked_ml, lockedSpread: pick?.locked_spread)
             : HP.pickPoints(sport: game.sport, lockedMl: ml, lockedSpread: game.spread)
-          Text("If they win: +\(HP.fmtPts(pts)) pts")
+          Text("If they win outright: +\(HP.fmtPts(pts)) pts")
             .font(BoldTheme.Fonts.body(13, weight: .semibold))
             .foregroundColor(BoldTheme.Colors.text)
         }

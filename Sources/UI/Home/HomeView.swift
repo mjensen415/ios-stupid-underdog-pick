@@ -511,7 +511,13 @@ struct HomeView: View {
   }
 
   private var countdownLine: Text? {
-    guard let k = primaryKickoff else { return nil }
+    guard let k = primaryKickoff else {
+      // Kickoff unknown (game row missing or lines not posted): never claim
+      // a lock time, just the rule -- while the week still has games.
+      let upcoming = primarySport == "cfb" ? viewModel.cfbWeekUpcoming : primarySport == "nfl" ? viewModel.nflWeekUpcoming : false
+      let offseason = primarySport == "cfb" ? viewModel.cfbOffseason : viewModel.nflOffseason
+      return upcoming && !offseason ? Text("Picks lock at kickoff") : nil
+    }
     let secs = max(0, Int(k.timeIntervalSinceNow))
     let d = secs / 86_400, h = (secs % 86_400) / 3600, m = (secs % 3600) / 60
     let txt = d > 0 ? "\(d)d \(h)h" : h > 0 ? "\(h)h \(m)m" : "\(max(m, 1))m"
