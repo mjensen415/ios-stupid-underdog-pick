@@ -50,6 +50,10 @@ final class HomeViewModel: ObservableObject {
   // Pickems progress for the current NFL week.
   @Published var pickDetailCfb: HomePickDetail?
   @Published var pickDetailNfl: HomePickDetail?
+  /// Last week's Underdog pick per sport (the week before the live one),
+  /// for Home's one-line "Last week:" result. Nil = no pick last week.
+  @Published var lastWeekDetailCfb: HomePickDetail?
+  @Published var lastWeekDetailNfl: HomePickDetail?
   @Published var pickemsPicked = 0
   @Published var pickemsTotal = 0
   @Published var pickemsOpen = 0
@@ -121,6 +125,7 @@ final class HomeViewModel: ObservableObject {
       cfbWindowLoaded = true
       cfbOffseason = await cfbOffseasonTask
       pickDetailCfb = await fetchPickDetail(client: client, pick: myPickCfb)
+      lastWeekDetailCfb = await fetchLastWeek(client: client, season: cfbCtx.season, week: cfbCtx.week, sport: "cfb")
     }
     if let nflCtx {
       async let nflPickTask = try? PicksService(client: client).myPick(season: nflCtx.season, week: nflCtx.week, sport: "nfl")
@@ -132,6 +137,7 @@ final class HomeViewModel: ObservableObject {
       nflWindowLoaded = true
       nflOffseason = await nflOffseasonTask
       pickDetailNfl = await fetchPickDetail(client: client, pick: myPickNfl)
+      lastWeekDetailNfl = await fetchLastWeek(client: client, season: nflCtx.season, week: nflCtx.week, sport: "nfl")
       await loadPickemsProgress(client: client, userId: userId, season: nflCtx.season, week: nflCtx.week)
     }
   }
@@ -155,6 +161,14 @@ final class HomeViewModel: ObservableObject {
     let logos = try? JSONDecoder().decode([Logos].self, from: res.data).first
     let logo = pick.picked_team_id == game.homeTeamId ? logos?.home_logo_url : logos?.away_logo_url
     return HomePickDetail(pick: pick, game: game, logoURL: logo.flatMap(URL.init(string:)))
+  }
+
+  /// The pick (and its game) from the week before `week`, same sport.
+  private func fetchLastWeek(client: SupabaseClient, season: Int, week: Int, sport: String) async -> HomePickDetail? {
+    guard week > 1,
+          let pick = try? await PicksService(client: client).myPick(season: season, week: week - 1, sport: sport)
+    else { return nil }
+    return await fetchPickDetail(client: client, pick: pick)
   }
 
   private func loadPickemsProgress(client: SupabaseClient, userId: UUID, season: Int, week: Int) async {
@@ -233,8 +247,8 @@ struct HomePickDetail {
   let logoURL: URL?
 
   var pickedIsHome: Bool { pick.picked_team_id == game.homeTeamId }
-  var teamName: String { (pickedIsHome ? game.homeTeam : game.awayTeam) ?? "Your pick" }
-  var opponent: String { (pickedIsHome ? game.awayTeam : game.homeTeam) ?? "Opponent" }
+  var teamName: String { (pickedIsHome ? game.homeDisplay : game.awayDisplay) ?? "Your pick" }
+  var opponent: String { (pickedIsHome ? game.awayDisplay : game.homeDisplay) ?? "Opponent" }
   var spread: Double? { pick.winPoints(on: game) }
   var isLocked: Bool { pick.locked_spread != nil }
   var lineNote: String? { pick.lineNote(on: game) }
@@ -337,7 +351,6 @@ struct HomeView: View {
           VStack(alignment: .leading, spacing: 0) {
             topRow
             if viewModel.hasLoaded {
-              statsRow
               contestsSection
               if proStore.showEntry(flags: featureFlags) {
                 sectionHeader("Pro")
@@ -542,44 +555,18 @@ struct HomeView: View {
     }
   }
 
-  // ── Big numbers (de-slop #18): dog wins, points, best group rank -- all
-  // from data Home already loads (get_my_rank + my groups). ─────────────
-  @ViewBuilder private var statsRow: some View {
-    let rank = viewModel.myRank
-    let sportKey = sport.rawValue
-    let bestGroup = viewModel.myGroups
-      .filter { $0.rank != nil && $0.game_type != .pickems && ($0.sport.rawValue == sportKey || $0.sport == .both) }
-      .min { ($0.rank ?? .max) < ($1.rank ?? .max) }
-    if hasAnyContest && (rank != nil || bestGroup != nil) {
-      HStack(alignment: .top, spacing: BoldTheme.Space.s2) {
-        bigStat(String(rank?.wins ?? 0), label: "dog wins this season")
-        bigStat(formatSpread(rank?.points ?? 0), label: "points")
-        if let g = bestGroup, let r = g.rank {
-          bigStat("#\(r)", label: "of \(g.player_count ?? g.member_count) in \(g.name)")
-        } else if let rank, rank.totalPlayers > 0 {
-          bigStat("#\(rank.rank)", label: "of \(rank.totalPlayers) overall")
-        } else if viewModel.streak > 0 {
-          bigStat(String(viewModel.streak), label: "week streak")
-        }
+  // ── Last week's result (round 2): one quiet body-size line under the
+  // yellow block, for the same contest. Hidden with no pick last week. ──
+  @ViewBuilder private var lastWeekLine: some View {
+    let detail = primarySport == "cfb" ? viewModel.lastWeekDetailCfb : primarySport == "nfl" ? viewModel.lastWeekDetailNfl : nil
+    if let detail {
+      Button { appState.requestedTab = 3 } label: {
+        LastWeekLine(detail: detail)
       }
-      .padding(.top, 20)
+      .buttonStyle(.plain)
+      .padding(.top, BoldTheme.Space.s3)
+      .accessibilityHint("Opens My Picks")
     }
-  }
-
-  private func bigStat(_ value: String, label: String) -> some View {
-    VStack(alignment: .leading, spacing: 2) {
-      Text(verbatim: value)
-        .font(BoldTheme.Fonts.display(46))
-        .foregroundColor(BoldTheme.Colors.text)
-        .lineLimit(1)
-        .minimumScaleFactor(0.6)
-      Text(verbatim: label)
-        .font(BoldTheme.Fonts.body(13))
-        .foregroundColor(BoldTheme.Colors.textDim)
-        .lineLimit(2)
-        .fixedSize(horizontal: false, vertical: true)
-    }
-    .frame(maxWidth: .infinity, alignment: .leading)
   }
 
   private func sectionHeader(_ title: String, link: String? = nil, action: (() -> Void)? = nil) -> some View {
@@ -627,6 +614,7 @@ struct HomeView: View {
             appState.goToUnderdog(sport: primarySport)
           }
           .padding(.top, BoldTheme.Space.s4)
+          lastWeekLine
         }
 
         // Every other contest you play, as compact rows (#20).
@@ -842,6 +830,45 @@ struct HomeView: View {
   }
 }
 
+/// "Last week: Baylor +1.5 · won, +1.5 pts". Green only on a won result;
+/// a loss is just dim (no red alarm).
+struct LastWeekLine: View {
+  let detail: HomePickDetail
+
+  var body: some View {
+    let line = detail.spread.map { " +\(jsNumber($0))" } ?? ""
+    HStack(spacing: 6) {
+      if detail.outcome == .win {
+        Image(systemName: "checkmark.circle.fill")
+          .font(.system(size: 14, weight: .semibold))
+          .foregroundColor(BoldTheme.Role.won)
+      }
+      (Text("Last week: ").foregroundColor(BoldTheme.Colors.textDim)
+        + Text(verbatim: detail.teamName + line).foregroundColor(BoldTheme.Colors.text).font(BoldTheme.Fonts.body(15, weight: .semibold))
+        + result)
+        .font(BoldTheme.Fonts.body(15))
+        .lineLimit(2)
+      Spacer(minLength: 0)
+      Image(systemName: "chevron.right")
+        .font(.system(size: 12, weight: .bold))
+        .foregroundColor(BoldTheme.Colors.textFaint)
+    }
+    .contentShape(Rectangle())
+  }
+
+  private var result: Text {
+    switch detail.outcome {
+    case .win:
+      let pts = detail.spread.map { ", +\(jsNumber($0)) pts" } ?? ""
+      return Text(verbatim: " · won\(pts)").foregroundColor(BoldTheme.Role.won)
+    case .loss:
+      return Text(" · lost").foregroundColor(BoldTheme.Colors.textDim)
+    case .pending:
+      return Text(" · in progress").foregroundColor(BoldTheme.Colors.textDim)
+    }
+  }
+}
+
 /// Flat card holding compact rows with hairlines between them (#20).
 private struct ListCard: View {
   let rows: [AnyView]
@@ -864,7 +891,7 @@ private struct ListCard: View {
 
 /// This week's pick for the lead contest -- the one yellow block (#19),
 /// with the ink-on-yellow primary button.
-private struct PickBlock: View {
+struct PickBlock: View {
   let sport: String
   let week: Int?
   let status: ContestRow.Status
@@ -980,7 +1007,7 @@ private struct JoinContestRow: View {
 }
 
 /// "Pro Ball · Underdog pick" / "Week 8 · locks Sun 1:00 PM" / one pill.
-private struct ContestRow: View {
+struct ContestRow: View {
   enum Kind { case underdog, pickems }
   enum Status: Equatable {
     case offseason, picked, live, lost, missed
