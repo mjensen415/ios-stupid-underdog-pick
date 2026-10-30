@@ -30,6 +30,10 @@ struct RawFinal {
   /// Home-relative spread: positive = home is the dog.
   let spread: Double?
   var startTime: Date? = nil
+  /// Short names (v_games_named home_short/away_short) for the opponent
+  /// label; nil = use the full name.
+  var homeShort: String? = nil
+  var awayShort: String? = nil
 }
 
 enum RecentForm {
@@ -46,7 +50,7 @@ enum RecentForm {
     let won = ours > theirs
     return FormGame(
       won: won, tie: ours == theirs, ourPts: ours, theirPts: theirs,
-      opponent: isHome ? g.away : g.home, away: !isHome,
+      opponent: isHome ? (g.awayShort ?? g.away) : (g.homeShort ?? g.home), away: !isHome,
       line: line, dogWin: won && (line ?? 0) > 0, date: g.startTime
     )
   }
