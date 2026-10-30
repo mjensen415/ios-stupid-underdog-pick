@@ -24,12 +24,11 @@ struct PickemsWelcomeView: View {
       ScrollView {
         VStack(spacing: 20) {
           VStack(spacing: 4) {
-            Text("PRO BALL · NEW")
-              .font(BoldTheme.Fonts.mono(10, weight: .semibold))
-              .tracking(1.2)
-              .foregroundColor(BoldTheme.Colors.green)
-            Text("PRO BALL PICKEMS")
-              .font(BoldTheme.Fonts.display(38))
+            Text("Pro Ball · new")
+              .font(BoldTheme.Fonts.body(13, weight: .semibold))
+              .foregroundColor(BoldTheme.Colors.textDim)
+            Text("Pro Ball Pickems")
+              .font(BoldTheme.Fonts.body(30, weight: .bold))
               .foregroundColor(BoldTheme.Colors.text)
               .multilineTextAlignment(.center)
             Text("Pick the winner of every Pro Ball game, every week. 1 point per correct pick — no spreads, no favorites, just wins.")
@@ -41,13 +40,12 @@ struct PickemsWelcomeView: View {
           .padding(.top, 24)
 
           VStack(alignment: .leading, spacing: 10) {
-            Text("HOW IT WORKS")
-              .font(BoldTheme.Fonts.body(11, weight: .bold))
-              .foregroundColor(BoldTheme.Colors.goldDeep)
-              .tracking(0.6)
+            Text("How it works")
+              .font(BoldTheme.Fonts.body(16, weight: .bold))
+              .foregroundColor(BoldTheme.Colors.text)
             ForEach(bullets, id: \.self) { line in
               HStack(alignment: .top, spacing: 8) {
-                Text("•").foregroundColor(BoldTheme.Colors.green)
+                Text("•").foregroundColor(BoldTheme.Colors.textDim)
                 Text(line)
                   .font(BoldTheme.Fonts.body(13.5))
                   .foregroundColor(BoldTheme.Colors.textDim)
@@ -55,10 +53,8 @@ struct PickemsWelcomeView: View {
             }
           }
           .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(18)
-          .background(BoldTheme.Colors.glassStrong)
-          .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
-          .clipShape(RoundedRectangle(cornerRadius: 16))
+          .padding(BoldTheme.Space.cardPad)
+          .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
 
           Text("\(GlobalGroups.tagline) Or create a group and invite your friends, or join one that's already playing.")
             .font(BoldTheme.Fonts.body(13))
@@ -67,41 +63,28 @@ struct PickemsWelcomeView: View {
 
           VStack(spacing: 10) {
             if let onPlayGlobal {
+              // The one primary action.
               Button(action: onPlayGlobal) {
                 Text(GlobalGroups.joinCTA)
-                  .font(BoldTheme.Fonts.display(18))
-                  .foregroundColor(.white)
-                  .frame(maxWidth: .infinity)
-                  .frame(height: 50)
-                  .background(BoldTheme.Colors.green)
-                  .clipShape(RoundedRectangle(cornerRadius: 12))
               }
+              .buttonStyle(SupPrimaryButtonStyle())
               .accessibilityIdentifier("pickemsPlayGlobalButton")
             }
             Button {
               showCreate = true
             } label: {
-              Text("Create a Pickems Group")
-                .font(BoldTheme.Fonts.display(18))
-                .foregroundColor(BoldTheme.Colors.text)
-                .frame(maxWidth: .infinity)
-                .frame(height: 50)
-                .background(BoldTheme.Colors.gold)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+              Text("Create a Pickems group")
             }
+            .buttonStyle(SupSecondaryButtonStyle())
             Button {
               showJoin = true
             } label: {
-              Text("Join a Group")
-                .font(BoldTheme.Fonts.body(14, weight: .bold))
-                .foregroundColor(BoldTheme.Colors.text)
-                .frame(maxWidth: .infinity)
-                .frame(height: 46)
-                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
+              Text("Join a group")
             }
+            .buttonStyle(SupSecondaryButtonStyle())
           }
         }
-        .padding(20)
+        .padding(BoldTheme.Space.margin)
       }
     }
     .sheet(isPresented: $showCreate) {

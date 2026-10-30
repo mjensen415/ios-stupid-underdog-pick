@@ -59,7 +59,7 @@ struct RootView: View {
         // session restore finishes instead of flashing AuthView.
         ZStack {
           BoldTheme.Colors.bgPage.ignoresSafeArea()
-          ProgressView().tint(BoldTheme.Colors.gold)
+          ProgressView().tint(BoldTheme.Colors.text)
         }
       } else if appState.session == nil {
         AuthView()

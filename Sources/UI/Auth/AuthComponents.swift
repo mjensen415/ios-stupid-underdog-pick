@@ -7,9 +7,8 @@ struct BoldMonoLabel: View {
   let text: String
   var body: some View {
     Text(text)
-      .font(BoldTheme.Fonts.mono(11))
-      .tracking(0.9)
-      .foregroundColor(BoldTheme.Colors.textFaint)
+      .font(BoldTheme.Fonts.body(14, weight: .semibold))
+      .foregroundColor(BoldTheme.Colors.textDim)
   }
 }
 
@@ -38,12 +37,12 @@ struct BoldTextField: View {
     .foregroundColor(BoldTheme.Colors.text)
     .padding(.horizontal, 16)
     .frame(height: 50)
-    .background(focused ? BoldTheme.Colors.gold.opacity(0.06) : BoldTheme.Colors.text.opacity(0.04))
+    .background(BoldTheme.Colors.card)
     .overlay(
-      RoundedRectangle(cornerRadius: 13)
-        .stroke(focused ? BoldTheme.Colors.gold : BoldTheme.Colors.border, lineWidth: 1)
+      RoundedRectangle(cornerRadius: BoldTheme.Radius.inner, style: .continuous)
+        .stroke(focused ? BoldTheme.Colors.text : BoldTheme.Colors.border, lineWidth: focused ? 1.5 : 1)
     )
-    .clipShape(RoundedRectangle(cornerRadius: 13))
+    .clipShape(RoundedRectangle(cornerRadius: BoldTheme.Radius.inner, style: .continuous))
     .onTapGesture { focused = true }
     // SwiftUI has no reliable cross-field focus notification without
     // @FocusState wired at the call site -- approximate the web's focus
@@ -59,26 +58,15 @@ struct BoldPrimaryButton: View {
   let action: () -> Void
 
   var body: some View {
+    // The standard yellow primary pill (de-slop #8).
     Button(action: action) {
-      ZStack {
-        BoldTheme.HatchOverlay(angle: .degrees(45), color: BoldTheme.Colors.bgPage.opacity(0.09), band: 5, period: 12)
-        if isLoading {
-          ProgressView().tint(BoldTheme.Colors.bgPage)
-        } else {
-          Text(title)
-            .font(BoldTheme.Fonts.display(22))
-            .tracking(0.9)
-            .foregroundColor(BoldTheme.Colors.bgPage)
-        }
+      if isLoading {
+        ProgressView().tint(BoldTheme.Colors.text)
+      } else {
+        Text(title)
       }
-      .frame(maxWidth: .infinity)
-      .frame(height: 56)
-      .background(
-        LinearGradient(colors: [Color(hex: 0xFFDD5C), BoldTheme.Colors.gold], startPoint: .top, endPoint: .bottom)
-      )
-      .clipShape(RoundedRectangle(cornerRadius: 14))
-      .shadow(color: BoldTheme.Colors.gold.opacity(0.22), radius: 12, y: 6)
     }
+    .buttonStyle(SupPrimaryButtonStyle())
     .disabled(disabled || isLoading)
     .opacity((disabled || isLoading) ? 0.7 : 1)
   }

@@ -37,7 +37,6 @@ struct AuthView: View {
   var body: some View {
     ZStack {
       BoldTheme.Colors.bgPage.ignoresSafeArea()
-      BoldTheme.AmbientBlobs()
         .ignoresSafeArea()
 
       ScrollView {
@@ -57,12 +56,10 @@ struct AuthView: View {
           SupIcon(variant: mode == .forgot ? .football : .monogram)
             .frame(width: 56, height: 56)
             .clipShape(RoundedRectangle(cornerRadius: 15))
-            .shadow(color: .black.opacity(0.4), radius: 10, y: 8)
             .padding(.bottom, 22)
 
           Text(title)
-            .font(BoldTheme.Fonts.display(40))
-            .lineSpacing(-4)
+            .font(BoldTheme.Fonts.body(32, weight: .bold))
             .foregroundColor(BoldTheme.Colors.text)
             .fixedSize(horizontal: false, vertical: true)
 
@@ -74,8 +71,8 @@ struct AuthView: View {
 
           if let errorMessage {
             Text(errorMessage)
-              .font(BoldTheme.Fonts.body(13))
-              .foregroundColor(.red)
+              .font(BoldTheme.Fonts.body(14))
+              .foregroundColor(BoldTheme.Role.lost)
               .padding(.bottom, 12)
           }
 
@@ -113,24 +110,18 @@ struct AuthView: View {
 
             HStack(spacing: 12) {
               Rectangle().fill(BoldTheme.Colors.border).frame(height: 1)
-              Text("OR").font(BoldTheme.Fonts.mono(11)).tracking(1.1).foregroundColor(BoldTheme.Colors.textFaint)
+              Text("or").font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Colors.textDim)
               Rectangle().fill(BoldTheme.Colors.border).frame(height: 1)
             }
             .padding(.vertical, 22)
           }
 
           HStack(spacing: 8) {
-            BoldMonoLabel(text: "EMAIL")
+            BoldMonoLabel(text: "Email")
             // Web shows the email tag only while signing in (not on
             // create-account or reset), as an inline pill rather than a tab.
             if mode == .signin && lastUsed == .email {
-              Text("LAST USED")
-                .font(BoldTheme.Fonts.mono(10.5, weight: .bold))
-                .tracking(1.4)
-                .foregroundColor(.white)
-                .padding(.horizontal, 9).padding(.vertical, 3)
-                .background(BoldTheme.Colors.green)
-                .clipShape(Capsule())
+              SupPill(text: "Last used", kind: .gray)
             }
           }
           .padding(.bottom, 7)
@@ -139,7 +130,7 @@ struct AuthView: View {
 
           if mode != .forgot {
             HStack {
-              BoldMonoLabel(text: "PASSWORD")
+              BoldMonoLabel(text: "Password")
               Spacer()
               Button(showPassword ? "Hide" : "Show") { showPassword.toggle() }
                 .font(BoldTheme.Fonts.body(12))
@@ -213,9 +204,9 @@ struct AuthView: View {
   // Copy per mode -- the forgot strings are the web's Auth.tsx verbatim.
   private var title: String {
     switch mode {
-    case .signin: return "BACK FOR\nMORE."
-    case .signup: return "PICK THE\nDOG."
-    case .forgot: return "LOST THE\nPLOT?"
+    case .signin: return "Back for more."
+    case .signup: return "Pick the dog."
+    case .forgot: return "Lost the plot?"
     }
   }
 
@@ -229,9 +220,9 @@ struct AuthView: View {
 
   private var cta: String {
     switch mode {
-    case .signin: return "SIGN IN"
-    case .signup: return "CREATE ACCOUNT"
-    case .forgot: return "SEND RESET LINK"
+    case .signin: return "Sign in"
+    case .signup: return "Create account"
+    case .forgot: return "Send reset link"
     }
   }
 
@@ -248,9 +239,8 @@ struct AuthView: View {
 
   private func resetSentConfirmation(_ sentTo: String) -> some View {
     VStack(alignment: .leading, spacing: 6) {
-      Text("RESET LINK SENT")
-        .font(BoldTheme.Fonts.mono(11, weight: .bold))
-        .tracking(1.1)
+      Text("Reset link sent")
+        .font(BoldTheme.Fonts.body(15, weight: .bold))
         .foregroundColor(BoldTheme.Colors.green)
       // Supabase doesn't reveal whether the address has an account, so
       // neither do we -- "if" keeps this honest for a mistyped email.
@@ -374,13 +364,12 @@ private struct LastUsedTab: ViewModifier {
   func body(content: Content) -> some View {
     if show {
       ZStack(alignment: .top) {
-        Text("LAST USED")
-          .font(BoldTheme.Fonts.mono(10.5, weight: .bold))
-          .tracking(1.4)
-          .foregroundColor(.white)
+        Text("Last used")
+          .font(BoldTheme.Fonts.body(12, weight: .bold))
+          .foregroundColor(BoldTheme.Colors.text)
           .padding(.top, 5)
           .frame(maxWidth: .infinity, minHeight: 22, alignment: .top)
-          .background(BoldTheme.Colors.green)
+          .background(BoldTheme.Colors.track)
           .clipShape(UnevenRoundedRectangle(topLeadingRadius: 12, topTrailingRadius: 12))
           .padding(.horizontal, 18)
           .accessibilityHidden(true)

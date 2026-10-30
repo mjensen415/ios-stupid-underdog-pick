@@ -55,7 +55,7 @@ struct WatchPill: View {
         .font(BoldTheme.Fonts.body(10.5, weight: .bold))
         .lineLimit(1)
         .fixedSize()
-        .foregroundColor(live ? .white : BoldTheme.Colors.gold)
+        .foregroundColor(live ? .white : BoldTheme.Colors.card)
         .padding(.horizontal, 8).padding(.vertical, 3)
         .background(Capsule().fill(live ? SUPColors.liveRed : BoldTheme.Colors.text))
       }

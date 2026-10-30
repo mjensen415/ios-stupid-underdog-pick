@@ -42,7 +42,7 @@ struct PublicProfileView: View {
               .frame(width: 72, height: 72)
               .clipShape(Circle())
               Text(profile.display_name?.isEmpty == false ? profile.display_name! : "Player")
-                .font(BoldTheme.Fonts.display(20))
+                .font(BoldTheme.Fonts.body(20, weight: .bold))
                 .foregroundColor(BoldTheme.Colors.text)
             }
             Spacer()
@@ -56,11 +56,11 @@ struct PublicProfileView: View {
             HStack(spacing: 6) {
               Text("🔥").font(.system(size: 13))
               Text(verbatim: "\(streak)-week streak")
-                .font(BoldTheme.Fonts.mono(12, weight: .semibold))
-                .foregroundColor(BoldTheme.Colors.goldDeep)
+                .font(BoldTheme.Fonts.body(13, weight: .semibold))
+                .foregroundColor(BoldTheme.Colors.text)
             }
             .padding(.horizontal, 10).padding(.vertical, 5)
-            .background(BoldTheme.Colors.goldDeep.opacity(0.1))
+            .background(BoldTheme.Colors.track)
             .clipShape(Capsule())
             .listRowInsets(EdgeInsets())
             .padding(.horizontal, 16).padding(.top, 4)
@@ -68,7 +68,7 @@ struct PublicProfileView: View {
 
           HStack {
             VStack(alignment: .leading, spacing: 2) {
-              Text("ALL-TIME RECORD").font(BoldTheme.Fonts.mono(10)).foregroundColor(BoldTheme.Colors.textFaint)
+              Text("All-time record").font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
               Text(verbatim: "\(careerTotals?.wins ?? 0)W – \(careerTotals?.losses ?? 0)L")
                 .font(BoldTheme.Fonts.display(22))
                 .foregroundColor(BoldTheme.Colors.text)
@@ -78,18 +78,18 @@ struct PublicProfileView: View {
               VStack(alignment: .trailing, spacing: 2) {
                 // Wins / (wins + losses). SUP scores outright wins only -- covering
                 // the spread isn't enough -- so this is a win rate, not a cover rate.
-                Text("WIN RATE").font(BoldTheme.Fonts.mono(10)).foregroundColor(BoldTheme.Colors.textFaint)
+                Text("Win rate").font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
                 Text(verbatim: "\(Int((Double(w) / Double(w + l) * 100).rounded()))%")
                   .font(BoldTheme.Fonts.display(22))
-                  .foregroundColor(BoldTheme.Colors.green)
+                  .foregroundColor(BoldTheme.Colors.text)
               }
               Spacer()
             }
             VStack(alignment: .trailing, spacing: 2) {
-              Text("POINTS").font(BoldTheme.Fonts.mono(10)).foregroundColor(BoldTheme.Colors.textFaint)
+              Text("Points").font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
               Text(formatPoints(careerTotals?.totalPoints))
                 .font(BoldTheme.Fonts.display(22))
-                .foregroundColor(BoldTheme.Colors.goldDeep)
+                .foregroundColor(BoldTheme.Colors.text)
             }
           }
           .padding(.vertical, 4)
@@ -99,76 +99,70 @@ struct PublicProfileView: View {
               Text(verbatim: "\(row.season ?? 0)").foregroundColor(BoldTheme.Colors.text)
               Spacer()
               Text(verbatim: "\(row.wins ?? 0)W-\(row.losses ?? 0)L")
-                .font(BoldTheme.Fonts.mono(12))
-                .foregroundColor(BoldTheme.Colors.textFaint)
+                .font(BoldTheme.Fonts.mono(13))
+                .foregroundColor(BoldTheme.Colors.textDim)
               Text(formatPoints(row.totalPoints))
-                .font(BoldTheme.Fonts.display(16))
-                .foregroundColor(BoldTheme.Colors.green)
+                .font(BoldTheme.Fonts.mono(15, weight: .semibold))
+                .foregroundColor(BoldTheme.Colors.text)
                 .frame(minWidth: 50, alignment: .trailing)
             }
           }
 
           if seasonTotals.isEmpty {
-            Text("No picks yet this season.").foregroundColor(BoldTheme.Colors.textFaint)
+            Text("No picks yet this season.").foregroundColor(BoldTheme.Colors.textDim)
           }
         } header: {
-          Label("Trophy Case", systemImage: "trophy.fill")
+          Label("Record", systemImage: "trophy.fill")
         }
-        .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
+        .listRowBackground(BoldTheme.Colors.card)
 
         Section {
           if pickHistory.isEmpty {
-            Text("No locked picks yet -- picks show up here once the game they're for has started.")
-              .font(BoldTheme.Fonts.body(12))
-              .foregroundColor(BoldTheme.Colors.textFaint)
+            Text("No locked picks yet. Picks show up here once their game starts.")
+              .font(BoldTheme.Fonts.body(14))
+              .foregroundColor(BoldTheme.Colors.textDim)
           } else {
             ForEach(pickHistory) { row in
               HStack(spacing: 10) {
-                Text(verbatim: "W\(row.week)")
-                  .font(BoldTheme.Fonts.mono(11))
-                  .foregroundColor(BoldTheme.Colors.textFaint)
-                  .frame(width: 28, alignment: .leading)
+                Text(verbatim: "Wk \(row.week)")
+                  .font(BoldTheme.Fonts.mono(13))
+                  .foregroundColor(BoldTheme.Colors.textDim)
+                  .frame(width: 40, alignment: .leading)
                 VStack(alignment: .leading, spacing: 1) {
                   Text(row.pickedTeam?.shortName ?? row.pickedTeam?.name ?? "Unknown")
-                    .font(BoldTheme.Fonts.body(13, weight: .semibold))
+                    .font(BoldTheme.Fonts.body(15, weight: .semibold))
                     .foregroundColor(BoldTheme.Colors.text)
                   Text(verbatim: "vs \(row.opponent?.shortName ?? row.opponent?.name ?? "Unknown")")
-                    .font(BoldTheme.Fonts.mono(11))
-                    .foregroundColor(BoldTheme.Colors.textFaint)
+                    .font(BoldTheme.Fonts.body(13))
+                    .foregroundColor(BoldTheme.Colors.textDim)
                 }
                 Spacer()
                 if row.isFinal {
                   if row.won {
-                    Text(verbatim: "+\(Int(row.awardedPoints))")
-                      .font(BoldTheme.Fonts.mono(12, weight: .bold))
-                      .foregroundColor(BoldTheme.Colors.goldDeep)
+                    SupPill(text: "Won +\(Int(row.awardedPoints))", kind: .green)
                   } else {
-                    Text("NO WIN")
-                      .font(BoldTheme.Fonts.mono(11))
-                      .foregroundColor(BoldTheme.Colors.textFaint)
+                    SupPill(text: "Lost", kind: .gray)
                   }
                 } else {
-                  Text("LIVE")
-                    .font(BoldTheme.Fonts.mono(11, weight: .semibold))
-                    .foregroundColor(Color(hex: 0xC6402A))
+                  SupPill(text: "Live", kind: .gray)
                 }
               }
               .padding(.vertical, 4)
             }
           }
         } header: {
-          Label("Pick History", systemImage: "checklist")
+          Label("Pick history", systemImage: "checklist")
         }
-        .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
+        .listRowBackground(BoldTheme.Colors.card)
       } else if let loadError {
         Section {
-          Text(loadError).foregroundColor(.red)
-          Button("Retry") { Task { await load() } }
-            .foregroundColor(BoldTheme.Colors.goldDeep)
+          Text(loadError).foregroundColor(BoldTheme.Role.lost)
+          Button("Try again") { Task { await load() } }
+            .foregroundColor(BoldTheme.Colors.text)
         }
-        .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
+        .listRowBackground(BoldTheme.Colors.card)
       } else if isLoading {
-        ProgressView().tint(BoldTheme.Colors.gold)
+        ProgressView().tint(BoldTheme.Colors.text)
           .listRowBackground(BoldTheme.Colors.bgPage)
       }
     }
@@ -179,7 +173,7 @@ struct PublicProfileView: View {
     .toolbarBackground(BoldTheme.Colors.bgPage, for: .navigationBar)
     .toolbarBackground(.visible, for: .navigationBar)
     .toolbarColorScheme(.light, for: .navigationBar)
-    .tint(BoldTheme.Colors.gold)
+    .tint(BoldTheme.Colors.text)
     .task { await load() }
   }
 

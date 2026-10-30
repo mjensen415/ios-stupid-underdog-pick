@@ -43,6 +43,15 @@ struct ProfileView: View {
   var body: some View {
     NavigationStack {
       Form {
+        // Screen title as a Barlow header (same as Groups / My picks); the
+        // system large title rendered blank on iOS 26 here.
+        Section {
+          Text("Settings")
+            .font(BoldTheme.Fonts.body(28, weight: .bold))
+            .foregroundColor(BoldTheme.Colors.text)
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: 8, leading: 4, bottom: 0, trailing: 4))
+        }
         if let profile {
           Section {
             HStack {
@@ -62,7 +71,7 @@ struct ProfileView: View {
                     }
                     if isUploadingAvatar {
                       Circle().fill(Color.black.opacity(0.5))
-                      ProgressView().tint(BoldTheme.Colors.gold)
+                      ProgressView().tint(BoldTheme.Colors.text)
                     }
                   }
                   .frame(width: 72, height: 72)
@@ -70,8 +79,8 @@ struct ProfileView: View {
                 }
                 .disabled(isUploadingAvatar)
                 Text("Tap to change photo")
-                  .font(BoldTheme.Fonts.mono(11))
-                  .foregroundColor(BoldTheme.Colors.textFaint)
+                  .font(BoldTheme.Fonts.body(13))
+                  .foregroundColor(BoldTheme.Colors.textDim)
               }
               Spacer()
             }
@@ -80,14 +89,14 @@ struct ProfileView: View {
               Task { await uploadAvatar(newItem) }
             }
 
-            TextField("Display Name", text: $displayName)
+            TextField("Display name", text: $displayName)
               .foregroundColor(BoldTheme.Colors.text)
             if let errorMessage {
-              Text(errorMessage).foregroundColor(.red)
+              Text(errorMessage).foregroundColor(BoldTheme.Role.lost)
             }
-            Button(isSavingName ? "Saving…" : "Save Name") { Task { await saveName() } }
+            Button(isSavingName ? "Saving…" : "Save name") { Task { await saveName() } }
               .disabled(isSavingName || displayName == (profile.display_name ?? ""))
-              .foregroundColor(BoldTheme.Colors.goldDeep)
+              .foregroundColor(BoldTheme.Colors.text)
 
             TextField("Email", text: $email)
               .keyboardType(.emailAddress)
@@ -97,24 +106,24 @@ struct ProfileView: View {
             if let emailMessage {
               Text(emailMessage).foregroundColor(BoldTheme.Colors.textDim).font(.footnote)
             }
-            Button(isSavingEmail ? "Updating…" : "Update Email") { Task { await saveEmail() } }
+            Button(isSavingEmail ? "Updating…" : "Update email") { Task { await saveEmail() } }
               .disabled(isSavingEmail || email == (profile.email ?? ""))
-              .foregroundColor(BoldTheme.Colors.goldDeep)
+              .foregroundColor(BoldTheme.Colors.text)
           } header: {
             Label("Account", systemImage: "person.crop.circle")
           }
-          .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
+          .listRowBackground(BoldTheme.Colors.card)
 
           Section {
             if streak > 0 {
               HStack(spacing: 6) {
                 Text("🔥").font(.system(size: 13))
                 Text(verbatim: "\(streak)-week streak")
-                  .font(BoldTheme.Fonts.mono(12, weight: .semibold))
-                  .foregroundColor(BoldTheme.Colors.goldDeep)
+                  .font(BoldTheme.Fonts.body(13, weight: .semibold))
+                  .foregroundColor(BoldTheme.Colors.text)
               }
               .padding(.horizontal, 10).padding(.vertical, 5)
-              .background(BoldTheme.Colors.goldDeep.opacity(0.1))
+              .background(BoldTheme.Colors.track)
               .clipShape(Capsule())
               .listRowInsets(EdgeInsets())
               .padding(.horizontal, 16).padding(.top, 4)
@@ -122,7 +131,7 @@ struct ProfileView: View {
 
             HStack {
               VStack(alignment: .leading, spacing: 2) {
-                Text("ALL-TIME RECORD").font(BoldTheme.Fonts.mono(10)).foregroundColor(BoldTheme.Colors.textFaint)
+                Text("All-time record").font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
                 Text(verbatim: "\(careerTotals?.wins ?? 0)W – \(careerTotals?.losses ?? 0)L")
                   .font(BoldTheme.Fonts.display(22))
                   .foregroundColor(BoldTheme.Colors.text)
@@ -132,18 +141,18 @@ struct ProfileView: View {
                 VStack(alignment: .trailing, spacing: 2) {
                   // Wins / (wins + losses). SUP scores outright wins only -- covering
                   // the spread isn't enough -- so this is a win rate, not a cover rate.
-                  Text("WIN RATE").font(BoldTheme.Fonts.mono(10)).foregroundColor(BoldTheme.Colors.textFaint)
+                  Text("Win rate").font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
                   Text(verbatim: "\(Int((Double(w) / Double(w + l) * 100).rounded()))%")
                     .font(BoldTheme.Fonts.display(22))
-                    .foregroundColor(BoldTheme.Colors.green)
+                    .foregroundColor(BoldTheme.Colors.text)
                 }
                 Spacer()
               }
               VStack(alignment: .trailing, spacing: 2) {
-                Text("POINTS").font(BoldTheme.Fonts.mono(10)).foregroundColor(BoldTheme.Colors.textFaint)
+                Text("Points").font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
                 Text(formatPoints(careerTotals?.totalPoints))
                   .font(BoldTheme.Fonts.display(22))
-                  .foregroundColor(BoldTheme.Colors.goldDeep)
+                  .foregroundColor(BoldTheme.Colors.text)
               }
             }
             .padding(.vertical, 4)
@@ -153,34 +162,31 @@ struct ProfileView: View {
                 Text(verbatim: "\(row.season ?? 0)").foregroundColor(BoldTheme.Colors.text)
                 Spacer()
                 Text(verbatim: "\(row.wins ?? 0)W-\(row.losses ?? 0)L")
-                  .font(BoldTheme.Fonts.mono(12))
-                  .foregroundColor(BoldTheme.Colors.textFaint)
+                  .font(BoldTheme.Fonts.mono(13))
+                  .foregroundColor(BoldTheme.Colors.textDim)
                 Text(formatPoints(row.totalPoints))
-                  .font(BoldTheme.Fonts.display(16))
-                  // Per-season point totals down a list are GREEN, not gold --
-                  // gold stays reserved for the single all-time career total
-                  // above. Matches web's AccountInfoTab.tsx "By Season" list.
-                  .foregroundColor(BoldTheme.Colors.green)
+                  .font(BoldTheme.Fonts.mono(15, weight: .semibold))
+                  .foregroundColor(BoldTheme.Colors.text)
                   .frame(minWidth: 50, alignment: .trailing)
               }
             }
 
             NavigationLink(destination: PickHistoryView()) {
-              Text("View Full Pick History")
-                .foregroundColor(BoldTheme.Colors.goldDeep)
+              Text("Pick history")
+                .foregroundColor(BoldTheme.Colors.text)
             }
 
             // Leaderboard dropped off the tab bar (5-tab limit -- see
             // MainTabView) in favor of a real Groups tab and this Settings
             // tab, so it needs a way in from somewhere else.
             NavigationLink(destination: LeaderboardView()) {
-              Text("View Leaderboard")
-                .foregroundColor(BoldTheme.Colors.goldDeep)
+              Text("Leaderboards")
+                .foregroundColor(BoldTheme.Colors.text)
             }
           } header: {
-            Label("Trophy Case", systemImage: "trophy.fill")
+            Label("Your record", systemImage: "trophy.fill")
           }
-          .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
+          .listRowBackground(BoldTheme.Colors.card)
 
           Section {
             switch notificationAuthStatus {
@@ -190,7 +196,7 @@ struct ProfileView: View {
               Button("Open Settings") {
                 if let url = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(url) }
               }
-              .foregroundColor(BoldTheme.Colors.goldDeep)
+              .foregroundColor(BoldTheme.Colors.text)
             case .authorized, .provisional, .ephemeral:
               Toggle("Pick reminders", isOn: $notificationPrefs.pick_reminder)
               Toggle("Game kickoff", isOn: $notificationPrefs.game_live)
@@ -206,25 +212,25 @@ struct ProfileView: View {
                 Task { await enablePush() }
               }
               .disabled(isRequestingPushPermission)
-              .foregroundColor(BoldTheme.Colors.goldDeep)
+              .foregroundColor(BoldTheme.Colors.text)
             }
           } header: {
             Label("Notifications", systemImage: "bell.badge")
           }
-          .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
+          .listRowBackground(BoldTheme.Colors.card)
           .onChange(of: notificationPrefs) { _, newValue in
             guard let client else { return }
             Task { try? await PushService(client: client).updatePreferences(newValue) }
           }
         } else if let loadError {
           Section {
-            Text(loadError).foregroundColor(.red)
-            Button("Retry") { Task { await load() } }
-              .foregroundColor(BoldTheme.Colors.goldDeep)
+            Text(loadError).foregroundColor(BoldTheme.Role.lost)
+            Button("Try again") { Task { await load() } }
+              .foregroundColor(BoldTheme.Colors.text)
           }
-          .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
+          .listRowBackground(BoldTheme.Colors.card)
         } else {
-          ProgressView().tint(BoldTheme.Colors.gold)
+          ProgressView().tint(BoldTheme.Colors.text)
             .listRowBackground(BoldTheme.Colors.bgPage)
         }
 
@@ -245,7 +251,7 @@ struct ProfileView: View {
           } header: {
             Label("Pro tools", systemImage: "sparkles")
           }
-          .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
+          .listRowBackground(BoldTheme.Colors.card)
         }
 
         // Outside the `if let profile` above so the links stay reachable even
@@ -259,12 +265,12 @@ struct ProfileView: View {
           legalLink("Responsible Gaming", SiteLinks.responsibleGaming)
           legalLink("Disclosures", SiteLinks.disclosures)
         } header: {
-          Label("About & Legal", systemImage: "doc.text")
+          Label("About & legal", systemImage: "doc.text")
         }
-        .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
+        .listRowBackground(BoldTheme.Colors.card)
 
         Section {
-          Button("Sign Out", role: .destructive) {
+          Button("Sign out", role: .destructive) {
             Task {
               if let client { await AuthService(client: client).signOut() }
               await MainActor.run { appState.session = nil }
@@ -273,25 +279,25 @@ struct ProfileView: View {
         } header: {
           Label("Session", systemImage: "rectangle.portrait.and.arrow.right")
         }
-        .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
+        .listRowBackground(BoldTheme.Colors.card)
 
         Section {
-          Button(isDeletingAccount ? "Deleting…" : "Delete Account", role: .destructive) {
+          Button(isDeletingAccount ? "Deleting…" : "Delete account", role: .destructive) {
             showDeleteConfirm = true
           }
           .disabled(isDeletingAccount)
         } header: {
-          Label("Danger Zone", systemImage: "exclamationmark.triangle")
+          Label("Delete account", systemImage: "exclamationmark.triangle")
         } footer: {
-          deleteError.map { Text($0).foregroundColor(.red) }
+          deleteError.map { Text($0).foregroundColor(BoldTheme.Role.lost) }
         }
-        .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
+        .listRowBackground(BoldTheme.Colors.card)
         .confirmationDialog(
           "Delete your account?",
           isPresented: $showDeleteConfirm,
           titleVisibility: .visible
         ) {
-          Button("Delete Account", role: .destructive) {
+          Button("Delete account", role: .destructive) {
             Task { await deleteAccount() }
           }
           Button("Cancel", role: .cancel) {}
@@ -306,7 +312,12 @@ struct ProfileView: View {
       }
       .scrollContentBackground(.hidden)
       .background(BoldTheme.Colors.bgPage.ignoresSafeArea())
-      .navigationTitle("Profile")
+      .navigationTitle("Settings")
+      .toolbar(.hidden, for: .navigationBar)
+      .safeAreaInset(edge: .top, spacing: 0) {
+        Color.clear.frame(height: 0)
+          .background(BoldTheme.Colors.bgPage.opacity(0.94), ignoresSafeAreaEdges: .top)
+      }
       .toolbarBackground(BoldTheme.Colors.bgPage, for: .navigationBar)
       .toolbarBackground(.visible, for: .navigationBar)
       // Frost's bgPage is light now (was dark under Bold) -- see
@@ -317,7 +328,8 @@ struct ProfileView: View {
         SafariView(url: item.url).ignoresSafeArea()
       }
     }
-    .tint(BoldTheme.Colors.gold)
+    // Toggles and links: green "on", not yellow (yellow = primary action).
+    .tint(BoldTheme.Colors.green)
   }
 
   private func legalLink(_ title: String, _ url: URL) -> some View {

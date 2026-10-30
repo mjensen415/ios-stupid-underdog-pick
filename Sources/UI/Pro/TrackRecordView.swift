@@ -68,22 +68,23 @@ struct TrackRecordView: View {
       ScrollView {
         VStack(alignment: .leading, spacing: 16) {
           VStack(alignment: .leading, spacing: 4) {
-            Text("MODEL TRACK RECORD\(data?.season.map { " · \($0) CFB" } ?? "")")
-              .font(BoldTheme.Fonts.mono(10.5, weight: .bold)).tracking(1).foregroundColor(BoldTheme.Colors.green)
-            Text("TRACK RECORD").font(BoldTheme.Fonts.display(42)).foregroundColor(BoldTheme.Colors.text)
+            Text("Model track record\(data?.season.map { " · \($0) CFB" } ?? "")")
+              .font(BoldTheme.Fonts.body(13, weight: .semibold)).foregroundColor(BoldTheme.Colors.textDim)
+            Text("Track record").font(BoldTheme.Fonts.body(28, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
             Text("How our outright-upset model has actually done, graded after every game. The bigger the line, the less likely the dog wins outright, using the spread-to-win curve P(dog) = 1 − Φ(line / 13).")
               .font(BoldTheme.Fonts.body(13.5)).foregroundColor(BoldTheme.Colors.textDim)
               .fixedSize(horizontal: false, vertical: true)
           }
           if let error {
-            Text(error).font(BoldTheme.Fonts.body(13)).foregroundColor(Color(hex: 0x8A1C1C))
+            Text(error).font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Role.lost)
           } else if let data {
             content(data)
           } else {
             ProgressView().frame(maxWidth: .infinity).padding(.top, 40)
           }
         }
-        .padding(18)
+        .padding(.horizontal, BoldTheme.Space.margin)
+        .padding(.vertical, BoldTheme.Space.s4)
       }
     }
     .navigationTitle("Track record")
@@ -106,15 +107,15 @@ struct TrackRecordView: View {
   @ViewBuilder private func content(_ d: TrackRecordData) -> some View {
     let t = TrackRecordTotals(d.weeks)
     LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-      kpi("GAMES GRADED", "\(t.games)", "Weeks 1–\(d.weeks.last.map { String($0.week) } ?? "–"), lined & final")
-      kpi("UPSETS VS EXPECTED", "\(t.upsets) / \(num(t.expected, 0))", "\(signed(Double(t.upsets) - t.expected)) vs model")
-      kpi("LOG LOSS / GAME", t.logLoss.map { num($0, 3) } ?? "–", "coin flip \(num(coinFlip, 3)) · lower is better")
-      kpi("TOP-12 DOGS", "\(t.topHits)/\(t.topN)",
+      kpi("Games graded", "\(t.games)", "Weeks 1–\(d.weeks.last.map { String($0.week) } ?? "–"), lined & final")
+      kpi("Upsets vs expected", "\(t.upsets) / \(num(t.expected, 0))", "\(signed(Double(t.upsets) - t.expected)) vs model")
+      kpi("Log loss per game", t.logLoss.map { num($0, 3) } ?? "–", "coin flip \(num(coinFlip, 3)) · lower is better")
+      kpi("Top-12 dogs", "\(t.topHits)/\(t.topN)",
           "\(t.topN > 0 ? num(t.topPts / Double(t.topN), 2) : "–") pts/pick vs \(t.topN > 0 ? num(t.topExp / Double(t.topN), 2) : "–") expected", gold: true)
     }
 
     section("Upsets by week", sub: "Actual outright upsets vs the number the model expected before kickoff.") {
-      table(headers: ["WK", "GAMES", "UPSETS", "EXP", "DIFF", "TOP 12"],
+      table(headers: ["Wk", "Games", "Upsets", "Exp", "Diff", "Top 12"],
             rows: d.weeks.map { w in
               ["\(w.week)", "\(w.games)", "\(w.upsets)", num(w.expected, 1), signed(Double(w.upsets) - w.expected), "\(w.top_hits)/\(w.top_n)"]
             })
@@ -124,7 +125,7 @@ struct TrackRecordView: View {
     }
 
     section("Is the model calibrated?", sub: "Every graded game, bucketed by the dog's pre-game win chance. Calibrated means predicted and actual match.") {
-      table(headers: ["WIN CHANCE", "GAMES", "PREDICTED", "ACTUAL"],
+      table(headers: ["Win chance", "Games", "Predicted", "Actual"],
             rows: d.calibration.map { b in
               ["\(jsNumber(b.lo))–\(jsNumber(b.hi))%", "\(b.n)", pct(b.predicted), pct(b.actual)]
             })
@@ -142,7 +143,7 @@ struct TrackRecordView: View {
     }
 
     Text("Not betting advice. The game stays free; Pro is tools and info only.")
-      .font(BoldTheme.Fonts.body(11)).foregroundColor(BoldTheme.Colors.textFaint)
+      .font(BoldTheme.Fonts.body(12)).foregroundColor(BoldTheme.Colors.textDim)
   }
 
   // MARK: Bits
@@ -153,25 +154,24 @@ struct TrackRecordView: View {
 
   private func kpi(_ label: String, _ value: String, _ sub: String, gold: Bool = false) -> some View {
     VStack(alignment: .leading, spacing: 3) {
-      Text(label).font(BoldTheme.Fonts.mono(9, weight: .bold)).tracking(0.7).foregroundColor(BoldTheme.Colors.textDim)
-      Text(value).font(BoldTheme.Fonts.display(28)).foregroundColor(gold ? BoldTheme.Colors.goldDeep : BoldTheme.Colors.text)
-      Text(sub).font(BoldTheme.Fonts.body(10.5)).foregroundColor(BoldTheme.Colors.textFaint).fixedSize(horizontal: false, vertical: true)
+      Text(label).font(BoldTheme.Fonts.body(12, weight: .semibold)).foregroundColor(BoldTheme.Colors.textDim)
+      Text(value).font(BoldTheme.Fonts.display(28)).foregroundColor(BoldTheme.Colors.text)
+      Text(sub).font(BoldTheme.Fonts.body(12)).foregroundColor(BoldTheme.Colors.textDim).fixedSize(horizontal: false, vertical: true)
     }
     .padding(12)
     .frame(maxWidth: .infinity, minHeight: 96, alignment: .topLeading)
-    .background(RoundedRectangle(cornerRadius: 14).fill(BoldTheme.Colors.glassStrong))
-    .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
+    .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
   }
 
   private func section<C: View>(_ title: String, sub: String?, @ViewBuilder content: () -> C) -> some View {
     VStack(alignment: .leading, spacing: 10) {
-      Text(title.uppercased()).font(BoldTheme.Fonts.display(22)).foregroundColor(BoldTheme.Colors.text)
-      if let sub { Text(sub).font(BoldTheme.Fonts.body(12.5)).foregroundColor(BoldTheme.Colors.textDim).fixedSize(horizontal: false, vertical: true) }
+      Text(title).font(BoldTheme.Fonts.body(17, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
+      if let sub { Text(sub).font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim).fixedSize(horizontal: false, vertical: true) }
       content()
     }
-    .padding(14)
+    .padding(BoldTheme.Space.cardPad)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(RoundedRectangle(cornerRadius: 16).fill(BoldTheme.Colors.glassStrong))
+    .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
   }
 
   private func table(headers: [String], rows: [[String]]) -> some View {
@@ -181,7 +181,7 @@ struct TrackRecordView: View {
           Text(h).frame(maxWidth: .infinity, alignment: i == 0 ? .leading : .trailing)
         }
       }
-      .font(BoldTheme.Fonts.mono(9, weight: .bold)).foregroundColor(BoldTheme.Colors.textFaint)
+      .font(BoldTheme.Fonts.body(12, weight: .semibold)).foregroundColor(BoldTheme.Colors.textDim)
       .padding(.vertical, 6)
       ForEach(Array(rows.enumerated()), id: \.offset) { _, r in
         Divider().overlay(BoldTheme.Colors.border)

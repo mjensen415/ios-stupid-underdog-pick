@@ -12,15 +12,15 @@ struct ShareCardView: View {
     VStack(alignment: .leading, spacing: 0) {
       HStack(spacing: 0) {
         Text("STUPID").foregroundColor(BoldTheme.Colors.text)
-        Text("UNDERDOG").foregroundColor(BoldTheme.Colors.goldDeep)
+        Text("UNDERDOG").foregroundColor(BoldTheme.Colors.text)
         Text("PICK").foregroundColor(BoldTheme.Colors.text)
       }
       .font(BoldTheme.Fonts.body(22, weight: .bold))
       .padding(.bottom, 28)
 
-      Text("MY PICK THIS WEEK")
-        .font(BoldTheme.Fonts.mono(13, weight: .semibold))
-        .foregroundColor(BoldTheme.Colors.textFaint)
+      Text("My pick this week")
+        .font(BoldTheme.Fonts.body(18, weight: .semibold))
+        .foregroundColor(BoldTheme.Colors.textDim)
         .padding(.bottom, 8)
 
       Text(dogName.uppercased())
@@ -33,21 +33,19 @@ struct ShareCardView: View {
         .foregroundColor(BoldTheme.Colors.textDim)
         .padding(.bottom, 20)
 
-      Text(verbatim: "+\(String(format: "%.1f", spread))")
+      Text(verbatim: "+\(jsNumber(spread))")
         .font(BoldTheme.Fonts.display(88))
-        .foregroundColor(BoldTheme.Colors.goldDeep)
+        .foregroundColor(BoldTheme.Colors.text)
       // Outright wins only: covering isn't enough to win the points.
-      Text("POINTS IF IT WINS OUTRIGHT")
-        .font(BoldTheme.Fonts.mono(13, weight: .semibold))
-        .foregroundColor(BoldTheme.Colors.textFaint)
+      Text("points if it wins outright")
+        .font(BoldTheme.Fonts.body(18, weight: .semibold))
+        .foregroundColor(BoldTheme.Colors.textDim)
 
       Spacer()
     }
     .padding(40)
     .frame(width: 700, height: 420, alignment: .topLeading)
-    .background(
-      LinearGradient(colors: [BoldTheme.Colors.bgPage, Color(hex: 0xC9CFC2)], startPoint: .topLeading, endPoint: .bottomTrailing)
-    )
+    .background(BoldTheme.Colors.bgPage)
   }
 }
 

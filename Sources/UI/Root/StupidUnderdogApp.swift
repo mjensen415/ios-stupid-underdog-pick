@@ -12,9 +12,9 @@ struct StupidUnderdogApp: App {
       Group {
         if let e = appState.startupError {
           VStack(spacing: 12) {
-            Text("STARTUP ERROR").font(BoldTheme.Fonts.display(28)).foregroundColor(BoldTheme.Colors.text)
+            Text("Couldn't start").font(BoldTheme.Fonts.body(24, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
             Text(e.localizedDescription).multilineTextAlignment(.center).foregroundColor(BoldTheme.Colors.textDim)
-            Text("Check SUPABASE_URL / SUPABASE_ANON_KEY in Info.plist.").font(BoldTheme.Fonts.mono(11)).foregroundColor(BoldTheme.Colors.textFaint)
+            Text("Check SUPABASE_URL / SUPABASE_ANON_KEY in Info.plist.").font(BoldTheme.Fonts.code(11)).foregroundColor(BoldTheme.Colors.textDim)
           }
           .padding()
           .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -28,7 +28,7 @@ struct StupidUnderdogApp: App {
         } else {
           ZStack {
             BoldTheme.Colors.bgPage.ignoresSafeArea()
-            ProgressView("Starting…").tint(BoldTheme.Colors.gold).foregroundColor(BoldTheme.Colors.textDim)
+            ProgressView("Starting…").tint(BoldTheme.Colors.text).foregroundColor(BoldTheme.Colors.textDim)
           }
         }
       }
