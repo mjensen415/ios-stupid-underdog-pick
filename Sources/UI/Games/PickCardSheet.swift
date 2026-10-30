@@ -147,9 +147,14 @@ struct PickCardSheet: View {
 
         if isCurrentPick {
           VStack(spacing: BoldTheme.Space.s2) {
-            Text(shownLocked ? "This is your pick for the week. It's locked." : "This is your pick for the week.")
+            // Web parity (round 3): say it's the pick, offer Done, not a
+            // second Lock in. Clear stays until kickoff.
+            Text(verbatim: shownLocked ? "\(dogLabel) is your pick. It's locked." : "\(dogLabel) is your pick. Tap another game to switch.")
               .font(BoldTheme.Fonts.body(14, weight: .semibold))
               .foregroundColor(BoldTheme.Colors.green)
+              .multilineTextAlignment(.center)
+            Button("Done") { dismiss() }
+              .buttonStyle(SupPrimaryButtonStyle())
             // Once the game kicks off the pick is final (the server rejects
             // a clear), so no button that can only fail.
             if !shownLocked {

@@ -5,7 +5,9 @@ import SwiftUI
 /// centered middle column stacked as the big ink "+3", the kickoff time,
 /// then a where-to-watch capsule (Pro). Once there's a score the middle
 /// column becomes the scoreboard. Locked, live and finished games dim; the
-/// picked game's row turns solid green. No per-row PICK button (de-slop
+/// picked game's row turns solid green. No FAV/DOG labels on the row: the
+/// sticky "FAVORITE · day · UNDERDOG" header carries them (round 3). No
+/// per-row PICK button (de-slop
 /// #12): the whole row is the target -- tap for the pick card, swipe left
 /// for the yellow Pick action.
 struct GameRowView: View {
@@ -72,10 +74,6 @@ struct GameRowView: View {
       HStack(spacing: 8) {
         logo(favId)
         VStack(alignment: .leading, spacing: 1) {
-          Text("FAV")
-            .font(BoldTheme.TypeRole.label(9.5))
-            .tracking(1)
-            .foregroundColor(ink.opacity(0.62))
           Text(verbatim: (isHomeFavorite ? "@\u{00A0}" : "") + favName)
             .font(BoldTheme.Fonts.body(14, weight: .semibold))
             .foregroundColor(ink)
@@ -95,10 +93,6 @@ struct GameRowView: View {
       HStack(spacing: 8) {
         Spacer(minLength: 0)
         VStack(alignment: .trailing, spacing: 1) {
-          Text("DOG")
-            .font(BoldTheme.TypeRole.label(9.5))
-            .tracking(1)
-            .foregroundColor(ink.opacity(0.62))
           Text(verbatim: (isHomeFavorite ? "" : "@\u{00A0}") + dogName)
             .font(BoldTheme.Fonts.body(14, weight: .semibold))
             .foregroundColor(ink)
