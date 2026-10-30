@@ -13,7 +13,6 @@ struct ToastModifier: ViewModifier {
             .padding(.horizontal, 12).padding(.vertical, 8)
             .background(.ultraThinMaterial)
             .clipShape(Capsule())
-            .shadow(radius: 2)
             .padding(.bottom, 12)
         }
         .transition(.move(edge: .bottom).combined(with: .opacity))

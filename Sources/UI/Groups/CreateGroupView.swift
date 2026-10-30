@@ -29,8 +29,8 @@ struct CreateGroupView: View {
         Section {
           TextField("Group name", text: $name)
           Text(verbatim: "\(name.count)/40 characters")
-            .font(BoldTheme.Fonts.mono(11))
-            .foregroundColor(BoldTheme.Colors.textFaint)
+            .font(BoldTheme.Fonts.body(12))
+            .foregroundColor(BoldTheme.Colors.textDim)
         }
         Section {
           TextField("Description (optional)", text: $description, axis: .vertical)
@@ -77,7 +77,7 @@ struct CreateGroupView: View {
             .foregroundColor(BoldTheme.Colors.textDim)
         }
         if let errorText {
-          Text(errorText).foregroundColor(.red).font(BoldTheme.Fonts.body(13))
+          Text(errorText).foregroundColor(BoldTheme.Role.lost).font(BoldTheme.Fonts.body(14))
         }
       }
       .navigationTitle("Create Group")

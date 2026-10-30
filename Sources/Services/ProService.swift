@@ -163,29 +163,41 @@ struct ProDataService {
     guard !ors.isEmpty else { return [] }
     struct Row: Decodable {
       let home_name: String?; let away_name: String?
+      let home_short: String?; let away_short: String?
       let home_team_id: UUID?; let away_team_id: UUID?
       let home_points: Int?; let away_points: Int?
       let closing_spread: Double?; let latest_spread: Double?
       let start_time: Date
     }
     let iso = ISO8601DateFormatter().string(from: before)
-    guard let res = try? await client.from("v_games_named")
-      .select("home_name, away_name, home_team_id, away_team_id, home_points, away_points, closing_spread, latest_spread, start_time")
-      .eq("sport", value: sport).eq("status", value: "final").lt("start_time", value: iso)
-      .or(ors.joined(separator: ","))
-      .order("start_time", ascending: false).limit(n + 2)
-      .execute()
-    else { return [] }
+    let base = "home_name, away_name, home_team_id, away_team_id, home_points, away_points, closing_spread, latest_spread, start_time"
+    func run(_ columns: String) async throws -> Data {
+      try await client.from("v_games_named")
+        .select(columns)
+        .eq("sport", value: sport).eq("status", value: "final").lt("start_time", value: iso)
+        .or(ors.joined(separator: ","))
+        .order("start_time", ascending: false).limit(n + 2)
+        .execute().data
+    }
+    var data: Data?
+    if GamesService.shortNamesAvailable {
+      do { data = try await run(base + ", home_short, away_short") } catch {
+        if isMissingColumn(error) { GamesService.shortNamesAvailable = false } else { return [] }
+      }
+    }
+    if data == nil { data = try? await run(base) }
+    guard let data else { return [] }
     let dec = JSONDecoder()
     dec.dateDecodingStrategy = .iso8601withFallback
-    guard let rows = try? dec.decode([Row].self, from: res.data) else { return [] }
+    guard let rows = try? dec.decode([Row].self, from: data) else { return [] }
     let key = teamId?.uuidString.lowercased()
     return rows.compactMap { g in
       RecentForm.toFormGame(RawFinal(
         home: g.home_name ?? "", away: g.away_name ?? "",
         homeKey: g.home_team_id?.uuidString.lowercased(), awayKey: g.away_team_id?.uuidString.lowercased(),
         homePts: g.home_points, awayPts: g.away_points,
-        spread: g.closing_spread ?? g.latest_spread, startTime: g.start_time
+        spread: g.closing_spread ?? g.latest_spread, startTime: g.start_time,
+        homeShort: g.home_short, awayShort: g.away_short
       ), key: key, name: teamId == nil ? teamName : nil)
     }.prefix(n).map { $0 }
   }

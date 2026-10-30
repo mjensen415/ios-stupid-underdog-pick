@@ -249,17 +249,17 @@ struct GroupDetailView: View {
   var body: some View {
     ZStack {
       BoldTheme.Colors.bgPage.ignoresSafeArea()
-      BoldTheme.AmbientBlobs().ignoresSafeArea()
 
       Group {
         if let e = viewModel.errorText, viewModel.group == nil {
           VStack(spacing: 8) {
-            Text("Error loading group").font(BoldTheme.Fonts.display(24)).foregroundColor(BoldTheme.Colors.text)
-            Text(e).foregroundColor(BoldTheme.Colors.textDim)
-            Button("Retry") { Task { await viewModel.loadInitial() } }.foregroundColor(BoldTheme.Colors.goldDeep)
+            Text("Couldn't load this group").font(BoldTheme.Fonts.body(20, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
+            Text(e).font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Colors.textDim)
+            Button("Try again") { Task { await viewModel.loadInitial() } }
+              .buttonStyle(SupSecondaryButtonStyle(fullWidth: false))
           }.padding()
         } else if viewModel.isLoading && viewModel.group == nil {
-          ProgressView("Loading…").tint(BoldTheme.Colors.gold)
+          ProgressView("Loading…").tint(BoldTheme.Colors.text)
         } else if viewModel.group == nil {
           VStack(spacing: 10) {
             Image(systemName: "lock.fill").font(.system(size: 28)).foregroundColor(BoldTheme.Colors.textFaint)
@@ -288,34 +288,33 @@ struct GroupDetailView: View {
   private var content: some View {
     let group = viewModel.group!
     ScrollView {
-      VStack(alignment: .leading, spacing: 20) {
-        HStack(spacing: 14) {
-          AvatarInitials(name: group.name, size: 56)
+      VStack(alignment: .leading, spacing: BoldTheme.Space.s4) {
+        HStack(spacing: BoldTheme.Space.s3) {
+          AvatarInitials(name: group.name, size: 52)
           VStack(alignment: .leading, spacing: 6) {
-            Text(group.name).font(BoldTheme.Fonts.display(24)).foregroundColor(BoldTheme.Colors.text)
+            Text(group.name).font(BoldTheme.Fonts.body(22, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
+              .fixedSize(horizontal: false, vertical: true)
             HStack(spacing: 6) {
               if let role = viewModel.myRole { RoleBadge(role: role) }
               PrivacyChip(isPrivate: group.is_private)
               Text(verbatim: "\(viewModel.memberCount) member\(viewModel.memberCount == 1 ? "" : "s")")
-                .font(BoldTheme.Fonts.body(12)).foregroundColor(BoldTheme.Colors.textDim)
+                .font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
             }
           }
           Spacer()
         }
         if let description = group.description, !description.isEmpty {
-          Text(description).font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
+          Text(description).font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Colors.textDim)
         }
 
         if viewModel.myRole == .pending {
-          bannerCard(icon: "clock.fill", title: "Pending Approval", subtitle: "An admin needs to approve your request.")
+          bannerCard(icon: "clock.fill", title: "Waiting for approval", subtitle: "An admin needs to approve your request.")
         } else if viewModel.myRole == nil {
-          BoldTheme.GlassCard(strong: true, radius: 14, padding: 14) {
-            VStack(alignment: .leading, spacing: 10) {
-              Text("Join this group").font(BoldTheme.Fonts.body(15, weight: .semibold)).foregroundColor(BoldTheme.Colors.text)
-              Button("Request to Join") { Task { await viewModel.join() } }
-                .font(BoldTheme.Fonts.body(14, weight: .semibold))
-                .padding(.horizontal, 16).padding(.vertical, 10)
-                .background(BoldTheme.Colors.gold).foregroundColor(BoldTheme.Colors.text).cornerRadius(10)
+          BoldTheme.FlatCard {
+            VStack(alignment: .leading, spacing: BoldTheme.Space.s3) {
+              Text("Join this group").font(BoldTheme.Fonts.body(16, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
+              Button("Request to join") { Task { await viewModel.join() } }
+                .buttonStyle(SupPrimaryButtonStyle())
             }
           }
         }
@@ -330,16 +329,18 @@ struct GroupDetailView: View {
         }
 
         if viewModel.myRole != nil && viewModel.myRole != .pending {
-          Button("Leave Group") { showLeaveConfirm = true }
-            .font(BoldTheme.Fonts.body(14, weight: .semibold))
-            .foregroundColor(.red)
-            .padding(.top, 8)
+          Button("Leave group") { showLeaveConfirm = true }
+            .font(BoldTheme.Fonts.body(15, weight: .semibold))
+            .foregroundColor(BoldTheme.Role.lost)
+            .padding(.top, BoldTheme.Space.s2)
         }
       }
-      .padding(20)
+      .padding(.horizontal, BoldTheme.Space.margin)
+      .padding(.top, BoldTheme.Space.s2)
+      .padding(.bottom, BoldTheme.Space.s6)
     }
     .confirmationDialog("Leave this group?", isPresented: $showLeaveConfirm, titleVisibility: .visible) {
-      Button("Leave Group", role: .destructive) {
+      Button("Leave group", role: .destructive) {
         Task {
           guard let client else { return }
           do {
@@ -352,14 +353,14 @@ struct GroupDetailView: View {
   }
 
   private func bannerCard(icon: String, title: String, subtitle: String) -> some View {
-    BoldTheme.GlassCard(strong: true, radius: 14, padding: 14) {
+    BoldTheme.FlatCard {
       HStack(spacing: 12) {
         // GREEN, not gold -- this is a status icon, not an action, so it
         // shouldn't compete with the screen's one primary-action CTA.
         Image(systemName: icon).foregroundColor(BoldTheme.Colors.green)
         VStack(alignment: .leading, spacing: 2) {
           Text(title).font(BoldTheme.Fonts.body(14, weight: .semibold)).foregroundColor(BoldTheme.Colors.text)
-          Text(subtitle).font(BoldTheme.Fonts.body(12)).foregroundColor(BoldTheme.Colors.textDim)
+          Text(subtitle).font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
         }
         Spacer()
       }
@@ -379,49 +380,36 @@ struct GroupDetailView: View {
             }
           }
       }
-      PillToggle(options: [(label: "This Week", value: LeaderboardScope.week), (label: "Season", value: .season)], selection: $leaderboardScope)
+      PillToggle(options: [(label: "This week", value: LeaderboardScope.week), (label: "Season", value: .season)], selection: $leaderboardScope)
         .onChange(of: leaderboardScope) { _, newValue in
           Task { await viewModel.loadLeaderboard(scope: newValue) }
         }
       if leaderboardScope == .week && viewModel.availableWeeks.count > 1 {
-        ScrollView(.horizontal, showsIndicators: false) {
-          HStack(spacing: 6) {
-            ForEach(viewModel.availableWeeks, id: \.self) { w in
-              let active = w == viewModel.week
-              Button {
-                viewModel.week = w
-              } label: {
-                Text("Week \(w)")
-                  .font(BoldTheme.Fonts.body(12.5, weight: .bold))
-                  .padding(.horizontal, 16).padding(.vertical, 7)
-                  .background(active ? BoldTheme.Colors.gold : BoldTheme.Colors.track)
-                  .foregroundColor(active ? BoldTheme.Colors.text : BoldTheme.Colors.textDim)
-                  .clipShape(Capsule())
-              }
-              .buttonStyle(.plain)
-            }
-          }
-        }
+        // Shared week pills: scrolls the selected week into view.
+        WeekPills(weeks: viewModel.availableWeeks, selected: $viewModel.week)
         .onChange(of: viewModel.week) { Task { await viewModel.loadLeaderboard(scope: leaderboardScope) } }
       }
 
       if viewModel.leaderboard.isEmpty {
-        Text("No data available for this period").font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textFaint).padding(.vertical, 16)
+        Text("No results for this week yet.").font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Colors.textDim).padding(.vertical, 16)
       } else {
-        BoldTheme.GlassCard {
+        BoldTheme.FlatCard {
           VStack(alignment: .leading, spacing: 0) {
             HStack {
-              Text("RK").frame(width: 28, alignment: .leading)
-              Text("ENTRY")
+              Text("Rank").frame(width: 40, alignment: .leading)
+              Text("Player")
               Spacer()
-              Text("PTS")
+              Text("Points")
             }
-            .font(BoldTheme.Fonts.mono(11)).foregroundColor(BoldTheme.Colors.textFaint)
+            .font(BoldTheme.Fonts.body(12, weight: .semibold)).foregroundColor(BoldTheme.Colors.textDim)
             .padding(.bottom, 6)
 
             ForEach(viewModel.leaderboard) { entry in
               HStack(spacing: 12) {
-                Text(entry.rank == 1 ? "🏆" : "#\(entry.rank)").frame(width: 28, alignment: .leading)
+                Text(verbatim: "\(entry.rank)")
+                  .font(BoldTheme.TypeRole.tableNumber(14))
+                  .foregroundColor(BoldTheme.Colors.text)
+                  .frame(width: 28, alignment: .leading)
                 // Only the avatar+name area is the NavigationLink -- the row
                 // isn't in a List, so a link wrapping the whole HStack would
                 // fight with sibling controls elsewhere in this tab (kick/
@@ -430,7 +418,8 @@ struct GroupDetailView: View {
                   HStack(spacing: 12) {
                     AvatarInitials(name: entry.display_name ?? "?", size: 32)
                     VStack(alignment: .leading, spacing: 2) {
-                      Text(entry.display_name ?? "Unknown").font(BoldTheme.Fonts.body(14, weight: .medium)).foregroundColor(BoldTheme.Colors.text)
+                      Text(entry.display_name ?? "Unknown").font(BoldTheme.Fonts.body(15, weight: .semibold)).foregroundColor(BoldTheme.Colors.text)
+                        .fixedSize(horizontal: false, vertical: true)
                       if entry.role == .owner || entry.role == .admin { RoleBadge(role: entry.role) }
                     }
                   }
@@ -438,12 +427,9 @@ struct GroupDetailView: View {
                 .buttonStyle(.plain)
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
-                  // GREEN, not gold -- one pill per leaderboard row would
-                  // otherwise repeat gold as a decorative accent down the
-                  // whole list instead of reserving it for the screen's one
-                  // primary-action CTA.
-                  Text(String(format: "%.1f", entry.points)).font(BoldTheme.Fonts.display(18)).foregroundColor(BoldTheme.Colors.green)
-                  Text(verbatim: "\(entry.wins)-\(entry.losses)").font(BoldTheme.Fonts.mono(11)).foregroundColor(BoldTheme.Colors.textFaint)
+                  // Ink table numbers: points, then the W-L record.
+                  Text(jsNumber(entry.points)).font(BoldTheme.TypeRole.tableNumber(15)).foregroundColor(BoldTheme.Colors.text)
+                  Text(verbatim: "\(entry.wins)–\(entry.losses)").font(BoldTheme.TypeRole.tableNumber(12, weight: .regular)).foregroundColor(BoldTheme.Colors.textDim)
                 }
               }
               .padding(.vertical, 8)
@@ -466,14 +452,9 @@ struct GroupDetailView: View {
     // make their picks" from a real user's invite-link session.
     VStack(alignment: .leading, spacing: 16) {
       NavigationLink(destination: PickemsView()) {
-        Text("Make Your Picks")
-          .font(BoldTheme.Fonts.body(15, weight: .semibold))
-          .frame(maxWidth: .infinity)
-          .padding(.vertical, 12)
+        Text("Make your picks")
       }
-      .background(BoldTheme.Colors.gold)
-      .foregroundColor(BoldTheme.Colors.text)
-      .cornerRadius(10)
+      .buttonStyle(SupPrimaryButtonStyle())
 
       if viewModel.pickemsAvailableWeeks.count > 1 {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -486,8 +467,8 @@ struct GroupDetailView: View {
                 Text("Week \(w)")
                   .font(BoldTheme.Fonts.body(12.5, weight: .bold))
                   .padding(.horizontal, 16).padding(.vertical, 7)
-                  .background(active ? BoldTheme.Colors.gold : BoldTheme.Colors.track)
-                  .foregroundColor(active ? BoldTheme.Colors.text : BoldTheme.Colors.textDim)
+                  .background(active ? BoldTheme.Colors.text : BoldTheme.Colors.track)
+                  .foregroundColor(active ? BoldTheme.Colors.card : BoldTheme.Colors.textDim)
                   .clipShape(Capsule())
               }
               .buttonStyle(.plain)
@@ -515,9 +496,9 @@ struct GroupDetailView: View {
     return VStack(alignment: .leading, spacing: 16) {
       if viewModel.isAdmin && !pending.isEmpty {
         VStack(alignment: .leading, spacing: 8) {
-          Text("PENDING").font(BoldTheme.Fonts.mono(11)).foregroundColor(BoldTheme.Colors.textFaint)
+          Text("Waiting for approval").font(BoldTheme.Fonts.body(16, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
           ForEach(pending) { member in
-            BoldTheme.GlassCard(strong: true, radius: 12, padding: 10) {
+            BoldTheme.GlassCard(radius: BoldTheme.Radius.card, padding: 12) {
               HStack {
                 NavigationLink(destination: PublicProfileView(userId: member.user_id)) {
                   HStack {
@@ -534,7 +515,7 @@ struct GroupDetailView: View {
                   Image(systemName: "checkmark.circle.fill").foregroundColor(BoldTheme.Colors.green)
                 }
                 Button { Task { await viewModel.kick(userId: member.user_id) } } label: {
-                  Image(systemName: "xmark.circle.fill").foregroundColor(.red)
+                  Image(systemName: "xmark.circle.fill").foregroundColor(BoldTheme.Role.lost)
                 }
               }
             }
@@ -543,9 +524,12 @@ struct GroupDetailView: View {
       }
 
       VStack(alignment: .leading, spacing: 8) {
-        Text("MEMBERS").font(BoldTheme.Fonts.mono(11)).foregroundColor(BoldTheme.Colors.textFaint)
+        Text("Members").font(BoldTheme.Fonts.body(16, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
+        // One flat card with compact rows, not a card per member.
+        VStack(spacing: 0) {
         ForEach(active) { member in
-          BoldTheme.GlassCard(strong: true, radius: 12, padding: 10) {
+          VStack(spacing: 0) {
+            if member.id != active.first?.id { Rectangle().fill(BoldTheme.Colors.border).frame(height: 1) }
             HStack {
               NavigationLink(destination: PublicProfileView(userId: member.user_id)) {
                 HStack {
@@ -559,16 +543,20 @@ struct GroupDetailView: View {
               if canManage(member) {
                 Menu {
                   if viewModel.isOwner && member.role == .member {
-                    Button("Promote to Admin") { Task { await viewModel.promote(userId: member.user_id) } }
+                    Button("Make admin") { Task { await viewModel.promote(userId: member.user_id) } }
                   }
-                  Button("Remove from Group", role: .destructive) { Task { await viewModel.kick(userId: member.user_id) } }
+                  Button("Remove from group", role: .destructive) { Task { await viewModel.kick(userId: member.user_id) } }
                 } label: {
                   Image(systemName: "ellipsis.circle").foregroundColor(BoldTheme.Colors.textDim)
                 }
               }
             }
+            .padding(.horizontal, BoldTheme.Space.cardPad)
+            .padding(.vertical, 10)
           }
         }
+        }
+        .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
       }
     }
   }
@@ -589,17 +577,18 @@ struct GroupDetailView: View {
       InviteManagementSection(viewModel: viewModel)
 
       if viewModel.isOwner {
-        BoldTheme.GlassCard(strong: true, radius: 12, padding: 14) {
+        BoldTheme.FlatCard {
           VStack(alignment: .leading, spacing: 8) {
-            Text("DANGER ZONE").font(BoldTheme.Fonts.mono(11)).foregroundColor(.red)
-            Button("Delete Group") { showDeleteConfirm = true }
-              .font(BoldTheme.Fonts.body(14, weight: .semibold))
-              .foregroundColor(.red)
+            Text("Delete this group").font(BoldTheme.Fonts.body(16, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
+            Text("Removes the group and its board for everyone. This can't be undone.")
+              .font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
+            Button("Delete group") { showDeleteConfirm = true }
+              .font(BoldTheme.Fonts.body(15, weight: .semibold))
+              .foregroundColor(BoldTheme.Role.lost)
           }
         }
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.red.opacity(0.4)))
         .confirmationDialog("Delete this group? This can't be undone.", isPresented: $showDeleteConfirm, titleVisibility: .visible) {
-          Button("Delete Group", role: .destructive) {
+          Button("Delete group", role: .destructive) {
             Task {
               guard let client, let group = viewModel.group else { return }
               do {
@@ -626,14 +615,11 @@ private struct InviteManagementSection: View {
     BoldTheme.GlassCard {
       VStack(alignment: .leading, spacing: 10) {
         HStack {
-          Text("INVITES").font(BoldTheme.Fonts.mono(11)).foregroundColor(BoldTheme.Colors.textFaint)
+          Text("Invites").font(BoldTheme.Fonts.body(16, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
           Spacer()
-          // GREEN, not gold -- "Save Changes" above is this settings tab's
-          // one primary-action CTA; a second gold button here would compete
-          // with it on the same screen.
-          Button("Generate Link") { Task { await createInvite() } }
-            .font(BoldTheme.Fonts.body(13, weight: .semibold))
-            .foregroundColor(BoldTheme.Colors.green)
+          // Outline: "Save changes" above is this tab's one primary action.
+          Button("Make a link") { Task { await createInvite() } }
+            .buttonStyle(SmallPill(primary: false))
             .disabled(isCreating)
         }
 
@@ -644,21 +630,20 @@ private struct InviteManagementSection: View {
           .textInputAutocapitalization(.never)
           .autocorrectionDisabled()
           .keyboardType(.emailAddress)
-          .padding(10)
-          .background(BoldTheme.Colors.surface)
-          .cornerRadius(10)
+          .padding(12)
+          .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.inner, style: .continuous).fill(BoldTheme.Colors.track))
 
         if let link = justCreatedLink {
           HStack {
-            Text(link).font(BoldTheme.Fonts.mono(12)).foregroundColor(BoldTheme.Colors.text).lineLimit(1)
+            Text(link).font(BoldTheme.Fonts.code(12)).foregroundColor(BoldTheme.Colors.text).lineLimit(1)
             Spacer()
             Button {
               UIPasteboard.general.string = link
             } label: {
-              Image(systemName: "doc.on.doc").foregroundColor(BoldTheme.Colors.green)
+              Image(systemName: "doc.on.doc").foregroundColor(BoldTheme.Colors.text)
             }
           }
-          .padding(10).background(BoldTheme.Colors.surface).cornerRadius(10)
+          .padding(12).background(RoundedRectangle(cornerRadius: BoldTheme.Radius.inner, style: .continuous).fill(BoldTheme.Colors.track))
         }
 
         if !justCreatedEmailResults.isEmpty {
@@ -669,25 +654,25 @@ private struct InviteManagementSection: View {
                 Spacer()
                 Text(result.ok ? "Sent" : "Failed")
                   .font(BoldTheme.Fonts.body(11, weight: .semibold))
-                  .foregroundColor(result.ok ? BoldTheme.Colors.green : .red)
+                  .foregroundColor(result.ok ? BoldTheme.Colors.green : BoldTheme.Role.lost)
               }
             }
           }
         }
 
         if viewModel.invites.isEmpty {
-          Text("No invites created yet").font(BoldTheme.Fonts.body(12)).foregroundColor(BoldTheme.Colors.textFaint)
+          Text("No invite links yet.").font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
         } else {
           ForEach(viewModel.invites) { invite in
-            BoldTheme.GlassCard(strong: true, radius: 10, padding: 10) {
+            BoldTheme.GlassCard(radius: BoldTheme.Radius.inner, padding: 10) {
               HStack {
-                Text(invite.invite_token).font(BoldTheme.Fonts.mono(12)).foregroundColor(BoldTheme.Colors.text)
+                Text(invite.invite_token).font(BoldTheme.Fonts.code(12)).foregroundColor(BoldTheme.Colors.text)
                 Spacer()
                 Text(status(for: invite)).font(BoldTheme.Fonts.body(11)).foregroundColor(BoldTheme.Colors.textDim)
                 Button {
                   Task { await revoke(invite) }
                 } label: {
-                  Image(systemName: "xmark").foregroundColor(.red)
+                  Image(systemName: "xmark").foregroundColor(BoldTheme.Role.lost)
                 }
               }
             }
@@ -752,15 +737,14 @@ private struct EditGroupSection: View {
   var body: some View {
     BoldTheme.GlassCard {
     VStack(alignment: .leading, spacing: 10) {
-      Text("GROUP SETTINGS").font(BoldTheme.Fonts.mono(11)).foregroundColor(BoldTheme.Colors.textFaint)
+      Text("Group settings").font(BoldTheme.Fonts.body(16, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
 
       VStack(alignment: .leading, spacing: 6) {
         Text("Name").font(BoldTheme.Fonts.body(12)).foregroundColor(BoldTheme.Colors.textDim)
         TextField("Group name", text: $name)
           .font(BoldTheme.Fonts.body(14))
-          .padding(10)
-          .background(BoldTheme.Colors.surface)
-          .cornerRadius(10)
+          .padding(12)
+          .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.inner, style: .continuous).fill(BoldTheme.Colors.track))
       }
 
       VStack(alignment: .leading, spacing: 6) {
@@ -768,12 +752,11 @@ private struct EditGroupSection: View {
         TextField("Description (optional)", text: $description, axis: .vertical)
           .font(BoldTheme.Fonts.body(14))
           .lineLimit(2...4)
-          .padding(10)
-          .background(BoldTheme.Colors.surface)
-          .cornerRadius(10)
+          .padding(12)
+          .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.inner, style: .continuous).fill(BoldTheme.Colors.track))
       }
 
-      Toggle("Private Group", isOn: $isPrivate)
+      Toggle("Private group", isOn: $isPrivate)
         .font(BoldTheme.Fonts.body(14))
 
       HStack {
@@ -783,11 +766,10 @@ private struct EditGroupSection: View {
           if isSaving {
             ProgressView()
           } else {
-            Text("Save Changes").font(BoldTheme.Fonts.body(14, weight: .semibold))
+            Text("Save changes")
           }
         }
-        .padding(.horizontal, 16).padding(.vertical, 10)
-        .background(BoldTheme.Colors.gold).foregroundColor(BoldTheme.Colors.text).cornerRadius(10)
+        .buttonStyle(SupPrimaryButtonStyle(fullWidth: false))
         .disabled(isSaving || name.trimmingCharacters(in: .whitespaces).isEmpty)
 
         if savedRecently {

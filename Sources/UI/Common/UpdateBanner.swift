@@ -15,7 +15,7 @@ struct UpdateBanner: View {
     HStack(alignment: .center, spacing: 12) {
       Image(systemName: "arrow.down.circle.fill")
         .font(.system(size: 20))
-        .foregroundColor(BoldTheme.Colors.goldDeep)
+        .foregroundColor(BoldTheme.Colors.text)
 
       VStack(alignment: .leading, spacing: 1) {
         Text("Update Available")
@@ -52,12 +52,11 @@ struct UpdateBanner: View {
     .padding(.horizontal, 14).padding(.vertical, 10)
     // Solid page color under the glass -- it floats over screen content,
     // which otherwise shows through the translucent glass.
-    .background(BoldTheme.Colors.glassStrong)
+    .background(BoldTheme.Colors.card)
     .background(BoldTheme.Colors.bgPage)
     .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
     .clipShape(RoundedRectangle(cornerRadius: 14))
     .padding(.horizontal, 14)
-    .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
   }
 
   static func shouldShow(_ config: AppVersionConfig) -> Bool {
@@ -76,13 +75,12 @@ struct UpdateRequiredView: View {
   var body: some View {
     ZStack {
       BoldTheme.Colors.bgPage.ignoresSafeArea()
-      BoldTheme.AmbientBlobs().ignoresSafeArea()
       VStack(spacing: 18) {
         SupIcon(variant: .monogram)
           .frame(width: 72, height: 72)
           .clipShape(RoundedRectangle(cornerRadius: 18))
-        Text("TIME TO UPDATE")
-          .font(BoldTheme.Fonts.display(30))
+        Text("Time to update")
+          .font(BoldTheme.Fonts.body(26, weight: .bold))
           .foregroundColor(BoldTheme.Colors.text)
         Text(config.updateMessage ?? "This version of Stupid Underdog Pick is out of date. Update to \(config.latestVersion) to keep making picks.")
           .font(BoldTheme.Fonts.body(15))
@@ -91,12 +89,8 @@ struct UpdateRequiredView: View {
           .padding(.horizontal, 12)
         Button { UIApplication.shared.open(UpdateBanner.appStoreURL) } label: {
           Text("Update on the App Store")
-            .font(BoldTheme.Fonts.body(15, weight: .bold))
-            .foregroundColor(BoldTheme.Colors.text)
-            .frame(maxWidth: .infinity).frame(height: 50)
-            .background(BoldTheme.Colors.gold)
-            .clipShape(RoundedRectangle(cornerRadius: 14))
         }
+        .buttonStyle(SupPrimaryButtonStyle())
         Button {
           checking = true
           Task { await recheck(); checking = false }

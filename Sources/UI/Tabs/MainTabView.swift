@@ -6,14 +6,18 @@ struct MainTabView: View {
   @State private var selection = 0
 
   init() {
+    // iOS 26: leave the stock Liquid Glass tab bar alone (de-slop #28) --
+    // an opaque UITabBarAppearance fights the glass and hides the content
+    // scrolling under it. Only the tints below are ours there.
+    if #available(iOS 26, *) { return }
     let appearance = UITabBarAppearance()
-    appearance.configureWithOpaqueBackground()
-    appearance.backgroundColor = UIColor(BoldTheme.Colors.bgPage)
+    appearance.configureWithDefaultBackground()
+    appearance.backgroundColor = UIColor(BoldTheme.Colors.bgPage).withAlphaComponent(0.82)
     let normal = UITabBarItemAppearance()
-    normal.normal.iconColor = UIColor(BoldTheme.Colors.textFaint)
-    normal.normal.titleTextAttributes = [.foregroundColor: UIColor(BoldTheme.Colors.textFaint)]
-    normal.selected.iconColor = UIColor(BoldTheme.Colors.goldDeep)
-    normal.selected.titleTextAttributes = [.foregroundColor: UIColor(BoldTheme.Colors.goldDeep)]
+    normal.normal.iconColor = UIColor(BoldTheme.Colors.textDim)
+    normal.normal.titleTextAttributes = [.foregroundColor: UIColor(BoldTheme.Colors.textDim)]
+    normal.selected.iconColor = UIColor(BoldTheme.Colors.text)
+    normal.selected.titleTextAttributes = [.foregroundColor: UIColor(BoldTheme.Colors.text)]
     appearance.stackedLayoutAppearance = normal
     UITabBar.appearance().standardAppearance = appearance
     UITabBar.appearance().scrollEdgeAppearance = appearance
@@ -41,7 +45,9 @@ struct MainTabView: View {
         .tabItem { Label("Settings", systemImage: "gearshape") }
         .tag(5)
     }
-    .tint(BoldTheme.Colors.goldDeep)
+    // Selected tab in ink (mock: active tab is ink, others dim); gold is
+    // kept for "your next action" only.
+    .tint(BoldTheme.Colors.text)
     .onChange(of: appState.requestedTab) { _, newValue in
       guard let newValue else { return }
       selection = newValue

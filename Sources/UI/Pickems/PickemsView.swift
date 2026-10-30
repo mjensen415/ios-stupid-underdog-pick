@@ -237,7 +237,7 @@ final class PickemsViewModel: ObservableObject {
 private func dayLabel(_ date: Date) -> String {
   let f = DateFormatter()
   f.dateFormat = "EEEE, MMM d"
-  return f.string(from: date).uppercased()
+  return f.string(from: date)
 }
 
 private func kickoffLabel(_ date: Date) -> String {
@@ -380,14 +380,13 @@ struct PickemsView: View {
       HStack(spacing: 0) {
         atAGlanceCell(
           value: "\(standing.correct)-\(max(standing.total - standing.correct, 0))",
-          label: "RECORD", color: BoldTheme.Colors.text, showDivider: true
+          label: "record", color: BoldTheme.Colors.text, showDivider: true
         )
-        atAGlanceCell(value: "#\(standing.rank)", label: "RANK", color: BoldTheme.Colors.goldDeep, showDivider: true)
-        atAGlanceCell(value: "\(standing.correct)", label: "PTS", color: BoldTheme.Colors.green, showDivider: false)
+        atAGlanceCell(value: "#\(standing.rank)", label: "rank", color: BoldTheme.Colors.text, showDivider: true)
+        atAGlanceCell(value: "\(standing.correct)", label: "points", color: BoldTheme.Colors.text, showDivider: false)
       }
-      .background(BoldTheme.Colors.glassStrong)
-      .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
-      .clipShape(RoundedRectangle(cornerRadius: 16))
+      .background(BoldTheme.Colors.card)
+      .clipShape(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous))
       .padding(.top, 12)
     }
   }
@@ -395,7 +394,7 @@ struct PickemsView: View {
   private func atAGlanceCell(value: String, label: String, color: Color, showDivider: Bool) -> some View {
     VStack(spacing: 2) {
       Text(value).font(BoldTheme.Fonts.display(24)).foregroundColor(color)
-      Text(label).font(BoldTheme.Fonts.mono(9.5)).tracking(0.9).foregroundColor(BoldTheme.Colors.textFaint)
+      Text(label).font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
     }
     .frame(maxWidth: .infinity)
     .padding(.vertical, 14)
@@ -443,8 +442,8 @@ struct PickemsView: View {
           .foregroundColor(BoldTheme.Colors.textFaint)
       }
       .padding(.horizontal, 12).padding(.vertical, 7)
-      .background(viewModel.activeGroupId != nil ? BoldTheme.Colors.gold.opacity(0.16) : BoldTheme.Colors.track)
-      .overlay(Capsule().strokeBorder(viewModel.activeGroupId != nil ? BoldTheme.Colors.goldDeep : .clear, lineWidth: 1))
+      .background(viewModel.activeGroupId != nil ? BoldTheme.Colors.card : BoldTheme.Colors.track)
+      .overlay(Capsule().strokeBorder(viewModel.activeGroupId != nil ? BoldTheme.Colors.text : .clear, lineWidth: 1.5))
       .clipShape(Capsule())
     }
     .buttonStyle(.plain)
@@ -461,16 +460,14 @@ struct PickemsView: View {
         VStack(alignment: .trailing, spacing: 4) {
           Button("Copy picks from\u{2026}") { showCopyPicksSheet = true }
             .font(BoldTheme.Fonts.body(11.5, weight: .bold))
-            .foregroundColor(BoldTheme.Colors.goldDeep)
+            .foregroundColor(BoldTheme.Colors.text)
           Button("Reset to shared") { Task { await viewModel.resetToSharedPicks() } }
             .font(BoldTheme.Fonts.body(11, weight: .semibold))
             .foregroundColor(BoldTheme.Colors.textFaint)
         }
       }
       .padding(12)
-      .background(BoldTheme.Colors.gold.opacity(0.1))
-      .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(BoldTheme.Colors.goldDeep, lineWidth: 1))
-      .clipShape(RoundedRectangle(cornerRadius: 12))
+      .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
       .padding(.top, 10)
     }
   }
@@ -576,15 +573,14 @@ struct PickemsView: View {
 
   private var header: some View {
     VStack(alignment: .leading, spacing: 4) {
-      Text("PRO BALL · \(viewModel.season.map { String($0) } ?? "")")
-        .font(BoldTheme.Fonts.mono(10, weight: .semibold))
-        .tracking(1.2)
-        .foregroundColor(BoldTheme.Colors.green)
-      Text("PRO BALL PICKEMS")
-        .font(BoldTheme.Fonts.display(34))
+      Text("Pro Ball · \(viewModel.season.map { String($0) } ?? "")")
+        .font(BoldTheme.Fonts.body(13, weight: .semibold))
+        .foregroundColor(BoldTheme.Colors.textDim)
+      Text("Pro Ball Pickems")
+        .font(BoldTheme.Fonts.body(28, weight: .bold))
         .foregroundColor(BoldTheme.Colors.text)
       Text("Pick the winner of every game. 1 point each.")
-        .font(BoldTheme.Fonts.body(13))
+        .font(BoldTheme.Fonts.body(14))
         .foregroundColor(BoldTheme.Colors.textDim)
     }
   }
@@ -608,9 +604,8 @@ struct PickemsView: View {
           Text(t == .pick ? "Pick" : "Standings")
             .font(BoldTheme.Fonts.body(12.5, weight: .bold))
             .padding(.horizontal, 16).padding(.vertical, 7)
-            .background(active ? BoldTheme.Colors.text : Color.clear)
-            .foregroundColor(active ? BoldTheme.Colors.bgPage : BoldTheme.Colors.textDim)
-            .overlay(Capsule().strokeBorder(active ? BoldTheme.Colors.text : BoldTheme.Colors.border, lineWidth: 1))
+            .background(active ? BoldTheme.Colors.text : BoldTheme.Colors.track)
+            .foregroundColor(active ? BoldTheme.Colors.card : BoldTheme.Colors.textDim)
             .clipShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -623,9 +618,9 @@ struct PickemsView: View {
     if let lastGame = viewModel.lastGame {
       HStack(alignment: .center, spacing: 12) {
         VStack(alignment: .leading, spacing: 2) {
-          Text("TIEBREAKER")
-            .font(BoldTheme.Fonts.body(11, weight: .bold))
-            .foregroundColor(BoldTheme.Colors.goldDeep)
+          Text("Tiebreaker")
+            .font(BoldTheme.Fonts.body(15, weight: .bold))
+            .foregroundColor(BoldTheme.Colors.text)
           Text(viewModel.tiebreakerLocked
             ? "Locked — \(lastGame.awayName ?? "") @ \(lastGame.homeName ?? "") already started"
             : "Combined score, \(lastGame.awayName ?? "") @ \(lastGame.homeName ?? "") (last game, \(kickoffLabel(lastGame.startTime)))")
@@ -636,11 +631,9 @@ struct PickemsView: View {
         TextField("--", text: $viewModel.tiebreakerGuess)
           .keyboardType(.numberPad)
           .multilineTextAlignment(.center)
-          .font(BoldTheme.Fonts.display(20))
-          .frame(width: 58, height: 34)
-          .background(Color.white)
-          .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
-          .clipShape(RoundedRectangle(cornerRadius: 8))
+          .font(BoldTheme.Fonts.mono(17, weight: .semibold))
+          .frame(width: 58, height: 36)
+          .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(BoldTheme.Colors.track))
           .disabled(viewModel.tiebreakerLocked)
           .opacity(viewModel.tiebreakerLocked ? 0.5 : 1)
         if !viewModel.tiebreakerLocked {
@@ -648,19 +641,13 @@ struct PickemsView: View {
             Task { await viewModel.saveTiebreaker() }
           } label: {
             Text(viewModel.savedGuess != nil ? "Update" : "Save")
-              .font(BoldTheme.Fonts.body(12, weight: .bold))
-              .foregroundColor(.white)
-              .padding(.horizontal, 12).padding(.vertical, 9)
-              .background(BoldTheme.Colors.green)
-              .clipShape(RoundedRectangle(cornerRadius: 8))
           }
+          .buttonStyle(SmallPill(primary: false))
           .disabled(viewModel.savingTiebreaker || viewModel.tiebreakerGuess == (viewModel.savedGuess.map { String($0) } ?? ""))
         }
       }
-      .padding(14)
-      .background(BoldTheme.Colors.glassStrong)
-      .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
-      .clipShape(RoundedRectangle(cornerRadius: 14))
+      .padding(BoldTheme.Space.cardPad)
+      .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
       .padding(.top, 16)
     }
   }
@@ -677,9 +664,8 @@ struct PickemsView: View {
           let day = dayLabel(game.startTime)
           if day != prevDay {
             Text(day)
-              .font(BoldTheme.Fonts.mono(10))
-              .tracking(0.9)
-              .foregroundColor(BoldTheme.Colors.textFaint)
+              .font(BoldTheme.Fonts.body(14, weight: .semibold))
+              .foregroundColor(BoldTheme.Colors.text)
               .padding(.top, index == 0 ? 0 : 4)
           }
           PickemsGameRowView(
@@ -799,19 +785,18 @@ private struct PickemsGameRowView: View {
     VStack(alignment: .leading, spacing: 8) {
       HStack(spacing: 6) {
         if game.isLive {
-          Circle().fill(Color(hex: 0xC6402A)).frame(width: 6, height: 6)
+          Circle().fill(SUPColors.liveRed).frame(width: 6, height: 6)
         }
-        Text(game.isFinal ? "FINAL" : game.isLive ? "LIVE" : kickoffLabel(game.startTime))
-          .font(BoldTheme.Fonts.mono(9.5, weight: .bold))
-          .tracking(0.8)
-          .foregroundColor(game.isLive ? Color(hex: 0xC6402A) : BoldTheme.Colors.textFaint)
+        Text(game.isFinal ? "Final" : game.isLive ? "Live" : kickoffLabel(game.startTime))
+          .font(BoldTheme.Fonts.body(13, weight: .semibold))
+          .foregroundColor(game.isLive ? SUPColors.liveRed : BoldTheme.Colors.textDim)
         Spacer(minLength: 6)
         if let lineText {
           Text(verbatim: lineText)
             .font(BoldTheme.Fonts.mono(10, weight: .semibold))
-            .foregroundColor(BoldTheme.Colors.goldDeep)
+            .foregroundColor(BoldTheme.Colors.text)
             .padding(.horizontal, 7).padding(.vertical, 2)
-            .background(BoldTheme.Colors.gold.opacity(0.18))
+            .background(BoldTheme.Colors.track)
             .clipShape(Capsule())
             .accessibilityLabel("Line \(lineText), admin only")
         }
@@ -827,13 +812,11 @@ private struct PickemsGameRowView: View {
         let correct = myPick == game.winnerTeamId
         Text(correct ? "You picked right · +1" : "You picked wrong")
           .font(BoldTheme.Fonts.body(10.5, weight: .bold))
-          .foregroundColor(correct ? BoldTheme.Colors.green : Color(hex: 0xA6402A))
+          .foregroundColor(correct ? BoldTheme.Colors.green : BoldTheme.Role.lost)
       }
     }
-    .padding(14)
-    .background(BoldTheme.Colors.glassStrong)
-    .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
-    .clipShape(RoundedRectangle(cornerRadius: 14))
+    .padding(BoldTheme.Space.cardPad)
+    .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
   }
 
   @ViewBuilder
@@ -853,10 +836,11 @@ private struct PickemsGameRowView: View {
             Image(systemName: "football").resizable().scaledToFit().opacity(0.3).foregroundColor(BoldTheme.Colors.textFaint)
           }
           .frame(width: 30, height: 30)
-          Text((name ?? "").uppercased())
-            .font(BoldTheme.Fonts.body(12.5, weight: picked ? .bold : .semibold))
-            .foregroundColor(picked ? BoldTheme.Colors.text : BoldTheme.Colors.textDim)
-            .lineLimit(1)
+          Text(name ?? "")
+            .font(BoldTheme.Fonts.body(14, weight: picked ? .bold : .semibold))
+            .foregroundColor(BoldTheme.Colors.text)
+            .lineLimit(2)
+            .minimumScaleFactor(0.85)
           Spacer(minLength: 0)
           if game.isLive || game.isFinal, let points {
             Text("\(points)")
@@ -877,8 +861,8 @@ private struct PickemsGameRowView: View {
             }
             .frame(height: 4)
             Text("\(pct)% picked")
-              .font(BoldTheme.Fonts.mono(9.5))
-              .foregroundColor(BoldTheme.Colors.textFaint)
+              .font(BoldTheme.Fonts.mono(12))
+              .foregroundColor(BoldTheme.Colors.textDim)
           }
         }
       }

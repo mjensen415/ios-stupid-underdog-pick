@@ -14,8 +14,11 @@ enum BoldTheme {
     static let goldDeep  = Color(hex: 0x7A5009) // Deep Gold -- same hue as gold, ~5.4:1 contrast on bgPage. Use for gold-meaning TEXT (spreads, "you're #1", stat highlights) on light/glass backgrounds.
     static let green     = Color(hex: 0x0E5A3A) // Field Green -- unchanged, links/accents
     static let text       = Color(hex: 0x0A1A10) // Ink
-    static let textDim    = Color(hex: 0x16241B).opacity(0.62)
-    static let textFaint  = Color(hex: 0x16241B).opacity(0.4)
+    // Contrast (Oct 30): dim/faint text must be >= 4.5:1 on the page, card
+    // and track fills. 0.62 was ~4.15:1 on the page; 0.70 is ~5.3:1 and
+    // 0.66 ~4.7:1 (worst case, Fog Gray page).
+    static let textDim    = Color(hex: 0x16241B).opacity(0.70)
+    static let textFaint  = Color(hex: 0x16241B).opacity(0.66)
     static let border     = Color(hex: 0x16241B).opacity(0.14)
     static let surface    = Color(hex: 0x16241B).opacity(0.04)
     static let track      = Color(hex: 0xEDEAE0) // light wall -- logo-fallback circles, muted chips
@@ -58,7 +61,16 @@ enum BoldTheme {
       }
     }
 
+    /// Numbers (points, W-L, scores, ranks): Barlow with fixed-width digits
+    /// so columns line up -- not JetBrains Mono, which read oddly next to
+    /// Barlow names (owner, Oct 30). Every existing `mono(...)` call site
+    /// now gets this.
     static func mono(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+      body(size, weight: weight == .regular ? .medium : .semibold).monospacedDigit()
+    }
+
+    /// JetBrains Mono, for code-like text only (invite tokens, links).
+    static func code(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
       weight == .medium || weight == .semibold || weight == .bold
         ? .custom(FontName.monoMed, size: size)
         : .custom(FontName.monoReg, size: size)
@@ -119,25 +131,188 @@ enum BoldTheme {
     }
   }
 
-  // Frost's frosted-glass surface, THE surface language -- ~55-78% white
-  // fill + blur + bright hairline rim + soft shadow. `strong` bumps fill
-  // opacity for smaller cards/rows (list items, stat tiles) where the
-  // lower default opacity reads too translucent. Port of GlassCard in
-  // web's BoldComponents.tsx.
+  // Kept for every existing call site, but flat now (de-slop #6, Oct 2026):
+  // no material, rim or shadow -- a solid off-white card on the Fog Gray
+  // page does the separating. `strong` is accepted and ignored.
   struct GlassCard<Content: View>: View {
     var strong: Bool = false
-    var radius: CGFloat = 20
-    var padding: CGFloat = 24
+    var radius: CGFloat = Radius.card
+    var padding: CGFloat = Space.cardPad
     @ViewBuilder var content: Content
 
     var body: some View {
       content
         .padding(padding)
-        .background(.ultraThinMaterial)
-        .background(strong ? Color.white.opacity(0.78) : Color.white.opacity(0.55))
-        .overlay(RoundedRectangle(cornerRadius: radius).strokeBorder(Color.white.opacity(0.78), lineWidth: 1))
-        .clipShape(RoundedRectangle(cornerRadius: radius))
-        .shadow(color: Color(hex: 0x142A1C).opacity(0.12), radius: 20, x: 0, y: 14)
+        .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(Colors.card))
+    }
+  }
+
+  /// The de-slop card: flat off-white fill, radius 18, 16 padding.
+  struct FlatCard<Content: View>: View {
+    var padding: CGFloat = Space.cardPad
+    @ViewBuilder var content: Content
+    var body: some View {
+      content
+        .padding(padding)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: Radius.card, style: .continuous).fill(Colors.card))
+    }
+  }
+}
+
+// MARK: - De-slop design values (Oct 2026)
+// One place for spacing, radius, type roles, colour roles and buttons.
+// Source: 01_SUP/design/deslop-2026-10/decisions.md + deslop-mockups.html.
+extension BoldTheme {
+  /// One spacing scale: 4 / 8 / 12 / 16 / 24 / 32.
+  enum Space {
+    static let s1: CGFloat = 4
+    static let s2: CGFloat = 8
+    static let s3: CGFloat = 12
+    static let s4: CGFloat = 16
+    static let s5: CGFloat = 24
+    static let s6: CGFloat = 32
+    /// Screen side margins.
+    static let margin: CGFloat = 16
+    /// Gap between cards.
+    static let cardGap: CGFloat = 12
+    /// Padding inside a card.
+    static let cardPad: CGFloat = 16
+  }
+
+  enum Radius {
+    static let card: CGFloat = 18
+    /// Boxes nested inside a card (Last 3, outcome line).
+    static let inner: CGFloat = 14
+  }
+
+  /// Type roles. Bebas Neue for team names and lines only; Barlow for
+  /// everything else, with monospaced digits for numbers in tables;
+  /// JetBrains Mono only for code-like text (invite tokens).
+  enum TypeRole {
+    static func teamName(_ size: CGFloat = 30) -> Font { Fonts.display(size) }
+    static func line(_ size: CGFloat = 30) -> Font { Fonts.display(size) }
+    static func title(_ size: CGFloat = 22) -> Font { Fonts.body(size, weight: .bold) }
+    static func body(_ size: CGFloat = 15, weight: Font.Weight = .regular) -> Font { Fonts.body(size, weight: weight) }
+    /// Small all-caps column labels (FAV / DOG / FAVORITE / UNDERDOG).
+    static func label(_ size: CGFloat = 10) -> Font { Fonts.body(size, weight: .bold) }
+    static func tableNumber(_ size: CGFloat = 12, weight: Font.Weight = .semibold) -> Font { Fonts.mono(size, weight: weight) }
+  }
+
+  /// Colour roles. Yellow = your next action only. Green = won / locked.
+  /// Red = lost / error. Grays for everything else.
+  enum Role {
+    static let action = Colors.gold
+    static let won = Colors.green
+    static let lost = Color(hex: 0xB42318)
+    static let wonTint = Color(hex: 0x0E5A3A).opacity(0.10)
+    static let lostTint = Color(hex: 0xB42318).opacity(0.10)
+    /// The +line: bold ink, not gold/brown.
+    static let line = Colors.text
+    static let neutralPill = Colors.track
+  }
+}
+
+extension BoldTheme.Colors {
+  /// Flat card fill (web --card, hsl(90 14% 97%)).
+  static let card = Color(hex: 0xF7F8F5)
+}
+
+// MARK: - Buttons
+
+/// Primary: yellow filled pill, Barlow bold 16, ink text, optional icon.
+struct SupPrimaryButtonStyle: ButtonStyle {
+  var fullWidth: Bool = true
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .font(BoldTheme.Fonts.body(16, weight: .bold))
+      .foregroundColor(BoldTheme.Colors.text)
+      .lineLimit(1)
+      .minimumScaleFactor(0.8)
+      .padding(.horizontal, 22).padding(.vertical, 14)
+      .frame(maxWidth: fullWidth ? .infinity : nil, minHeight: 50)
+      .background(Capsule().fill(BoldTheme.Colors.gold))
+      .opacity(configuration.isPressed ? 0.8 : 1)
+      .contentShape(Capsule())
+  }
+}
+
+/// Secondary: 1.5pt ink outline pill.
+struct SupSecondaryButtonStyle: ButtonStyle {
+  var fullWidth: Bool = true
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .font(BoldTheme.Fonts.body(16, weight: .bold))
+      .foregroundColor(BoldTheme.Colors.text)
+      .lineLimit(1)
+      .padding(.horizontal, 22).padding(.vertical, 14)
+      .frame(maxWidth: fullWidth ? .infinity : nil, minHeight: 50)
+      .overlay(Capsule().strokeBorder(BoldTheme.Colors.text, lineWidth: 1.5))
+      .opacity(configuration.isPressed ? 0.6 : 1)
+      .contentShape(Capsule())
+  }
+}
+
+/// The primary button when it sits on a yellow block: ink fill, yellow text.
+struct SupInkButtonStyle: ButtonStyle {
+  var fullWidth: Bool = true
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .font(BoldTheme.Fonts.body(16, weight: .bold))
+      .foregroundColor(BoldTheme.Colors.gold)
+      .lineLimit(1)
+      .padding(.horizontal, 22).padding(.vertical, 14)
+      .frame(maxWidth: fullWidth ? .infinity : nil, minHeight: 50)
+      .background(Capsule().fill(BoldTheme.Colors.text))
+      .opacity(configuration.isPressed ? 0.8 : 1)
+      .contentShape(Capsule())
+  }
+}
+
+/// Compact header-size version of the primary / secondary pill (screen
+/// headers: "Join", "+ Create").
+struct SmallPill: ButtonStyle {
+  var primary: Bool
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .font(BoldTheme.Fonts.body(14, weight: .bold))
+      .foregroundColor(BoldTheme.Colors.text)
+      .padding(.horizontal, 14).padding(.vertical, 8)
+      .background(Capsule().fill(primary ? BoldTheme.Colors.gold : .clear))
+      .overlay(primary ? nil : Capsule().strokeBorder(BoldTheme.Colors.text, lineWidth: 1.5))
+      .opacity(configuration.isPressed ? 0.7 : 1)
+      .contentShape(Capsule())
+  }
+}
+
+/// Small status pill (Missed, Picked, Pick...).
+struct SupPill: View {
+  enum Kind { case gray, green, outline, action }
+  let text: String
+  var kind: Kind = .gray
+  var body: some View {
+    Text(text)
+      .font(BoldTheme.Fonts.body(13, weight: .semibold))
+      .lineLimit(1)
+      .fixedSize()
+      .padding(.horizontal, 10).padding(.vertical, 4)
+      .foregroundColor(fg)
+      .background(Capsule().fill(bg))
+      .overlay(kind == .outline ? Capsule().strokeBorder(BoldTheme.Colors.text, lineWidth: 1.5) : nil)
+  }
+  private var fg: Color {
+    switch kind {
+    case .gray: return BoldTheme.Colors.textDim
+    case .green: return BoldTheme.Colors.green
+    case .outline, .action: return BoldTheme.Colors.text
+    }
+  }
+  private var bg: Color {
+    switch kind {
+    case .gray: return BoldTheme.Colors.track
+    case .green: return BoldTheme.Role.wonTint
+    case .outline: return .clear
+    case .action: return BoldTheme.Colors.gold
     }
   }
 }

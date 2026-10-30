@@ -12,11 +12,10 @@ struct MagicLinkView: View {
   var body: some View {
     ZStack {
       BoldTheme.Colors.bgPage.ignoresSafeArea()
-      BoldTheme.AmbientBlobs()
         .ignoresSafeArea()
 
       ScrollView {
-        BoldTheme.GlassCard(radius: 28, padding: 32) {
+        BoldTheme.GlassCard(radius: BoldTheme.Radius.card, padding: 24) {
         VStack(alignment: .leading, spacing: 0) {
           Button {
             dismiss()
@@ -30,12 +29,10 @@ struct MagicLinkView: View {
           SupIcon(variant: .football)
             .frame(width: 56, height: 56)
             .clipShape(RoundedRectangle(cornerRadius: 15))
-            .shadow(color: .black.opacity(0.4), radius: 10, y: 8)
             .padding(.bottom, 22)
 
-          Text("SKIP THE\nPASSWORD.")
-            .font(BoldTheme.Fonts.display(40))
-            .lineSpacing(-4)
+          Text("Skip the password.")
+            .font(BoldTheme.Fonts.body(32, weight: .bold))
             .foregroundColor(BoldTheme.Colors.text)
             .fixedSize(horizontal: false, vertical: true)
 
@@ -45,11 +42,11 @@ struct MagicLinkView: View {
             .padding(.top, 8)
             .padding(.bottom, 26)
 
-          BoldMonoLabel(text: "EMAIL").padding(.bottom, 7)
+          BoldMonoLabel(text: "Email").padding(.bottom, 7)
           BoldTextField(text: $email, placeholder: "you@school.edu", keyboardType: .emailAddress, textContentType: .emailAddress)
             .padding(.bottom, 20)
 
-          BoldPrimaryButton(title: "SEND LINK", isLoading: isLoading, disabled: email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
+          BoldPrimaryButton(title: "Send link", isLoading: isLoading, disabled: email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
             Task { await send() }
           }
 
@@ -61,8 +58,8 @@ struct MagicLinkView: View {
           }
           if let errorMessage {
             Text(errorMessage)
-              .font(BoldTheme.Fonts.body(13))
-              .foregroundColor(.red)
+              .font(BoldTheme.Fonts.body(14))
+              .foregroundColor(BoldTheme.Role.lost)
               .padding(.top, 16)
           }
         }

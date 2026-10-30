@@ -17,6 +17,15 @@ public struct Game: Decodable, Identifiable {
   public let homePoints: Int?
   public let awayPoints: Int?
   public let sport: String
+  /// Short school name from v_games_named (e.g. "Middle Tenn."), null
+  /// unless the full name is long enough to truncate. Optional and decoded
+  /// only if present, so builds keep working before the view has it.
+  public var homeShort: String? = nil
+  public var awayShort: String? = nil
+
+  /// Name to show in tight spots (rows, pick card): short name when set.
+  public var homeDisplay: String? { homeShort ?? homeTeam }
+  public var awayDisplay: String? { awayShort ?? awayTeam }
 
   public enum CodingKeys: String, CodingKey {
     case id, season, week, status, sport
@@ -36,6 +45,8 @@ public struct Game: Decodable, Identifiable {
     case picksLocked = "picks_locked"
     case homePoints = "home_points"
     case awayPoints = "away_points"
+    case homeShort = "home_short"
+    case awayShort = "away_short"
   }
 
   /// Nothing in the sync pipeline actually populates favorite_team_id --
@@ -84,6 +95,7 @@ extension Game {
     Game(id: id, season: season, week: week, homeTeam: homeTeam, awayTeam: awayTeam,
          homeTeamId: homeTeamId, awayTeamId: awayTeamId, favoriteTeamId: favoriteTeamId,
          startTime: startTime, bettingLine: bettingLine, latestSpread: spread, picksLocked: picksLocked,
-         status: status, homePoints: homePoints, awayPoints: awayPoints, sport: sport)
+         status: status, homePoints: homePoints, awayPoints: awayPoints, sport: sport,
+         homeShort: homeShort, awayShort: awayShort)
   }
 }

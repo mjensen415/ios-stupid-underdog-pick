@@ -38,7 +38,7 @@ struct NotificationSourcesView: View {
 
       Section {
         if !loaded {
-          ProgressView().tint(BoldTheme.Colors.gold)
+          ProgressView().tint(BoldTheme.Colors.text)
         } else if groups.isEmpty {
           Text("You're not in any Underdog Pick groups yet.")
             .font(BoldTheme.Fonts.body(12))
@@ -57,7 +57,7 @@ struct NotificationSourcesView: View {
 
       if let errorMessage {
         Section {
-          Text(errorMessage).foregroundColor(.red)
+          Text(errorMessage).foregroundColor(BoldTheme.Role.lost)
         }
         .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
       }

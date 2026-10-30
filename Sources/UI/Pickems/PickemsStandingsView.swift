@@ -122,8 +122,8 @@ struct PickemsStandingsView: View {
           Text(GlobalGroups.title)
             .font(BoldTheme.Fonts.body(12.5, weight: .bold))
             .padding(.horizontal, 16).padding(.vertical, 7)
-            .background(isGlobal ? BoldTheme.Colors.gold : BoldTheme.Colors.track)
-            .foregroundColor(isGlobal ? BoldTheme.Colors.text : BoldTheme.Colors.textDim)
+            .background(isGlobal ? BoldTheme.Colors.text : BoldTheme.Colors.track)
+            .foregroundColor(isGlobal ? BoldTheme.Colors.card : BoldTheme.Colors.textDim)
             .clipShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -135,8 +135,8 @@ struct PickemsStandingsView: View {
             Text(g.name)
               .font(BoldTheme.Fonts.body(12.5, weight: .bold))
               .padding(.horizontal, 16).padding(.vertical, 7)
-              .background(active ? BoldTheme.Colors.gold : BoldTheme.Colors.track)
-              .foregroundColor(active ? BoldTheme.Colors.text : BoldTheme.Colors.textDim)
+              .background(active ? BoldTheme.Colors.text : BoldTheme.Colors.track)
+              .foregroundColor(active ? BoldTheme.Colors.card : BoldTheme.Colors.textDim)
               .clipShape(Capsule())
           }
           .buttonStyle(.plain)
@@ -152,12 +152,11 @@ struct PickemsStandingsView: View {
         Button {
           scope = s
         } label: {
-          Text(s == .week ? "This Week" : "Season")
-            .font(BoldTheme.Fonts.body(12, weight: .bold))
+          Text(s == .week ? "This week" : "Season")
+            .font(BoldTheme.Fonts.body(13, weight: .semibold))
             .padding(.horizontal, 14).padding(.vertical, 6)
-            .background(active ? BoldTheme.Colors.green : Color.clear)
-            .foregroundColor(active ? .white : BoldTheme.Colors.textDim)
-            .overlay(Capsule().strokeBorder(active ? BoldTheme.Colors.green : BoldTheme.Colors.border, lineWidth: 1))
+            .background(active ? BoldTheme.Colors.text : BoldTheme.Colors.track)
+            .foregroundColor(active ? BoldTheme.Colors.card : BoldTheme.Colors.textDim)
             .clipShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -182,12 +181,12 @@ struct PickemsStandingsView: View {
         // Pinned rank/entry/pts column
         VStack(spacing: 0) {
           HStack {
-            Text("RK").frame(width: 22, alignment: .leading)
-            Text("ENTRY")
+            Text("#").frame(width: 22, alignment: .leading)
+            Text("Player")
             Spacer()
-            Text("PTS")
+            Text("Correct")
           }
-          .font(BoldTheme.Fonts.mono(10)).foregroundColor(BoldTheme.Colors.textFaint)
+          .font(BoldTheme.Fonts.body(12, weight: .semibold)).foregroundColor(BoldTheme.Colors.textDim)
           .padding(.horizontal, 16).frame(height: 52)
 
           Divider().background(BoldTheme.Colors.border)
@@ -195,12 +194,12 @@ struct PickemsStandingsView: View {
           ForEach(Array(ranked.enumerated()), id: \.element.id) { i, r in
             let correct = scope == .week ? r.row.weekCorrect : r.row.seasonCorrect
             HStack(alignment: .center, spacing: 0) {
-              Text("\(r.rank)").frame(width: 22, alignment: .leading).font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textFaint)
-              Text(r.row.displayName).font(BoldTheme.Fonts.body(14, weight: .semibold)).foregroundColor(BoldTheme.Colors.text).lineLimit(1)
+              Text("\(r.rank)").frame(width: 22, alignment: .leading).font(BoldTheme.TypeRole.tableNumber(13)).foregroundColor(BoldTheme.Colors.text)
+              Text(r.row.displayName).font(BoldTheme.Fonts.body(14, weight: .semibold)).foregroundColor(BoldTheme.Colors.text).lineLimit(2).minimumScaleFactor(0.85)
               Spacer(minLength: 4)
               Text("\(correct)")
-                .font(BoldTheme.Fonts.display(20))
-                .foregroundColor(r.rank == 1 ? BoldTheme.Colors.goldDeep : BoldTheme.Colors.green)
+                .font(BoldTheme.TypeRole.tableNumber(15))
+                .foregroundColor(BoldTheme.Colors.text)
             }
             .padding(.horizontal, 16).frame(height: 52)
             if i != ranked.count - 1 { Divider().background(BoldTheme.Colors.border) }
@@ -238,9 +237,8 @@ struct PickemsStandingsView: View {
           }
         }
       }
-      .background(BoldTheme.Colors.glassStrong)
-      .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
-      .clipShape(RoundedRectangle(cornerRadius: 14))
+      .background(BoldTheme.Colors.card)
+      .clipShape(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous))
     }
   }
 

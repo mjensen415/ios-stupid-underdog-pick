@@ -8,8 +8,9 @@ import SwiftUI
 
 private struct GlobalBadge: View {
   var body: some View {
-    RoundedRectangle(cornerRadius: 12)
-      .fill(BoldTheme.Colors.gold)
+    // Gray, not yellow: yellow is for your next action only (de-slop #5).
+    RoundedRectangle(cornerRadius: 12, style: .continuous)
+      .fill(BoldTheme.Colors.track)
       .frame(width: 42, height: 42)
       .overlay(Image(systemName: "globe").font(.system(size: 19, weight: .semibold)).foregroundColor(BoldTheme.Colors.text))
       .accessibilityHidden(true)
@@ -27,17 +28,15 @@ struct GlobalGroupCard: View {
         VStack(alignment: .leading, spacing: 3) {
           HStack(spacing: 8) {
             Text(GlobalGroups.title)
-              .font(BoldTheme.Fonts.display(20))
+              .font(BoldTheme.Fonts.body(16, weight: .bold))
               .foregroundColor(BoldTheme.Colors.text)
-            Text(GlobalGroups.label(game).uppercased())
-              .font(BoldTheme.Fonts.mono(9.5, weight: .bold))
-              .tracking(0.8)
-              .foregroundColor(BoldTheme.Colors.green)
-              .lineLimit(1)
-              .minimumScaleFactor(0.8)
+            Text(GlobalGroups.label(game))
+              .font(BoldTheme.Fonts.body(13, weight: .semibold))
+              .foregroundColor(BoldTheme.Colors.textDim)
+              .fixedSize(horizontal: false, vertical: true)
           }
           Text(GlobalGroups.tagline)
-            .font(BoldTheme.Fonts.body(12.5))
+            .font(BoldTheme.Fonts.body(13))
             .foregroundColor(BoldTheme.Colors.textDim)
             .fixedSize(horizontal: false, vertical: true)
         }
@@ -46,11 +45,9 @@ struct GlobalGroupCard: View {
           .font(.system(size: 13, weight: .bold))
           .foregroundColor(BoldTheme.Colors.textFaint)
       }
-      .padding(16)
+      .padding(BoldTheme.Space.cardPad)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .background(BoldTheme.Colors.glassStrong)
-      .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(BoldTheme.Colors.green.opacity(0.35), lineWidth: 1.5))
-      .clipShape(RoundedRectangle(cornerRadius: 14))
+      .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
     }
     .buttonStyle(.plain)
     .accessibilityLabel("Global \(GlobalGroups.label(game)) leaderboard")
@@ -75,10 +72,10 @@ struct GlobalGroupsRow: View {
         GlobalBadge()
         VStack(alignment: .leading, spacing: 2) {
           Text(GlobalGroups.title)
-            .font(BoldTheme.Fonts.body(15, weight: .heavy))
+            .font(BoldTheme.Fonts.body(15, weight: .semibold))
             .foregroundColor(BoldTheme.Colors.text)
           Text(GlobalGroups.tagline)
-            .font(BoldTheme.Fonts.body(12))
+            .font(BoldTheme.Fonts.body(13))
             .foregroundColor(BoldTheme.Colors.textDim)
             .fixedSize(horizontal: false, vertical: true)
         }
@@ -95,21 +92,18 @@ struct GlobalGroupsRow: View {
         }
       }
     }
-    .padding(16)
+    .padding(BoldTheme.Space.cardPad)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .background(BoldTheme.Colors.glassStrong)
-    .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(BoldTheme.Colors.green.opacity(0.35), lineWidth: 1.5))
-    .clipShape(RoundedRectangle(cornerRadius: 14))
+    .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
   }
 
   private func chip(_ label: String, action: @escaping () -> Void) -> some View {
     Button(action: action) {
       Text(label)
-        .font(BoldTheme.Fonts.body(12, weight: .bold))
+        .font(BoldTheme.Fonts.body(13, weight: .semibold))
         .foregroundColor(BoldTheme.Colors.text)
-        .padding(.horizontal, 13).padding(.vertical, 8)
-        .background(Capsule().fill(Color.white.opacity(0.6)))
-        .overlay(Capsule().strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
+        .padding(.horizontal, 12).padding(.vertical, 6)
+        .background(Capsule().fill(BoldTheme.Colors.track))
     }
     .buttonStyle(.plain)
   }
@@ -128,10 +122,9 @@ struct GlobalBoardView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       VStack(alignment: .leading, spacing: 4) {
-        Text(GlobalGroups.label(game).uppercased())
-          .font(BoldTheme.Fonts.mono(10, weight: .semibold))
-          .tracking(1)
-          .foregroundColor(BoldTheme.Colors.green)
+        Text(GlobalGroups.label(game))
+          .font(BoldTheme.Fonts.body(16, weight: .bold))
+          .foregroundColor(BoldTheme.Colors.text)
         Text(GlobalGroups.tagline)
           .font(BoldTheme.Fonts.body(13))
           .foregroundColor(BoldTheme.Colors.textDim)

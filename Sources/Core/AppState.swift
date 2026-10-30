@@ -46,6 +46,7 @@ final class AppState: ObservableObject {
   /// reflects it. Single place every CFB/Pro Ball entry point should funnel
   /// through instead of setting requestedSport/requestedTab directly.
   func goToUnderdog(sport: String, tab: Int = 1) {
+    hpSport = nil
     currentGame = sport == "nfl" ? .nfl : .cfb
     requestedSport = sport
     requestedTab = tab
@@ -67,6 +68,11 @@ final class AppState: ObservableObject {
   /// Ball / Pickems) -- like the web, where picking one navigates to its own
   /// page. Non-nil means the Games tab shows that sport's page.
   @Published var hpSport: HpSport?
+
+  /// A specific game to scroll to on Games (live ticker tap). GamesView
+  /// switches to its week if needed, scrolls, then clears it.
+  struct GameRequest: Equatable { let id: UUID; let sport: String; let week: Int? }
+  @Published var requestedGame: GameRequest?
 
   func goToHoopsPucks(_ sport: HpSport) {
     hpSport = sport

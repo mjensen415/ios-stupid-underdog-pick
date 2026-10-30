@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Horizontal week selector (gold pill = selected). Shared by Games (both
+/// Horizontal week selector (ink pill = selected; yellow is reserved for the
+/// screen's one primary action). Shared by Games (both
 /// Underdog contests) and Pickems so every week picker looks and scrolls the
 /// same. Scrolls the selected week into view -- Pro Ball has 18 weeks, and
 /// the current one shouldn't be off-screen to the right.
@@ -20,8 +21,8 @@ struct WeekPills: View {
               Text(verbatim: "Week \(formatWeekLabel(w))")
                 .font(BoldTheme.Fonts.body(12.5, weight: .bold))
                 .padding(.horizontal, 16).padding(.vertical, 7)
-                .background(active ? BoldTheme.Colors.gold : BoldTheme.Colors.track)
-                .foregroundColor(active ? BoldTheme.Colors.text : BoldTheme.Colors.textDim)
+                .background(active ? BoldTheme.Colors.text : BoldTheme.Colors.track)
+                .foregroundColor(active ? BoldTheme.Colors.card : BoldTheme.Colors.textDim)
                 .clipShape(Capsule())
             }
             .buttonStyle(.plain)

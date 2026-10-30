@@ -227,11 +227,14 @@ final class GamesViewModel: ObservableObject {
       // locks at its own kickoff, so any other still-open game stays a
       // real option (and a real swipe action) until then -- just says
       // what swiping actually does now.
-      return selectedGameId != nil && selectedGameId != g.id ? "Change to this upset" : "Pick this upset"
+      let dogIsHome = g.derivedUnderdogTeamId != nil && g.derivedUnderdogTeamId == g.homeTeamId
+      let dog = (dogIsHome ? g.homeDisplay : g.awayDisplay) ?? "the dog"
+      let line = g.underdogSpread.map { " +\(jsNumber($0))" } ?? ""
+      return (selectedGameId != nil && selectedGameId != g.id ? "Change to " : "Pick ") + dog + line
     }
     if currentPickIsLocked && g.id != selectedGameId { return "Your pick is locked" }
-    if g.status == "in_progress" { return "Game Live" }
-    if g.status == "final" { return "Game Over" }
+    if g.status == "in_progress" { return "Game live" }
+    if g.status == "final" { return "Game over" }
     return "Locked"
   }
 
@@ -257,7 +260,7 @@ final class GamesViewModel: ObservableObject {
     do {
       _ = try await PicksService(client: client)
         .upsertPick(gameId: g.id, pickedTeamId: pickedId, season: season, week: selectedWeek, groupId: activeGroupId)
-      flashToast("Picked \(g.awayTeam ?? "") @ \(g.homeTeam ?? "")")
+      flashToast("Picked \(g.awayDisplay ?? "") @ \(g.homeDisplay ?? "")")
       if haptic { Haptics.success() }
       pickCelebrationTrigger = UUID()
       // They just used the swipe gesture successfully -- the hint banner
@@ -338,32 +341,7 @@ struct GamesView: View {
   // banner, shown until dismissed or until they successfully make a pick
   // (whichever first -- see GamesViewModel.pickUnderdog).
   static let swipeHintDefaultsKey = "hasSeenSwipeToPickHint"
-  @AppStorage(GamesView.swipeHintDefaultsKey) private var hasSeenSwipeHint = false
   @State private var tappedGame: Game?
-
-  private var header: some View {
-    HStack {
-      SupIcon(variant: .monogram)
-        .frame(width: 28, height: 28)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-      Spacer()
-      // CFB and Pro Ball run on separate week numbering (offset by
-      // roughly a week), so the sport rides along with the week number.
-      // Picking the week happens in the pill row below.
-      Label("\(viewModel.sport == "cfb" ? "CFB" : "PRO BALL") · Week \(formatWeekLabel(viewModel.selectedWeek))", systemImage: "calendar")
-        .font(BoldTheme.Fonts.body(14, weight: .semibold))
-        .foregroundColor(BoldTheme.Colors.goldDeep)
-        .onChange(of: viewModel.selectedWeek) {
-          Task {
-            try? await viewModel.loadGames()
-            try? await viewModel.loadExistingPick()
-          }
-        }
-    }
-    .padding(.horizontal, 20)
-    .padding(.vertical, 14)
-    .background(BoldTheme.Colors.bgPage)
-  }
 
   // The picked team's row already tints gold + gets a checkmark badge
   // (GameRowView.isSelected) -- this banner is the "which game, at a
@@ -373,102 +351,82 @@ struct GamesView: View {
     return viewModel.games.first { $0.id == id }
   }
 
+  /// "Your pick" bar, pinned under the filter bar (round 2): which game,
+  /// at a glance, without scrolling to find the green row. Tap opens its
+  /// pick card. Only for the live week; past weeks get pastWeekNote.
   @ViewBuilder
-  private var pickedBanner: some View {
-    if let g = pickedGame {
+  private var pinnedPickBar: some View {
+    if let g = pickedGame, viewModel.selectedWeek >= viewModel.currentWeek {
       // The team actually picked (a Pro Ball line can move after the pick,
       // even flipping who the underdog is), scored on its locked line.
       let savedPick = viewModel.myPick?.game_id == g.id ? viewModel.myPick : nil
       let pickedTeamId = savedPick?.picked_team_id ?? g.derivedUnderdogTeamId
-      let underdogIsHome = pickedTeamId != nil && pickedTeamId == g.homeTeamId
-      let underdogName = underdogIsHome ? (g.homeTeam ?? "Home") : (g.awayTeam ?? "Away")
-      let favoriteName = underdogIsHome ? (g.awayTeam ?? "Away") : (g.homeTeam ?? "Home")
-      let bankSpread: Double? = savedPick.map { $0.winPoints(on: g) } ?? g.underdogSpread
-      let lineNote = savedPick?.lineNote(on: g)
-      HStack(spacing: 14) {
-        Circle()
-          .fill(BoldTheme.Colors.gold)
-          .frame(width: 40, height: 40)
-          .overlay(
-            RetryingAsyncImage(url: viewModel.logoURL(for: pickedTeamId)) { img in
-              img.resizable().scaledToFit().padding(5)
-            } placeholder: {
-              Image(systemName: "checkmark")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundColor(BoldTheme.Colors.text)
-            }
-          )
-          .clipShape(Circle())
-        VStack(alignment: .leading, spacing: 2) {
-          Text(verbatim: "WEEK \(formatWeekLabel(viewModel.selectedWeek)) PICK")
-            .font(BoldTheme.Fonts.mono(10, weight: .semibold))
-            .foregroundColor(textOnGreen.opacity(0.7))
-          HStack(spacing: 6) {
-            Text(underdogName.uppercased())
-              .font(BoldTheme.Fonts.display(20))
-              .foregroundColor(textOnGreen)
-            if let sp = bankSpread {
-              Text(verbatim: "+\(String(format: "%.1f", sp))")
-                .font(BoldTheme.Fonts.display(20))
-                .foregroundColor(BoldTheme.Colors.gold)
-            }
-          }
-          Text(verbatim: "vs \(favoriteName)")
-            .font(BoldTheme.Fonts.body(12))
-            .foregroundColor(textOnGreen.opacity(0.75))
-          // Once the game's decided, say what happened instead of what could.
-          if let pickedTeamId, g.status == "final" {
-            let won = g.outcome(forPickedTeamId: pickedTeamId) == .win
-            Text(verbatim: won
-                 ? (bankSpread.map { "Won outright — banked \(String(format: "%.1f", $0)) points." } ?? "Won outright.")
-                 : "Lost — no points this week.")
-              .font(BoldTheme.Fonts.body(11, weight: won ? .semibold : .regular))
-              .foregroundColor(won ? BoldTheme.Colors.gold : textOnGreen.opacity(0.65))
-              .padding(.top, 2)
-          } else if g.status == "in_progress" {
-            Text("Live now.")
-              .font(BoldTheme.Fonts.body(11, weight: .semibold))
-              .foregroundColor(textOnGreen.opacity(0.8))
-              .padding(.top, 2)
-          } else if let sp = bankSpread {
-            Text(verbatim: "Wins outright and you bank \(String(format: "%.1f", sp)) points.")
-              .font(BoldTheme.Fonts.body(11))
-              .foregroundColor(textOnGreen.opacity(0.65))
-              .padding(.top, 2)
-          }
-          if let lineNote {
-            Text(lineNote)
-              .font(BoldTheme.Fonts.body(11, weight: .semibold))
-              .foregroundColor(BoldTheme.Colors.gold)
-          }
+      let pickedIsHome = pickedTeamId != nil && pickedTeamId == g.homeTeamId
+      let dogName = (pickedIsHome ? g.homeDisplay : g.awayDisplay) ?? "Your pick"
+      let favoriteName = (pickedIsHome ? g.awayDisplay : g.homeDisplay) ?? ""
+      let points: Double? = savedPick.map { $0.winPoints(on: g) } ?? g.underdogSpread
+      HStack(spacing: 10) {
+        RetryingAsyncImage(url: viewModel.logoURL(for: pickedTeamId)) { img in
+          img.resizable().scaledToFit()
+        } placeholder: {
+          Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundColor(textOnGreen)
         }
-        Spacer()
-        if let shareImage, let sp = bankSpread {
-          // No singular `item: Image` initializer exists on ShareLink --
-          // only items:/preview: (Image conforms to Transferable, so a
-          // one-element array is the correct way to share a single image).
+        .frame(width: 26, height: 26)
+        (Text("Your pick: ").foregroundColor(textOnGreen.opacity(0.75))
+          + Text(verbatim: dogName + (points.map { " +\(jsNumber($0))" } ?? "")).bold()
+          + Text(verbatim: " · " + pickStatus(g, pickedTeamId: pickedTeamId, points: points)).foregroundColor(textOnGreen.opacity(0.85)))
+          .font(BoldTheme.Fonts.body(14))
+          .foregroundColor(textOnGreen)
+          .lineLimit(1)
+          .minimumScaleFactor(0.8)
+        Spacer(minLength: 4)
+        if let shareImage, let sp = points {
+          // No singular `item: Image` initializer exists on ShareLink.
           ShareLink(
             items: [shareImage],
-            preview: { img in SharePreview(Text(verbatim: "\(underdogName) +\(String(format: "%.1f", sp))"), image: img) }
+            preview: { img in SharePreview(Text(verbatim: "\(dogName) +\(jsNumber(sp))"), image: img) }
           ) {
             Image(systemName: "square.and.arrow.up")
-              .font(.system(size: 16, weight: .semibold))
+              .font(.system(size: 15, weight: .semibold))
               .foregroundColor(textOnGreen)
+              .frame(width: 30, height: 30)
           }
+          .accessibilityLabel("Share your pick")
         }
       }
-      .padding(16)
-      .background(BoldTheme.Colors.green)
-      .cornerRadius(10)
-      .padding(.horizontal, 20)
-      .padding(.bottom, 12)
-      .task(id: g.id) {
-        guard let sp = bankSpread else { shareImage = nil; return }
-        if let uiImage = renderShareCardImage(dogName: underdogName, spread: sp, favoriteName: favoriteName) {
+      .padding(.horizontal, BoldTheme.Space.s3)
+      .frame(minHeight: 44)
+      .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.inner, style: .continuous).fill(BoldTheme.Colors.green))
+      .contentShape(Rectangle())
+      .onTapGesture { tappedGame = g }
+      .accessibilityElement(children: .combine)
+      .accessibilityAddTraits(.isButton)
+      .task(id: "\(g.id)-\(points ?? 0)") {
+        guard let sp = points else { shareImage = nil; return }
+        if let uiImage = renderShareCardImage(dogName: dogName, spread: sp, favoriteName: favoriteName) {
           shareImage = Image(uiImage: uiImage)
         }
       }
     }
+  }
+
+  /// "Fri 4:30 PM", "Live 14–7", "won, +3 pts", "lost".
+  private func pickStatus(_ g: Game, pickedTeamId: UUID?, points: Double?) -> String {
+    let pickedHome = pickedTeamId == g.homeTeamId
+    if g.status == "final", let pickedTeamId {
+      return g.outcome(forPickedTeamId: pickedTeamId) == .win
+        ? "won" + (points.map { ", +\(jsNumber($0)) pts" } ?? "")
+        : "lost"
+    }
+    if g.status == "in_progress" {
+      if let h = g.homePoints, let a = g.awayPoints {
+        return "Live \(pickedHome ? h : a)–\(pickedHome ? a : h)"
+      }
+      return "Live"
+    }
+    let f = DateFormatter()
+    f.dateFormat = "EEE h:mm a"
+    return f.string(from: g.startTime)
   }
 
   /// Looking back at an earlier week: a one-line reminder of what you
@@ -480,7 +438,7 @@ struct GamesView: View {
       let savedPick = viewModel.myPick?.game_id == g.id ? viewModel.myPick : nil
       let pickedTeamId = savedPick?.picked_team_id ?? g.derivedUnderdogTeamId
       let pickedIsHome = pickedTeamId != nil && pickedTeamId == g.homeTeamId
-      let name = (pickedIsHome ? g.homeTeam : g.awayTeam) ?? "Your pick"
+      let name = (pickedIsHome ? g.homeDisplay : g.awayDisplay) ?? "Your pick"
       let spread: Double? = savedPick.map { $0.winPoints(on: g) } ?? g.underdogSpread
       let outcome = pickedTeamId.map { g.outcome(forPickedTeamId: $0) } ?? .pending
       HStack(spacing: 10) {
@@ -496,38 +454,21 @@ struct GamesView: View {
         + Text(verbatim: " \(name)")
           .font(BoldTheme.Fonts.body(13, weight: .bold))
           .foregroundColor(BoldTheme.Colors.text)
-        + Text(verbatim: spread.map { " +\(String(format: "%.1f", $0))" } ?? "")
-          .font(BoldTheme.Fonts.mono(12, weight: .semibold))
-          .foregroundColor(BoldTheme.Colors.goldDeep)
+        + Text(verbatim: spread.map { " +\(jsNumber($0))" } ?? "")
+          .font(BoldTheme.Fonts.body(13, weight: .bold))
+          .foregroundColor(BoldTheme.Role.line)
         Spacer(minLength: 6)
         switch outcome {
-        case .win:
-          Text(verbatim: spread.map { "WON +\(String(format: "%.1f", $0))" } ?? "WON")
-            .font(BoldTheme.Fonts.mono(11, weight: .semibold))
-            .foregroundColor(BoldTheme.Colors.text)
-            .padding(.horizontal, 9).padding(.vertical, 4)
-            .background(BoldTheme.Colors.gold)
-            .clipShape(Capsule())
-        case .loss:
-          Text("MISS")
-            .font(BoldTheme.Fonts.mono(11, weight: .semibold))
-            .foregroundColor(BoldTheme.Colors.textDim)
-            .padding(.horizontal, 9).padding(.vertical, 4)
-            .background(BoldTheme.Colors.track)
-            .clipShape(Capsule())
-        case .pending:
-          Text(g.status == "in_progress" ? "LIVE" : "PENDING")
-            .font(BoldTheme.Fonts.mono(11, weight: .semibold))
-            .foregroundColor(BoldTheme.Colors.textFaint)
+        case .win: SupPill(text: spread.map { "Won +\(jsNumber($0))" } ?? "Won", kind: .green)
+        case .loss: SupPill(text: "Missed", kind: .gray)
+        case .pending: SupPill(text: g.status == "in_progress" ? "Live" : "Pending", kind: .gray)
         }
       }
       .lineLimit(1)
-      .padding(.horizontal, 14).padding(.vertical, 10)
-      .background(BoldTheme.Colors.glassStrong)
-      .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(BoldTheme.Colors.glassBorder, lineWidth: 1))
-      .clipShape(RoundedRectangle(cornerRadius: 12))
-      .padding(.horizontal, 20)
-      .padding(.bottom, 10)
+      .padding(.horizontal, 14).padding(.vertical, 12)
+      .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
+      .padding(.horizontal, BoldTheme.Space.margin)
+      .padding(.bottom, BoldTheme.Space.cardGap)
     } else if !viewModel.games.isEmpty && viewModel.selectedGameId == nil {
       HStack(spacing: 8) {
         Image(systemName: "minus.circle")
@@ -537,41 +478,27 @@ struct GamesView: View {
           .foregroundColor(BoldTheme.Colors.textDim)
         Spacer()
       }
-      .padding(.horizontal, 14).padding(.vertical, 10)
-      .background(BoldTheme.Colors.glassStrong)
-      .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(BoldTheme.Colors.glassBorder, lineWidth: 1))
-      .clipShape(RoundedRectangle(cornerRadius: 12))
-      .padding(.horizontal, 20)
-      .padding(.bottom, 10)
+      .padding(.horizontal, 14).padding(.vertical, 12)
+      .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
+      .padding(.horizontal, BoldTheme.Space.margin)
+      .padding(.bottom, BoldTheme.Space.cardGap)
     }
   }
 
-  @ViewBuilder
-  private var swipeHintBanner: some View {
-    if !hasSeenSwipeHint {
-      HStack(spacing: 10) {
-        Image(systemName: "hand.draw.fill")
-          .foregroundColor(BoldTheme.Colors.goldDeep)
-        Text("Tap a game (or swipe left) to lock in that underdog.")
-          .font(BoldTheme.Fonts.body(13, weight: .medium))
-          .foregroundColor(BoldTheme.Colors.text)
-        Spacer()
-        Button {
-          withAnimation { hasSeenSwipeHint = true }
-        } label: {
-          Image(systemName: "xmark")
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundColor(BoldTheme.Colors.textFaint)
-        }
-      }
-      .padding(12)
-      .background(BoldTheme.Colors.gold.opacity(0.12))
-      .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(BoldTheme.Colors.goldDeep.opacity(0.3), lineWidth: 1))
-      .cornerRadius(10)
-      .padding(.horizontal, 20)
-      .padding(.bottom, 8)
-      .transition(.opacity.combined(with: .move(edge: .top)))
+  /// One-line note above the slate (de-slop #12): rows have no PICK
+  /// button, so say how to pick. Scrolls away with the games.
+  private var selectHint: some View {
+    HStack(spacing: BoldTheme.Space.s2) {
+      Image(systemName: "arrow.left")
+        .font(.system(size: 14, weight: .semibold))
+      Text("Slide or tap to select")
+        .font(BoldTheme.Fonts.body(14))
     }
+    .foregroundColor(BoldTheme.Colors.textDim)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .padding(.horizontal, BoldTheme.Space.margin)
+    .padding(.top, 14)
+    .padding(.bottom, BoldTheme.Space.s3)
   }
 
   private var searchField: some View {
@@ -580,6 +507,7 @@ struct GamesView: View {
         .foregroundColor(BoldTheme.Colors.textFaint)
         .font(.system(size: 14, weight: .medium))
       TextField("Search teams", text: $searchQuery)
+        .focused($searchFocused)
         .font(BoldTheme.Fonts.body(14))
         .foregroundColor(BoldTheme.Colors.text)
         .autocorrectionDisabled(true)
@@ -593,13 +521,9 @@ struct GamesView: View {
         }
       }
     }
-    .padding(.horizontal, 12)
+    .padding(.horizontal, 14)
     .padding(.vertical, 9)
-    .background(Color(hex: 0x16241B).opacity(0.07))
-    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
-    .cornerRadius(10)
-    .padding(.horizontal, 20)
-    .padding(.bottom, 10)
+    .background(Capsule().fill(BoldTheme.Colors.card))
   }
 
   // Matches either team's full or short name -- a search for "OSU" alone
@@ -610,7 +534,7 @@ struct GamesView: View {
     let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !query.isEmpty else { return viewModel.visibleGames }
     return viewModel.visibleGames.filter { g in
-      [g.homeTeam, g.awayTeam].compactMap { $0 }.contains { $0.localizedCaseInsensitiveContains(query) }
+      [g.homeTeam, g.awayTeam, g.homeShort, g.awayShort].compactMap { $0 }.contains { $0.localizedCaseInsensitiveContains(query) }
     }
   }
 
@@ -623,7 +547,7 @@ struct GamesView: View {
           Text("Picking for")
             .font(BoldTheme.Fonts.body(11, weight: .semibold))
             .foregroundColor(BoldTheme.Colors.textFaint)
-          Text(activeGroupName ?? "My Shared Picks")
+          Text(activeGroupName ?? "My shared pick")
             .font(BoldTheme.Fonts.body(12.5, weight: .bold))
             .foregroundColor(BoldTheme.Colors.text)
           Image(systemName: "chevron.down")
@@ -631,15 +555,16 @@ struct GamesView: View {
             .foregroundColor(BoldTheme.Colors.textFaint)
         }
         .padding(.horizontal, 12).padding(.vertical, 7)
-        .background(viewModel.activeGroupId != nil ? BoldTheme.Colors.gold.opacity(0.16) : BoldTheme.Colors.track)
-        .overlay(Capsule().strokeBorder(viewModel.activeGroupId != nil ? BoldTheme.Colors.goldDeep : .clear, lineWidth: 1))
+        .background(BoldTheme.Colors.card)
+        .overlay(Capsule().strokeBorder(viewModel.activeGroupId != nil ? BoldTheme.Colors.text : .clear, lineWidth: 1.5))
         .clipShape(Capsule())
       }
       .buttonStyle(.plain)
-      .padding(.horizontal, 20)
-      .padding(.bottom, 10)
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(.horizontal, BoldTheme.Space.margin)
+      .padding(.bottom, BoldTheme.Space.s3)
       .confirmationDialog("Picking for", isPresented: $showGroupPicker, titleVisibility: .visible) {
-        Button("My Shared Picks") { viewModel.activeGroupId = nil }
+        Button("My shared pick") { viewModel.activeGroupId = nil }
         ForEach(viewModel.underdogGroups) { g in
           Button(g.name) { viewModel.activeGroupId = g.group_id }
         }
@@ -658,18 +583,16 @@ struct GamesView: View {
         VStack(alignment: .trailing, spacing: 4) {
           Button("Copy pick from\u{2026}") { showCopyPicksSheet = true }
             .font(BoldTheme.Fonts.body(11.5, weight: .bold))
-            .foregroundColor(BoldTheme.Colors.goldDeep)
+            .foregroundColor(BoldTheme.Colors.green)
           Button("Reset to shared") { Task { await viewModel.resetToSharedPick() } }
             .font(BoldTheme.Fonts.body(11, weight: .semibold))
             .foregroundColor(BoldTheme.Colors.textFaint)
         }
       }
-      .padding(12)
-      .background(BoldTheme.Colors.gold.opacity(0.1))
-      .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(BoldTheme.Colors.goldDeep, lineWidth: 1))
-      .clipShape(RoundedRectangle(cornerRadius: 12))
-      .padding(.horizontal, 20)
-      .padding(.bottom, 10)
+      .padding(BoldTheme.Space.s3)
+      .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
+      .padding(.horizontal, BoldTheme.Space.margin)
+      .padding(.bottom, BoldTheme.Space.cardGap)
       .sheet(isPresented: $showCopyPicksSheet) {
         copyPicksSheet
       }
@@ -685,7 +608,7 @@ struct GamesView: View {
             .foregroundColor(BoldTheme.Colors.textDim)
         }
         Section {
-          Button("My Shared Picks") {
+          Button("My shared pick") {
             Task {
               await viewModel.copyPick(from: nil)
               showCopyPicksSheet = false
@@ -703,7 +626,7 @@ struct GamesView: View {
           }
         }
       }
-      .navigationTitle("Copy Pick")
+      .navigationTitle("Copy pick")
       .navigationBarTitleDisplayMode(.inline)
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
@@ -713,131 +636,325 @@ struct GamesView: View {
     }
   }
 
-  @ViewBuilder private var content: some View {
+  /// Error / loading / empty states, shown as one row under the bar so the
+  /// pinned bar (sport + week menus) stays usable in every state.
+  @ViewBuilder private var stateMessage: some View {
     if let e = viewModel.errorText {
-      VStack(spacing: 8) {
-        Text("Error loading games").font(BoldTheme.Fonts.display(24)).foregroundColor(BoldTheme.Colors.text)
-        Text(e).foregroundColor(BoldTheme.Colors.textDim).multilineTextAlignment(.center)
-        Button("Retry") { Task { await viewModel.loadInitial() } }
-          .foregroundColor(BoldTheme.Colors.goldDeep)
+      VStack(spacing: BoldTheme.Space.s2) {
+        Text("Couldn't load games").font(BoldTheme.TypeRole.title(20))
+        Text(e).font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Colors.textDim).multilineTextAlignment(.center)
+        Button("Try again") { Task { await viewModel.loadInitial() } }
+          .buttonStyle(SupSecondaryButtonStyle(fullWidth: false))
+          .padding(.top, BoldTheme.Space.s2)
       }
-      .padding()
-      .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .background(BoldTheme.Colors.bgPage)
+      .foregroundColor(BoldTheme.Colors.text)
+      .padding(BoldTheme.Space.s6)
+      .frame(maxWidth: .infinity)
     } else if viewModel.isLoading && viewModel.games.isEmpty {
       ProgressView("Loading games…")
-        .tint(BoldTheme.Colors.gold)
+        .tint(BoldTheme.Colors.text)
+        .font(BoldTheme.Fonts.body(14))
         .foregroundColor(BoldTheme.Colors.textDim)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(BoldTheme.Colors.bgPage)
+        .frame(maxWidth: .infinity)
+        .padding(.top, 80)
     } else if viewModel.games.isEmpty {
-      Text("No games for this week yet.")
-        .foregroundColor(BoldTheme.Colors.textDim)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(BoldTheme.Colors.bgPage)
+      emptyText("No games for this week yet.")
     } else if viewModel.visibleGames.isEmpty {
       // Games exist for the week but every CFB one is still hidden
       // pending a line -- distinct from the "nothing scheduled" case
       // above so this doesn't read as a bug.
-      Text("Lines haven't posted for this week yet. Check back soon.")
-        .foregroundColor(BoldTheme.Colors.textDim)
-        .multilineTextAlignment(.center)
-        .padding(.horizontal, 32)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(BoldTheme.Colors.bgPage)
+      emptyText("Lines haven't posted for this week yet. Check back soon.")
     } else if filteredGames.isEmpty {
-      Text(verbatim: "No games match “\(searchQuery).”")
-        .foregroundColor(BoldTheme.Colors.textDim)
-        .multilineTextAlignment(.center)
-        .padding(.horizontal, 32)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(BoldTheme.Colors.bgPage)
-    } else {
-      ScrollViewReader { proxy in
-        List {
+      emptyText("No games match “\(searchQuery)”.")
+    }
+  }
+
+  private func emptyText(_ t: String) -> some View {
+    Text(verbatim: t)
+      .font(BoldTheme.Fonts.body(15))
+      .foregroundColor(BoldTheme.Colors.textDim)
+      .multilineTextAlignment(.center)
+      .padding(.horizontal, BoldTheme.Space.s6)
+      .padding(.top, 80)
+      .frame(maxWidth: .infinity)
+  }
+
+  private var showSlate: Bool {
+    viewModel.errorText == nil && !(viewModel.isLoading && viewModel.games.isEmpty) && !filteredGames.isEmpty
+  }
+
+  /// One scroll for the whole screen, like the web (de-slop #14): only the
+  /// slim bar is pinned; the note, banners and every day card scroll.
+  private var slate: some View {
+    ScrollViewReader { proxy in
+      List {
+        Group {
+          if showSlate && viewModel.selectedWeek == viewModel.currentWeek {
+            selectHint
+          } else {
+            Color.clear.frame(height: BoldTheme.Space.s3)
+          }
+          groupPicker
+          groupModeBanner
+          if viewModel.selectedWeek < viewModel.currentWeek {
+            pastWeekNote
+          }
+          stateMessage
+        }
+        .plainListRow()
+
+        if showSlate {
+          // Each day's header is a pinned section header (round 2): it
+          // sticks under the filter bar and the next day's pushes it off.
           ForEach(dayGroups) { day in
             Section {
               ForEach(day.games) { g in
-                GameRowView(
-                  game: g,
-                  logoFor: { id in viewModel.logoURL(for: id) },
-                  isSelected: viewModel.selectedGameId == g.id,
-                  isFirstInDay: g.id == day.games.first?.id,
-                  isLastInDay: g.id == day.games.last?.id,
-                  actionable: viewModel.canPick(g) && viewModel.selectedGameId != g.id
-                    && viewModel.selectedWeek == viewModel.currentWeek,
-                  hasPickThisWeek: viewModel.selectedGameId != nil,
-                  // Pro only: the first linked network as a middle-column capsule.
-                  watch: isPro && watchEnabled ? viewModel.watchLinks(for: g).first(where: { $0.url != nil }) : nil
-                )
-                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                  if viewModel.selectedGameId == g.id {
-                    // Once the picked game has locked (kickoff passed, or
-                    // it's live/final), the pick is final -- the server
-                    // rejects a clear anyway (see clear_weekly_pick's
-                    // PICKS_LOCKED_AFTER_KICKOFF guard), so don't show a
-                    // swipe action that can only ever fail. Mirrors web's
-                    // BoldGreenBanner CHANGE-button treatment.
-                    if viewModel.canPick(g) {
-                      Button("Clear pick") {
-                        Task { await viewModel.clearPickForWeek() }
-                      }.tint(.gray)
-                    }
-                  } else {
-                    Button(viewModel.swipeActionLabel(for: g)) {
-                      Task { await viewModel.pickUnderdog(for: g) }
-                    }
-                    // swipeActions buttons always render white label text with
-                    // .tint() only coloring the background -- goldDeep (not the
-                    // bright brand gold) is what gives that white text real
-                    // contrast here.
-                    .tint(viewModel.canPick(g) ? BoldTheme.Colors.goldDeep : .gray)
-                    .disabled(!viewModel.canPick(g))
-                  }
-                }
-                // Tap is the second way in (swipe stays): opens the pick
-                // card, the native take on the web's pick sheet.
-                .contentShape(Rectangle())
-                .onTapGesture {
-                  guard viewModel.canPick(g) else { return }
-                  tappedGame = g
-                }
+                gameRow(g, day: day)
               }
+              Color.clear.frame(height: BoldTheme.Space.cardGap).plainListRow()
             } header: {
-              columnHeader(dateLabel: day.dateLabel)
+              dayHeader(day.dateLabel)
             }
             .id(day.id)
           }
         }
-        .listStyle(.plain)
-        .hardTopScrollEdge()
-        .scrollContentBackground(.hidden)
-        .background(BoldTheme.Colors.bgPage)
-        .dismissKeyboardOnTap()
-        .sheet(item: $tappedGame) { g in
-          PickCardSheet(
-            game: g,
-            logoFor: { id in viewModel.logoURL(for: id) },
-            isCurrentPick: viewModel.selectedGameId == g.id,
-            hasOtherPick: viewModel.selectedGameId != nil && viewModel.selectedGameId != g.id,
-            isPro: isPro,
-            watchEnabled: watchEnabled && viewModel.espnIds[g.id] != nil,
-            watchLinks: viewModel.watchLinks(for: g),
-            checkLine: { shown in await viewModel.recheckLine(for: shown) },
-            onLock: { locked in await viewModel.pickUnderdog(for: locked, haptic: false) },
-            onClear: { await viewModel.clearPickForWeek() }
-          )
+      }
+      .listStyle(.plain)
+      // No extra gap above each pinned day header; the 12pt spacer row
+      // at the end of each day is the card gap.
+      .listSectionSpacing(0)
+      .environment(\.defaultMinListHeaderHeight, 0)
+      .environment(\.defaultMinListRowHeight, 0)
+      .scrollContentBackground(.hidden)
+      .background(BoldTheme.Colors.bgPage)
+      .scrollDismissesKeyboard(.immediately)
+      // Directly on the List: iOS 26's top scroll-edge fade otherwise
+      // washes out the pinned day header.
+      .hardTopScrollEdge()
+      .safeAreaInset(edge: .top, spacing: 0) { topBar }
+      .refreshable {
+        try? await viewModel.loadGames()
+        try? await viewModel.loadExistingPick()
+      }
+      .sheet(item: $tappedGame) { g in
+        PickCardSheet(
+          game: g,
+          logoFor: { id in viewModel.logoURL(for: id) },
+          isCurrentPick: viewModel.selectedGameId == g.id,
+          hasOtherPick: viewModel.selectedGameId != nil && viewModel.selectedGameId != g.id,
+          isPro: isPro,
+          watchEnabled: watchEnabled && viewModel.espnIds[g.id] != nil,
+          watchLinks: viewModel.watchLinks(for: g),
+          checkLine: { shown in await viewModel.recheckLine(for: shown) },
+          onLock: { locked in await viewModel.pickUnderdog(for: locked, haptic: false) },
+          onClear: { await viewModel.clearPickForWeek() }
+        )
+        // Fresh card per game: its @State (`shown`) is seeded from `game`,
+        // so a quick dismiss-then-tap on another row must not reuse it.
+        .id(g.id)
+      }
+      // A week spans both already-played and upcoming days -- opening on
+      // the earliest day means scrolling past everything already final
+      // just to reach today's or the next live game. Jump straight to
+      // the first day that's today or later; if the whole week's in the
+      // past (last week's tab), land on the most recent day instead of
+      // the oldest.
+      .task(id: targetDayId) {
+        if consumeRequestedGame(proxy) { return }
+        guard let targetDayId, searchQuery.isEmpty else { return }
+        proxy.scrollTo(targetDayId, anchor: .top)
+      }
+      // Live ticker tap: go to that game's week, then scroll to its row.
+      .onChange(of: appState.requestedGame) { _, _ in _ = consumeRequestedGame(proxy) }
+      .onChange(of: viewModel.games.map(\.id)) { _, _ in _ = consumeRequestedGame(proxy) }
+    }
+  }
+
+  @State private var openSwipeId: UUID?
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+  /// Handles appState.requestedGame once its sport is showing. Returns
+  /// true when it scrolled.
+  private func consumeRequestedGame(_ proxy: ScrollViewProxy) -> Bool {
+    guard let r = appState.requestedGame, r.sport == viewModel.sport else { return false }
+    if let w = r.week, w != viewModel.selectedWeek {
+      viewModel.selectedWeek = w
+      return false
+    }
+    guard viewModel.games.contains(where: { $0.id == r.id }) else { return false }
+    searchQuery = ""
+    withAnimation { proxy.scrollTo(r.id, anchor: .center) }
+    appState.requestedGame = nil
+    return true
+  }
+
+  private func gameRow(_ g: Game, day: DayGroup) -> some View {
+    let isLast = g.id == day.games.last?.id
+    let isPick = viewModel.selectedGameId == g.id
+    let pickable = viewModel.canPick(g)
+    // Picked row: a gray "Clear pick" until it locks. Others: the yellow
+    // "Pick {Dog} +N" (gray and inert when the game can't be picked).
+    let action: SwipeToPickRow<GameRowView>.Action? = isPick
+      ? (pickable ? .init(label: "Clear pick", fill: Color(hex: 0x8E8E93), ink: .white, enabled: true) {
+          Task { await viewModel.clearPickForWeek() }
+        } : nil)
+      : .init(label: viewModel.swipeActionLabel(for: g),
+              fill: pickable ? BoldTheme.Colors.gold : BoldTheme.Colors.track,
+              ink: pickable ? BoldTheme.Colors.text : BoldTheme.Colors.textDim,
+              enabled: pickable) {
+          Task { await viewModel.pickUnderdog(for: g) }
         }
-        // A week spans both already-played and upcoming days -- opening on
-        // the earliest day means scrolling past everything already final
-        // just to reach today's or the next live game. Jump straight to
-        // the first day that's today or later; if the whole week's in the
-        // past (last week's tab), land on the most recent day instead of
-        // the oldest.
-        .task(id: targetDayId) {
-          guard let targetDayId else { return }
-          proxy.scrollTo(targetDayId, anchor: .top)
+    return SwipeToPickRow(id: g.id, openId: $openSwipeId, isLast: isLast, action: action, onTap: {
+      // Tap is the other way in: opens the pick card.
+      guard viewModel.canPick(g) else { return }
+      tappedGame = g
+    }) {
+      GameRowView(
+        game: g,
+        logoFor: { id in viewModel.logoURL(for: id) },
+        isSelected: isPick,
+        isFirstInDay: false,
+        isLastInDay: isLast,
+        // Pro only: the first linked network as a middle-column capsule.
+        watch: isPro && watchEnabled ? viewModel.watchLinks(for: g).first(where: { $0.url != nil }) : nil
+      )
+    }
+    .listRowInsets(EdgeInsets(top: 0, leading: BoldTheme.Space.margin, bottom: 0, trailing: BoldTheme.Space.margin))
+    .listRowBackground(Color.clear)
+    .listRowSeparator(.hidden)
+    .id(g.id)
+  }
+
+  /// "FAVORITE · Tuesday, Oct 20 · UNDERDOG": the top strip of each day's
+  /// card (de-slop #15) and a pinned section header. A full-width page-
+  /// colour fill sits behind the card strip so rows never show through
+  /// while it's pinned.
+  private func dayHeader(_ dateLabel: String) -> some View {
+    HStack {
+      Text("FAVORITE").frame(maxWidth: .infinity, alignment: .leading)
+      Text(dateLabel)
+        .font(BoldTheme.Fonts.body(14, weight: .semibold))
+        .tracking(0)
+        .foregroundColor(BoldTheme.Colors.text)
+        .lineLimit(1)
+        .fixedSize()
+      Text("UNDERDOG").frame(maxWidth: .infinity, alignment: .trailing)
+    }
+    .font(BoldTheme.TypeRole.label(10))
+    .tracking(1)
+    .foregroundColor(BoldTheme.Colors.textDim)
+    .padding(.vertical, BoldTheme.Space.s3)
+    .padding(.horizontal, BoldTheme.Space.cardPad)
+    .background(
+      UnevenRoundedRectangle(topLeadingRadius: BoldTheme.Radius.card, topTrailingRadius: BoldTheme.Radius.card, style: .continuous)
+        .fill(BoldTheme.Colors.card)
+    )
+    .padding(.horizontal, BoldTheme.Space.margin)
+    .frame(maxWidth: .infinity)
+    // Page fill reaches a little above the strip (under the opaque bar),
+    // so no sliver of a row can show between bar and pinned header.
+    .background(BoldTheme.Colors.bgPage.padding(.top, -6))
+    .listRowInsets(EdgeInsets())
+    .textCase(nil)
+  }
+
+  // ── Slim pinned bar: "CFB ▾" (sport menu) · "Week 8 ▾" · search ──────
+  @State private var searchOpen = false
+  @FocusState private var searchFocused: Bool
+
+  private var hpOptions: [HpSport] { HpSport.allCases.filter { featureFlags.isVisible($0.flag) } }
+
+  private var topBar: some View {
+    VStack(spacing: BoldTheme.Space.s2) {
+      HStack(spacing: BoldTheme.Space.s2) {
+        Menu {
+          sportButton("CFB", game: .cfb)
+          sportButton("Pro Ball", game: .nfl)
+          sportButton("Pickems", game: .pickems)
+          ForEach(hpOptions) { hp in
+            Button(hp.name) { appState.goToHoopsPucks(hp) }
+          }
+        } label: {
+          HStack(spacing: 4) {
+            Text(viewModel.sport == "cfb" ? "CFB" : "PRO BALL")
+              .font(BoldTheme.Fonts.display(30))
+            Image(systemName: "chevron.down").font(.system(size: 13, weight: .heavy))
+          }
+          .foregroundColor(BoldTheme.Colors.text)
         }
+        .accessibilityLabel("Sport: \(viewModel.sport == "cfb" ? "CFB" : "Pro Ball")")
+
+        if !viewModel.availableWeeks.isEmpty {
+          Menu {
+            ForEach(viewModel.availableWeeks.reversed(), id: \.self) { w in
+              Button {
+                viewModel.selectedWeek = w
+              } label: {
+                if w == viewModel.selectedWeek {
+                  Label("Week \(formatWeekLabel(w))", systemImage: "checkmark")
+                } else {
+                  Text(verbatim: "Week \(formatWeekLabel(w))" + (w == viewModel.currentWeek ? " (this week)" : ""))
+                }
+              }
+            }
+          } label: {
+            HStack(spacing: 4) {
+              Text(verbatim: "Week \(formatWeekLabel(viewModel.selectedWeek))")
+              Image(systemName: "chevron.down").font(.system(size: 11, weight: .heavy))
+            }
+            .font(BoldTheme.Fonts.body(14, weight: .semibold))
+            .foregroundColor(BoldTheme.Colors.text)
+            .padding(.horizontal, 12).padding(.vertical, 6)
+            .background(Capsule().fill(BoldTheme.Colors.card))
+          }
+        }
+
+        Spacer(minLength: 0)
+
+        Button {
+          withAnimation(.easeOut(duration: 0.2)) {
+            searchOpen.toggle()
+            if !searchOpen { searchQuery = "" }
+          }
+          searchFocused = searchOpen
+        } label: {
+          Image(systemName: searchOpen ? "xmark" : "magnifyingglass")
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundColor(BoldTheme.Colors.text)
+            .frame(width: 36, height: 36)
+            .background(Circle().fill(BoldTheme.Colors.card))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(searchOpen ? "Close search" : "Search teams")
+      }
+      if searchOpen {
+        searchField
+          .transition(.opacity.combined(with: .move(edge: .top)))
+      }
+      LiveTickerStrip()
+      pinnedPickBar
+    }
+    .animation(.easeOut(duration: 0.2), value: viewModel.selectedGameId)
+    .padding(.horizontal, BoldTheme.Space.margin)
+    .padding(.top, BoldTheme.Space.s2)
+    .padding(.bottom, 10)
+    // Opaque (round 3): with sticky day headers right under it, a frosted
+    // bar let rows bleed through the band between bar and header.
+    .background(BoldTheme.Colors.bgPage.ignoresSafeArea(edges: .top))
+    .overlay(alignment: .bottom) {
+      Rectangle().fill(BoldTheme.Colors.border).frame(height: 1)
+    }
+  }
+
+  private func sportButton(_ title: String, game: CurrentGame) -> some View {
+    Button {
+      appState.hpSport = nil
+      appState.currentGame = game
+    } label: {
+      if appState.hpSport == nil && appState.currentGame == game {
+        Label(title, systemImage: "checkmark")
+      } else {
+        Text(title)
       }
     }
   }
@@ -848,11 +965,8 @@ struct GamesView: View {
       ?? dayGroups.last?.id
   }
 
-  // Games in one week span multiple calendar days -- grouping into one
-  // Section per day (instead of a single flat list) gives each day its
-  // own floating header as you scroll, matching List's .plain
-  // sticky-header behavior, and makes it visually obvious where one day
-  // ends and the next begins.
+  // Games in one week span multiple calendar days -- each day is its own
+  // flat card with the FAVORITE · day · UNDERDOG header inside it.
   private struct DayGroup: Identifiable {
     let id: String
     let dateLabel: String
@@ -873,86 +987,37 @@ struct GamesView: View {
 
     return order.compactMap { key in
       guard let games = byDay[key], let first = games.first else { return nil }
-      return DayGroup(id: key, dateLabel: dayFormatter.string(from: first.startTime).uppercased(), games: games)
+      return DayGroup(id: key, dateLabel: dayFormatter.string(from: first.startTime), games: games)
     }
-  }
-
-  // Pinned column labels -- List's .plain style floats section headers at
-  // the top on scroll (native UITableView.Style.plain behavior), so this
-  // stays visible above the rows instead of scrolling away with them.
-  private func columnHeader(dateLabel: String) -> some View {
-    VStack(alignment: .leading, spacing: 4) {
-      Text(dateLabel)
-        .font(BoldTheme.Fonts.mono(11, weight: .bold))
-        .tracking(0.6)
-        .foregroundColor(BoldTheme.Colors.text)
-      HStack {
-        Text("FAVORITE")
-        Spacer()
-        Text("UNDERDOG")
-      }
-      .font(BoldTheme.Fonts.mono(11))
-      .tracking(0.9)
-      .foregroundColor(BoldTheme.Colors.textFaint)
-    }
-    // Full-bleed and opaque: a plain List's section header otherwise gets
-    // its own inset + default background, so the pinned header floated as
-    // an inset grey box with white edges while rows scrolled under it. The
-    // gap between days lives here (top padding) instead of a clear footer
-    // that let the list background show through.
-    .padding(.horizontal, 20)
-    .padding(.top, 14)
-    .padding(.bottom, 8)
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .background(BoldTheme.Colors.bgPage)
-    .overlay(alignment: .bottom) {
-      Rectangle().fill(BoldTheme.Colors.border).frame(height: 1).padding(.horizontal, 12)
-    }
-    .listRowInsets(EdgeInsets())
-    .textCase(nil)
   }
 
   var body: some View {
     ZStack {
-      VStack(spacing: 0) {
-        header
-        GameSwitcher()
-          .padding(.horizontal, 20)
-          .padding(.bottom, 10)
-        groupPicker
-        groupModeBanner
-        if viewModel.availableWeeks.count > 1 {
-          WeekPills(weeks: viewModel.availableWeeks, selected: $viewModel.selectedWeek)
-            .padding(.horizontal, 20)
-            .padding(.bottom, 10)
-        }
-        searchField
-        swipeHintBanner
-        if viewModel.selectedWeek < viewModel.currentWeek {
-          pastWeekNote
-        } else {
-          pickedBanner
-            .transition(.opacity.combined(with: .move(edge: .top)))
-        }
-        content
-        if let msg = viewModel.toastMessage {
-          Spacer()
-          Text(msg)
-            .font(BoldTheme.Fonts.body(13))
-            .foregroundColor(textOnGreen)
-            .padding(.horizontal, 12).padding(.vertical, 8)
-            .background(BoldTheme.Colors.green)
-            .clipShape(Capsule())
-            .shadow(radius: 2)
-            .padding(.bottom, 12)
-        }
-      }
+      slate
       // A fresh trigger only fires on a just-now successful pick (see
-      // pickCelebrationTrigger's doc comment) -- this is iOS's fanfare
-      // moment, the equivalent of web's confirmation-sheet celebration,
-      // since the swipe-to-pick gesture here has no separate confirm step.
-      if let trigger = viewModel.pickCelebrationTrigger {
+      // pickCelebrationTrigger's doc comment).
+      // No confetti with Reduce Motion on.
+      if let trigger = viewModel.pickCelebrationTrigger, !reduceMotion {
         ConfettiView(trigger: trigger, count: 50)
+      }
+    }
+    // Toast floats above the tab bar (it sits inside the safe area).
+    .overlay(alignment: .bottom) {
+      if let msg = viewModel.toastMessage {
+        Text(msg)
+          .font(BoldTheme.Fonts.body(14, weight: .semibold))
+          .foregroundColor(textOnGreen)
+          .padding(.horizontal, 16).padding(.vertical, 10)
+          .background(Capsule().fill(BoldTheme.Colors.green))
+          .padding(.bottom, BoldTheme.Space.s3)
+          .transition(.opacity)
+      }
+    }
+    .animation(.easeOut(duration: 0.2), value: viewModel.toastMessage)
+    .onChange(of: viewModel.selectedWeek) {
+      Task {
+        try? await viewModel.loadGames()
+        try? await viewModel.loadExistingPick()
       }
     }
     .background(BoldTheme.Colors.bgPage.ignoresSafeArea())
@@ -995,5 +1060,135 @@ struct GamesView: View {
     .onChange(of: viewModel.activeGroupId) { _, _ in
       Task { try? await viewModel.loadExistingPick() }
     }
+  }
+}
+
+private extension View {
+  /// A full-bleed List row with no background, inset or separator -- for
+  /// the note, banners and spacers that scroll with the slate.
+  func plainListRow() -> some View {
+    self
+      .listRowInsets(EdgeInsets())
+      .listRowBackground(Color.clear)
+      .listRowSeparator(.hidden)
+  }
+}
+
+/// Swipe left on a game to reveal a full-height action panel (the yellow
+/// "Pick {Dog} +N" from the mockup), tap it or swipe all the way to fire.
+/// Custom rather than .swipeActions: on iOS 26 those render as small glass
+/// capsules that can't carry the yellow action or a long label.
+struct SwipeToPickRow<Content: View>: View {
+  struct Action {
+    let label: String
+    let fill: Color
+    let ink: Color
+    let enabled: Bool
+    let run: () -> Void
+    init(label: String, fill: Color, ink: Color, enabled: Bool, run: @escaping () -> Void) {
+      self.label = label; self.fill = fill; self.ink = ink; self.enabled = enabled; self.run = run
+    }
+  }
+
+  let id: UUID
+  @Binding var openId: UUID?
+  let isLast: Bool
+  let action: Action?
+  let onTap: () -> Void
+  @ViewBuilder var content: Content
+
+  /// Live drag; @GestureState resets on its own when the touch ends or is
+  /// cancelled (e.g. the list takes over to scroll), so a row can't get
+  /// stuck half open.
+  /// Axis locks once the finger has moved ~10pt: horizontal only when the
+  /// sideways move clearly beats the vertical one. Vertical/diagonal flicks
+  /// never open, commit or switch a pick.
+  private struct DragState { var axis: Axis?; var x: CGFloat = 0 }
+  @GestureState private var gesture = DragState()
+  private var drag: CGFloat { gesture.x }
+  private let width: CGFloat = 132
+
+  private var isOpen: Bool { openId == id }
+  private var offset: CGFloat {
+    let base: CGFloat = isOpen ? -width : 0
+    return min(0, base + drag)
+  }
+
+  private static func lockAxis(_ t: CGSize) -> Axis {
+    abs(t.width) > abs(t.height) * 2 ? .horizontal : .vertical
+  }
+
+  var body: some View {
+    ZStack(alignment: .trailing) {
+      if let action, offset < 0 {
+        Button {
+          guard action.enabled else { return }
+          close()
+          action.run()
+        } label: {
+          Text(action.label)
+            .font(BoldTheme.Fonts.body(14, weight: .bold))
+            .foregroundColor(action.ink)
+            .multilineTextAlignment(.center)
+            .lineLimit(3)
+            .minimumScaleFactor(0.8)
+            // Wrap inside the panel instead of running past its edge.
+            .frame(width: width - 20)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(width: width)
+            .frame(maxHeight: .infinity)
+            // The panel grows with the drag; the label keeps its own width
+            // so it's never squeezed, and is fully shown once open.
+            .frame(width: max(-offset, width), alignment: .center)
+            .frame(width: -offset, alignment: .leading)
+            .background(action.fill)
+            .clipped()
+        }
+        .buttonStyle(.plain)
+        .accessibilityHidden(true)
+      }
+      // Tap target before the offset, so it slides with the row and
+      // leaves the revealed action panel tappable.
+      content
+        .contentShape(Rectangle())
+        .onTapGesture {
+          if isOpen { close() } else { onTap() }
+        }
+        .offset(x: offset)
+    }
+    .clipShape(GameRowView.cardShape(isLastInDay: isLast))
+    .simultaneousGesture(
+      DragGesture(minimumDistance: 10)
+        .updating($gesture) { v, state, _ in
+          if state.axis == nil { state.axis = Self.lockAxis(v.translation) }
+          guard action != nil, state.axis == .horizontal else { return }
+          state.x = v.translation.width
+        }
+        .onEnded { v in
+          // Decide on the real translation, not the predicted flick end.
+          guard let action, Self.lockAxis(v.translation) == .horizontal else { return }
+          let end = (isOpen ? -width : 0) + v.translation.width
+          withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+            if action.enabled && end < -width * 1.9 {
+              // A deliberate full swipe fires the action, then the row
+              // snaps shut and shows its normal picked state.
+              openId = nil
+              action.run()
+            } else if end < -width / 2 {
+              openId = id
+            } else if isOpen {
+              openId = nil
+            }
+          }
+        }
+    )
+    .animation(.spring(response: 0.3, dampingFraction: 0.85), value: openId)
+    .accessibilityAction(named: Text(action?.label ?? "")) {
+      if let action, action.enabled { action.run() }
+    }
+  }
+
+  private func close() {
+    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { openId = nil }
   }
 }

@@ -1,5 +1,6 @@
 import XCTest
 import SwiftUI
+import Supabase
 @testable import Stupid_Underdog_Pick
 
 /// Renders the signed-out sign-in screens in a real UIWindow inside the test
@@ -54,8 +55,20 @@ final class AuthScreenSnapshotTests: XCTestCase {
     try await snapshot(AuthView(initialMode: .forgot), name: "09-forgot-password")
   }
 
-  private func snapshot<V: View>(_ view: V, name: String) async throws {
-    let client = try SupabaseClientProvider.makeClient()
+  func testMagicLink() async throws {
+    try await snapshot(MagicLinkView(), name: "11-magic-link")
+  }
+
+  /// Onboarding step 1 ("What do you want to play?"). Its data loads point
+  /// at a dead local address, so nothing touches the network and the step
+  /// renders from local state only.
+  func testOnboardingStepOne() async throws {
+    let offline = SupabaseClient(supabaseURL: URL(string: "http://127.0.0.1:9")!, supabaseKey: "offline-test")
+    try await snapshot(OnboardingFlowView(client: offline, isPresented: .constant(true)), name: "12-onboarding-step-1", client: offline)
+  }
+
+  private func snapshot<V: View>(_ view: V, name: String, client: SupabaseClient? = nil) async throws {
+    let client = try client ?? SupabaseClientProvider.makeClient()
     let root = view
       .environmentObject(AppState())
       .environment(\.supabaseClient, client)

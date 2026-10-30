@@ -48,13 +48,13 @@ struct PickHistoryView: View {
     Group {
       if let errorText {
         VStack(spacing: 8) {
-          Text("Error loading history").font(BoldTheme.Fonts.display(24)).foregroundColor(BoldTheme.Colors.text)
+          Text("Couldn't load your history").font(BoldTheme.Fonts.body(20, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
           Text(errorText).foregroundColor(BoldTheme.Colors.textDim).multilineTextAlignment(.center)
           Button("Retry") { Task { await load() } }
-            .foregroundColor(BoldTheme.Colors.goldDeep)
+            .foregroundColor(BoldTheme.Colors.text)
         }.padding()
       } else if isLoading && picks.isEmpty {
-        ProgressView("Loading…").tint(BoldTheme.Colors.gold).foregroundColor(BoldTheme.Colors.textDim)
+        ProgressView("Loading…").tint(BoldTheme.Colors.text).foregroundColor(BoldTheme.Colors.textDim)
       } else if picks.isEmpty {
         Text("No pick history yet.").foregroundColor(BoldTheme.Colors.textDim)
       } else {
@@ -72,8 +72,8 @@ struct PickHistoryView: View {
                         .font(BoldTheme.Fonts.body(13, weight: .semibold))
                         .padding(.horizontal, 16)
                         .padding(.vertical, 8)
-                        .background(active ? BoldTheme.Colors.gold : BoldTheme.Colors.text.opacity(0.07))
-                        .foregroundColor(active ? BoldTheme.Colors.text : BoldTheme.Colors.textDim)
+                        .background(active ? BoldTheme.Colors.text : BoldTheme.Colors.track)
+                        .foregroundColor(active ? BoldTheme.Colors.card : BoldTheme.Colors.textDim)
                         .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
@@ -87,12 +87,12 @@ struct PickHistoryView: View {
 
           Section {
             HStack {
-              Text(verbatim: "\(selectedSeason ?? 0) Summary")
-                .font(BoldTheme.Fonts.mono(11))
-                .foregroundColor(BoldTheme.Colors.textFaint)
+              Text(verbatim: "\(selectedSeason ?? 0) season")
+                .font(BoldTheme.Fonts.body(14, weight: .semibold))
+                .foregroundColor(BoldTheme.Colors.textDim)
               Spacer()
-              Text(verbatim: "\(seasonSummary.wins)W-\(seasonSummary.losses)L")
-                .font(BoldTheme.Fonts.display(20))
+              Text(verbatim: "\(seasonSummary.wins)–\(seasonSummary.losses)")
+                .font(BoldTheme.TypeRole.tableNumber(16))
                 .foregroundColor(BoldTheme.Colors.text)
               if seasonSummary.pending > 0 {
                 Text(verbatim: "· \(seasonSummary.pending) pending")
@@ -102,7 +102,7 @@ struct PickHistoryView: View {
             }
             .padding(.vertical, 4)
           }
-          .listRowBackground(BoldTheme.Colors.text.opacity(0.04))
+          .listRowBackground(Color.clear)
           .listRowSeparator(.hidden)
 
           ForEach(
@@ -115,15 +115,20 @@ struct PickHistoryView: View {
                   GameRowView(
                     game: game,
                     logoFor: { id in id.flatMap { logoMap[$0] } },
-                    isSelected: true
+                    isSelected: true,
+                    isFirstInDay: true,
+                    isLastInDay: true
                   )
+                  .clipShape(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous))
+                  .listRowInsets(EdgeInsets(top: 0, leading: BoldTheme.Space.margin, bottom: BoldTheme.Space.cardGap, trailing: BoldTheme.Space.margin))
+                  .listRowBackground(Color.clear)
+                  .listRowSeparator(.hidden)
                 }
               }
             } header: {
-              Text(verbatim: "\(key.sport == "nfl" ? "PRO BALL" : "CFB") · WEEK \(formatWeekLabel(key.week))")
-                .font(BoldTheme.Fonts.mono(11))
-                .tracking(0.9)
-                .foregroundColor(BoldTheme.Colors.textFaint)
+              Text(verbatim: "\(key.sport == "nfl" ? "Pro Ball" : "CFB") · Week \(formatWeekLabel(key.week))")
+                .font(BoldTheme.Fonts.body(14, weight: .semibold))
+                .foregroundColor(BoldTheme.Colors.text)
             }
           }
         }
@@ -133,7 +138,7 @@ struct PickHistoryView: View {
       }
     }
     .background(BoldTheme.Colors.bgPage.ignoresSafeArea())
-    .navigationTitle("Pick History")
+    .navigationTitle("Pick history")
     .navigationBarTitleDisplayMode(.inline)
     .toolbarBackground(BoldTheme.Colors.bgPage, for: .navigationBar)
     .toolbarBackground(.visible, for: .navigationBar)
@@ -157,16 +162,12 @@ struct PickHistoryView: View {
       }
 
       // v_games_named, not the raw games table -- see Game.CodingKeys for why.
-      let res = try await client
-        .from("v_games_named")
-        .select("""
-          id, season, week, status, home_name, away_name, home_team_id, away_team_id, favorite_team_id, start_time, betting_line, latest_spread, picks_locked, home_points, away_points, sport
-        """)
-        .in("id", values: gameIds)
-        .execute()
+      let data = try await withShortNameColumns(GamesService.baseColumns) { cols in
+        try await client.from("v_games_named").select(cols).in("id", values: gameIds).execute().data
+      }
       let dec = JSONDecoder()
       dec.dateDecodingStrategy = .iso8601withFallback
-      let games = try dec.decode([Game].self, from: res.data)
+      let games = try dec.decode([Game].self, from: data)
 
       struct T: Decodable { let id: UUID; let logo_url: String? }
       let teamRes = try await client.from("teams").select("id, logo_url").execute()

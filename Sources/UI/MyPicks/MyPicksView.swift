@@ -3,7 +3,7 @@ import Supabase
 
 // My Picks, one section per contest (CFB / Pro Ball / Pickems):
 //   - "This week" hero card: current pick + live status + pick/change CTA
-//   - season stat strip (record, points banked, hit rate / accuracy)
+//   - season stat strip (record, points won, hit rate / accuracy)
 //   - week-by-week history timeline
 // Replaces the old flat ledger that mixed every sport's Underdog picks in
 // one list and never showed Pickems history at all.
@@ -16,8 +16,9 @@ struct UnderdogWeekEntry: Identifiable {
   var id: UUID { pick.id }
 
   var pickedIsHome: Bool { pick.picked_team_id == game.homeTeamId }
-  var pickedName: String { (pickedIsHome ? game.homeTeam : game.awayTeam) ?? "Your pick" }
-  var opponentName: String { (pickedIsHome ? game.awayTeam : game.homeTeam) ?? "Opponent" }
+  /// Short names where the long ones would cut off (de-slop #13).
+  var pickedName: String { (pickedIsHome ? game.homeDisplay : game.awayDisplay) ?? "Your pick" }
+  var opponentName: String { (pickedIsHome ? game.awayDisplay : game.homeDisplay) ?? "Opponent" }
   var spread: Double? { pick.winPoints(on: game) }
   var isLocked: Bool { pick.locked_spread != nil }
   var lineNote: String? { pick.lineNote(on: game) }
@@ -129,12 +130,11 @@ final class MyPicksViewModel: ObservableObject {
     var gamesById: [UUID: Game] = [:]
     let ids = Array(Set(picks.map(\.game_id)))
     if !ids.isEmpty {
-      let gRes = try await client
-        .from("v_games_named")
-        .select("id, season, week, status, home_name, away_name, home_team_id, away_team_id, favorite_team_id, start_time, betting_line, latest_spread, picks_locked, home_points, away_points, sport")
-        .in("id", values: ids)
-        .execute()
-      let games = try dateDecoder.decode([Game].self, from: gRes.data)
+      // Short team names when the view has them (falls back to full).
+      let gData = try await withShortNameColumns(GamesService.baseColumns) { cols in
+        try await client.from("v_games_named").select(cols).in("id", values: ids).execute().data
+      }
+      let games = try dateDecoder.decode([Game].self, from: gData)
       gamesById = Dictionary(uniqueKeysWithValues: games.map { ($0.id, $0) })
     }
     underdog = picks.compactMap { p in gamesById[p.game_id].map { UnderdogWeekEntry(pick: p, game: $0) } }
@@ -278,17 +278,16 @@ struct MyPicksView: View {
     NavigationStack {
       ZStack {
         BoldTheme.Colors.bgPage.ignoresSafeArea()
-        BoldTheme.AmbientBlobs().ignoresSafeArea()
 
         ScrollView {
-          VStack(alignment: .leading, spacing: 18) {
+          VStack(alignment: .leading, spacing: BoldTheme.Space.cardGap) {
             header
             sectionToggle
 
             if let e = viewModel.errorText {
               errorState(e)
             } else if !viewModel.loaded {
-              ProgressView().tint(BoldTheme.Colors.goldDeep)
+              ProgressView().tint(BoldTheme.Colors.text)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 60)
             } else if section == .pickems {
@@ -297,13 +296,19 @@ struct MyPicksView: View {
               underdogSection
             }
           }
-          .padding(.horizontal, 18)
-          .padding(.top, 8)
-          .padding(.bottom, 32)
+          .padding(.horizontal, BoldTheme.Space.margin)
+          .padding(.top, BoldTheme.Space.s2)
+          .padding(.bottom, BoldTheme.Space.s6)
         }
         .refreshable { await viewModel.load() }
       }
       .navigationBarHidden(true)
+      // No nav bar here: page-coloured strip behind the status bar so
+      // content doesn't scroll up under the clock.
+      .safeAreaInset(edge: .top, spacing: 0) {
+        Color.clear.frame(height: 0)
+          .background(BoldTheme.Colors.bgPage.opacity(0.94), ignoresSafeAreaEdges: .top)
+      }
     }
     .task {
       if let client {
@@ -316,9 +321,8 @@ struct MyPicksView: View {
 
   private var header: some View {
     HStack(alignment: .firstTextBaseline) {
-      Text("MY PICKS")
-        .font(BoldTheme.Fonts.display(26))
-        .tracking(0.6)
+      Text("My picks")
+        .font(BoldTheme.Fonts.body(28, weight: .bold))
         .foregroundColor(BoldTheme.Colors.text)
       Spacer()
       if availableSeasons.count > 1 {
@@ -334,9 +338,7 @@ struct MyPicksView: View {
           .font(BoldTheme.Fonts.body(13, weight: .semibold))
           .foregroundColor(BoldTheme.Colors.text)
           .padding(.horizontal, 12).padding(.vertical, 6)
-          .background(BoldTheme.Colors.glassStrong)
-          .overlay(Capsule().strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
-          .clipShape(Capsule())
+          .background(Capsule().fill(BoldTheme.Colors.card))
         }
       }
     }
@@ -346,11 +348,10 @@ struct MyPicksView: View {
 
   private func errorState(_ message: String) -> some View {
     VStack(spacing: 8) {
-      Text("Couldn't load your picks").font(BoldTheme.Fonts.display(22)).foregroundColor(BoldTheme.Colors.text)
+      Text("Couldn't load your picks").font(BoldTheme.Fonts.body(20, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
       Text(message).font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim).multilineTextAlignment(.center)
-      Button("Retry") { Task { await viewModel.load() } }
-        .font(BoldTheme.Fonts.body(14, weight: .semibold))
-        .foregroundColor(BoldTheme.Colors.goldDeep)
+      Button("Try again") { Task { await viewModel.load() } }
+        .buttonStyle(SupSecondaryButtonStyle(fullWidth: false))
     }
     .frame(maxWidth: .infinity)
     .padding(.top, 40)
@@ -363,7 +364,7 @@ struct MyPicksView: View {
       underdogThisWeek(ctx: ctx)
     }
     underdogStats
-    sectionLabel("HISTORY")
+    sectionLabel("History")
     if historyEntries.isEmpty {
       emptyHistory("No past \(section == .nfl ? "Pro Ball" : "CFB") picks \(season.map { "in \($0)" } ?? "yet").")
     } else {
@@ -375,10 +376,7 @@ struct MyPicksView: View {
           }
         }
       }
-      .background(BoldTheme.Colors.glassStrong)
-      .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(BoldTheme.Colors.glassBorder, lineWidth: 1))
-      .clipShape(RoundedRectangle(cornerRadius: 18))
-      .shadow(color: Color.black.opacity(0.06), radius: 12, y: 6)
+      .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
     }
   }
 
@@ -387,9 +385,8 @@ struct MyPicksView: View {
     let status = underdogStatus(entry)
     return VStack(alignment: .leading, spacing: 14) {
       HStack {
-        Text(verbatim: "\(section == .nfl ? "PRO BALL" : "CFB") · WEEK \(formatWeekLabel(ctx.week))")
-          .font(BoldTheme.Fonts.mono(11, weight: .semibold))
-          .tracking(0.8)
+        Text(verbatim: "\(section == .nfl ? "Pro Ball" : "CFB") · Week \(formatWeekLabel(ctx.week)) · underdog pick")
+          .font(BoldTheme.Fonts.body(13, weight: .semibold))
           .foregroundColor(BoldTheme.Colors.textDim)
         Spacer()
         statusChip(status)
@@ -401,14 +398,13 @@ struct MyPicksView: View {
           VStack(alignment: .leading, spacing: 3) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
               Text(entry.pickedName)
-                .font(BoldTheme.Fonts.body(20, weight: .bold))
+                .font(BoldTheme.TypeRole.teamName(30))
                 .foregroundColor(BoldTheme.Colors.text)
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
+                .fixedSize(horizontal: false, vertical: true)
               if let sp = entry.spread {
                 Text(verbatim: "+\(formatNumber(sp))")
-                  .font(BoldTheme.Fonts.mono(16, weight: .semibold))
-                  .foregroundColor(BoldTheme.Colors.goldDeep)
+                  .font(BoldTheme.TypeRole.line(30))
+                  .foregroundColor(BoldTheme.Role.line)
                 if entry.isLocked {
                   Image(systemName: "lock.fill")
                     .font(.system(size: 10, weight: .semibold))
@@ -418,42 +414,39 @@ struct MyPicksView: View {
               }
             }
             Text(verbatim: "vs \(entry.opponentName) · \(entry.scoreLine ?? kickoffText(entry.game.startTime))")
-              .font(BoldTheme.Fonts.body(13))
+              .font(BoldTheme.Fonts.body(14))
               .foregroundColor(BoldTheme.Colors.textDim)
-              .lineLimit(1)
+              .fixedSize(horizontal: false, vertical: true)
             if let note = entry.lineNote {
               Text(note)
-                .font(BoldTheme.Fonts.body(12, weight: .semibold))
-                .foregroundColor(BoldTheme.Colors.goldDeep)
-                .lineLimit(2)
+                .font(BoldTheme.Fonts.body(13, weight: .semibold))
+                .foregroundColor(BoldTheme.Colors.text)
+                .fixedSize(horizontal: false, vertical: true)
             }
           }
           Spacer(minLength: 0)
         }
       } else {
-        Text(status == .missed ? "Every game has kicked off. Catch the next one." : "Pick one underdog. If they win outright, you bank the spread.")
+        Text(status == .missed ? "Every game has kicked off. Catch the next one." : "Pick one underdog. If they win outright, you get points equal to the spread.")
           .font(BoldTheme.Fonts.body(14))
           .foregroundColor(BoldTheme.Colors.textDim)
       }
 
       if status != .missed {
-        Button { appState.goToUnderdog(sport: sport) } label: {
-          Text(entry == nil ? (viewModel.underdogOpen[sport] == true ? "Pick now →" : "Make pick →") : (status == .picked ? "Change pick →" : "View games →"))
-            .font(BoldTheme.Fonts.body(14, weight: .bold))
-            .foregroundColor(BoldTheme.Colors.text)
-            .frame(maxWidth: .infinity)
-            .frame(height: 44)
-            .background(entry == nil || status == .picked ? BoldTheme.Colors.gold : BoldTheme.Colors.track)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+        // Yellow only when there's a pick to make (the screen's one
+        // action); otherwise the outline secondary.
+        if entry == nil {
+          Button("Make your pick") { appState.goToUnderdog(sport: sport) }
+            .buttonStyle(SupPrimaryButtonStyle())
+        } else {
+          Button(status == .picked ? "Change pick" : "See games") { appState.goToUnderdog(sport: sport) }
+            .buttonStyle(SupSecondaryButtonStyle())
         }
-        .buttonStyle(.plain)
       }
     }
-    .padding(18)
-    .background(BoldTheme.Colors.glassStrong)
-    .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(BoldTheme.Colors.glassBorder, lineWidth: 1))
-    .clipShape(RoundedRectangle(cornerRadius: 20))
-    .shadow(color: Color.black.opacity(0.08), radius: 16, y: 8)
+    .padding(BoldTheme.Space.cardPad)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
   }
 
   private var underdogStats: some View {
@@ -462,19 +455,15 @@ struct MyPicksView: View {
     let losses = decided.count - wins
     let points = sportEntries.reduce(0) { $0 + $1.points }
     let rate = decided.isEmpty ? "–" : "\(Int((Double(wins) / Double(decided.count) * 100).rounded()))%"
-    return HStack(spacing: 10) {
-      statTile("RECORD", "\(wins)–\(losses)")
-      statTile("POINTS", points > 0 ? "+\(formatNumber(points))" : "0", highlight: points > 0)
-      statTile("HIT RATE", rate)
-    }
+    return statsCard([("\(wins)–\(losses)", "record"), (formatNumber(points), "points"), (rate, "hit rate")])
   }
 
   private func underdogHistoryRow(_ entry: UnderdogWeekEntry) -> some View {
     HStack(spacing: 12) {
       VStack(spacing: 0) {
-        Text("WK").font(BoldTheme.Fonts.mono(9, weight: .semibold)).foregroundColor(BoldTheme.Colors.textFaint)
+        Text("Wk").font(BoldTheme.Fonts.body(11, weight: .semibold)).foregroundColor(BoldTheme.Colors.textDim)
         Text(verbatim: formatWeekLabel(entry.pick.week))
-          .font(BoldTheme.Fonts.mono(15, weight: .semibold))
+          .font(BoldTheme.TypeRole.tableNumber(15))
           .foregroundColor(BoldTheme.Colors.text)
       }
       .frame(width: 34)
@@ -483,20 +472,16 @@ struct MyPicksView: View {
 
       VStack(alignment: .leading, spacing: 2) {
         HStack(spacing: 6) {
-          Text(entry.pickedName)
-            .font(BoldTheme.Fonts.body(14, weight: .semibold))
+          (Text(entry.pickedName)
+            + Text(verbatim: entry.spread.map { " +\(formatNumber($0))" } ?? "").bold())
+            .font(BoldTheme.Fonts.body(15, weight: .semibold))
             .foregroundColor(BoldTheme.Colors.text)
-            .lineLimit(1)
-          if let sp = entry.spread {
-            Text(verbatim: "+\(formatNumber(sp))")
-              .font(BoldTheme.Fonts.mono(12))
-              .foregroundColor(BoldTheme.Colors.textDim)
-          }
+            .fixedSize(horizontal: false, vertical: true)
         }
         Text(verbatim: "vs \(entry.opponentName)")
-          .font(BoldTheme.Fonts.body(12))
-          .foregroundColor(BoldTheme.Colors.textFaint)
-          .lineLimit(1)
+          .font(BoldTheme.Fonts.body(13))
+          .foregroundColor(BoldTheme.Colors.textDim)
+          .fixedSize(horizontal: false, vertical: true)
       }
 
       Spacer(minLength: 6)
@@ -504,8 +489,8 @@ struct MyPicksView: View {
         resultBadge(entry)
         if let score = entry.scoreLine {
           Text(score)
-            .font(BoldTheme.Fonts.mono(11))
-            .foregroundColor(BoldTheme.Colors.textFaint)
+            .font(BoldTheme.TypeRole.tableNumber(12, weight: .regular))
+            .foregroundColor(BoldTheme.Colors.textDim)
         }
       }
     }
@@ -515,26 +500,9 @@ struct MyPicksView: View {
 
   @ViewBuilder private func resultBadge(_ entry: UnderdogWeekEntry) -> some View {
     switch entry.outcome {
-    case .win:
-      Text(verbatim: "+\(formatNumber(entry.points))")
-        .font(BoldTheme.Fonts.mono(13, weight: .semibold))
-        .foregroundColor(BoldTheme.Colors.text)
-        .padding(.horizontal, 10).padding(.vertical, 5)
-        .background(BoldTheme.Colors.gold)
-        .clipShape(Capsule())
-    case .loss:
-      Text("MISS")
-        .font(BoldTheme.Fonts.mono(11, weight: .semibold))
-        .tracking(0.5)
-        .foregroundColor(BoldTheme.Colors.textDim)
-        .padding(.horizontal, 10).padding(.vertical, 5)
-        .background(BoldTheme.Colors.track)
-        .clipShape(Capsule())
-    case .pending:
-      Text(entry.isLive ? "LIVE" : "PENDING")
-        .font(BoldTheme.Fonts.mono(11, weight: .semibold))
-        .tracking(0.5)
-        .foregroundColor(entry.isLive ? Color(hex: 0xC6402A) : BoldTheme.Colors.textFaint)
+    case .win: SupPill(text: "Won +\(formatNumber(entry.points))", kind: .green)
+    case .loss: SupPill(text: "Lost", kind: .gray)
+    case .pending: SupPill(text: entry.isLive ? "Live" : "Pending", kind: .gray)
     }
   }
 
@@ -545,7 +513,7 @@ struct MyPicksView: View {
       pickemsThisWeek(ctx: ctx)
     }
     pickemsStats
-    sectionLabel("HISTORY")
+    sectionLabel("History")
     if pickemsHistory.isEmpty {
       emptyHistory("No past Pickems weeks \(season.map { "in \($0)" } ?? "yet").")
     } else {
@@ -557,10 +525,7 @@ struct MyPicksView: View {
           }
         }
       }
-      .background(BoldTheme.Colors.glassStrong)
-      .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(BoldTheme.Colors.glassBorder, lineWidth: 1))
-      .clipShape(RoundedRectangle(cornerRadius: 18))
-      .shadow(color: Color.black.opacity(0.06), radius: 12, y: 6)
+      .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
     }
   }
 
@@ -580,9 +545,8 @@ struct MyPicksView: View {
       : picked == 0 ? .missed : .partial(picked, total)
     return VStack(alignment: .leading, spacing: 14) {
       HStack {
-        Text(verbatim: "PICKEMS · WEEK \(formatWeekLabel(ctx.week))")
-          .font(BoldTheme.Fonts.mono(11, weight: .semibold))
-          .tracking(0.8)
+        Text(verbatim: "Pickems · Week \(formatWeekLabel(ctx.week))")
+          .font(BoldTheme.Fonts.body(13, weight: .semibold))
           .foregroundColor(BoldTheme.Colors.textDim)
         Spacer()
         statusChip(status)
@@ -605,7 +569,7 @@ struct MyPicksView: View {
         if picked > 0 {
           HStack(spacing: 14) {
             legendDot(BoldTheme.Colors.green, "\(correct) correct")
-            legendDot(Color(hex: 0xC6402A), "\(wrong) wrong")
+            legendDot(BoldTheme.Role.lost, "\(wrong) wrong")
             legendDot(BoldTheme.Colors.textFaint, "\(viewModel.pickemsThisWeekUnfinished) to play")
           }
         } else if open > 0 {
@@ -616,23 +580,18 @@ struct MyPicksView: View {
       }
 
       if open > 0 {
-        Button { appState.goToPickems() } label: {
-          Text(picked == 0 ? "Pick now →" : (openUnpicked > 0 ? "Finish your picks →" : "Change picks →"))
-            .font(BoldTheme.Fonts.body(14, weight: .bold))
-            .foregroundColor(.white)
-            .frame(maxWidth: .infinity)
-            .frame(height: 44)
-            .background(BoldTheme.Colors.pickemsAccentDeep)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
+        if openUnpicked > 0 {
+          Button(picked == 0 ? "Make your picks" : "Finish your picks") { appState.goToPickems() }
+            .buttonStyle(SupPrimaryButtonStyle())
+        } else {
+          Button("Change picks") { appState.goToPickems() }
+            .buttonStyle(SupSecondaryButtonStyle())
         }
-        .buttonStyle(.plain)
       }
     }
-    .padding(18)
-    .background(BoldTheme.Colors.glassStrong)
-    .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(BoldTheme.Colors.glassBorder, lineWidth: 1))
-    .clipShape(RoundedRectangle(cornerRadius: 20))
-    .shadow(color: Color.black.opacity(0.08), radius: 16, y: 8)
+    .padding(BoldTheme.Space.cardPad)
+    .frame(maxWidth: .infinity, alignment: .leading)
+    .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
   }
 
   private var pickemsStats: some View {
@@ -640,19 +599,15 @@ struct MyPicksView: View {
     let correct = weeks.reduce(0) { $0 + $1.correct }
     let decided = weeks.reduce(0) { $0 + $1.decided }
     let acc = decided == 0 ? "–" : "\(Int((Double(correct) / Double(decided) * 100).rounded()))%"
-    return HStack(spacing: 10) {
-      statTile("CORRECT", "\(correct)", highlight: correct > 0, pickems: true)
-      statTile("ACCURACY", acc)
-      statTile("WEEKS", "\(weeks.count)")
-    }
+    return statsCard([("\(correct)", "correct"), (acc, "accuracy"), ("\(weeks.count)", "weeks")])
   }
 
   private func pickemsHistoryRow(_ week: PickemsWeekEntry) -> some View {
     HStack(spacing: 12) {
       VStack(spacing: 0) {
-        Text("WK").font(BoldTheme.Fonts.mono(9, weight: .semibold)).foregroundColor(BoldTheme.Colors.textFaint)
+        Text("Wk").font(BoldTheme.Fonts.body(11, weight: .semibold)).foregroundColor(BoldTheme.Colors.textDim)
         Text(verbatim: formatWeekLabel(week.week))
-          .font(BoldTheme.Fonts.mono(15, weight: .semibold))
+          .font(BoldTheme.TypeRole.tableNumber(15))
           .foregroundColor(BoldTheme.Colors.text)
       }
       .frame(width: 34)
@@ -665,15 +620,15 @@ struct MyPicksView: View {
           Spacer()
           if week.decided > 0 {
             Text(verbatim: "\(Int((Double(week.correct) / Double(week.decided) * 100).rounded()))%")
-              .font(BoldTheme.Fonts.mono(13, weight: .semibold))
-              .foregroundColor(BoldTheme.Colors.pickemsAccent)
+              .font(BoldTheme.TypeRole.tableNumber(13))
+              .foregroundColor(BoldTheme.Colors.text)
           }
         }
         progressBar(value: week.correct, total: max(week.decided, 1), color: BoldTheme.Colors.green)
         if week.picked > week.decided {
           Text(verbatim: "\(week.picked - week.decided) still to play")
-            .font(BoldTheme.Fonts.body(11))
-            .foregroundColor(BoldTheme.Colors.textFaint)
+            .font(BoldTheme.Fonts.body(12))
+            .foregroundColor(BoldTheme.Colors.textDim)
         }
       }
     }
@@ -699,55 +654,45 @@ struct MyPicksView: View {
   }
 
   @ViewBuilder private func statusChip(_ status: PickStatus) -> some View {
-    let (text, fg, bg): (String, Color, Color) = {
-      switch status {
-      case .none: return ("", .clear, .clear)
-      case .pickNow: return ("No pick yet", BoldTheme.Colors.text, BoldTheme.Colors.gold)
-      case .picked: return ("Picked ✓", BoldTheme.Colors.green, BoldTheme.Colors.green.opacity(0.13))
-      case .live: return ("Live", Color(hex: 0xC6402A), Color(hex: 0xC6402A).opacity(0.12))
-      case .won: return ("Won", BoldTheme.Colors.text, BoldTheme.Colors.gold)
-      case .lost: return ("Lost", BoldTheme.Colors.textDim, BoldTheme.Colors.track)
-      case .missed: return ("Missed", BoldTheme.Colors.textDim, BoldTheme.Colors.track)
-      case let .partial(p, t): return ("\(p) of \(t)", BoldTheme.Colors.textDim, BoldTheme.Colors.track)
-      }
-    }()
-    if status != .none {
-      Text(text)
-        .font(BoldTheme.Fonts.body(12, weight: .bold))
-        .foregroundColor(fg)
-        .padding(.horizontal, 10).padding(.vertical, 4)
-        .background(bg)
-        .clipShape(Capsule())
+    switch status {
+    case .none: EmptyView()
+    case .pickNow: SupPill(text: "No pick yet", kind: .gray)
+    case .picked: SupPill(text: "Picked", kind: .green)
+    case .live: SupPill(text: "Live", kind: .gray)
+    case .won: SupPill(text: "Won", kind: .green)
+    case .lost: SupPill(text: "Lost", kind: .gray)
+    case .missed: SupPill(text: "Missed", kind: .gray)
+    case let .partial(p, t): SupPill(text: "\(p) of \(t)", kind: .gray)
     }
   }
 
-  private func statTile(_ label: String, _ value: String, highlight: Bool = false, pickems: Bool = false) -> some View {
-    VStack(alignment: .leading, spacing: 4) {
-      Text(label)
-        .font(BoldTheme.Fonts.mono(10, weight: .semibold))
-        .tracking(0.8)
-        .foregroundColor(BoldTheme.Colors.textFaint)
-      Text(value)
-        .font(BoldTheme.Fonts.display(24))
-        .foregroundColor(highlight ? (pickems ? BoldTheme.Colors.pickemsAccent : BoldTheme.Colors.goldDeep) : BoldTheme.Colors.text)
-        .lineLimit(1)
-        .minimumScaleFactor(0.7)
+  /// Season totals as one flat card with three numbers (not three tiles).
+  private func statsCard(_ stats: [(value: String, label: String)]) -> some View {
+    HStack(alignment: .top, spacing: BoldTheme.Space.s2) {
+      ForEach(Array(stats.enumerated()), id: \.offset) { _, st in
+        VStack(alignment: .leading, spacing: 2) {
+          Text(verbatim: st.value)
+            .font(BoldTheme.Fonts.display(30))
+            .foregroundColor(BoldTheme.Colors.text)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+          Text(verbatim: st.label)
+            .font(BoldTheme.Fonts.body(13))
+            .foregroundColor(BoldTheme.Colors.textDim)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+      }
     }
-    .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(.horizontal, 14)
-    .padding(.vertical, 12)
-    .background(BoldTheme.Colors.glassStrong)
-    .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(BoldTheme.Colors.glassBorder, lineWidth: 1))
-    .clipShape(RoundedRectangle(cornerRadius: 14))
+    .padding(BoldTheme.Space.cardPad)
+    .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
   }
 
   private func sectionLabel(_ text: String) -> some View {
     Text(text)
-      .font(BoldTheme.Fonts.mono(11, weight: .semibold))
-      .tracking(0.9)
-      .foregroundColor(BoldTheme.Colors.textFaint)
-      .padding(.top, 4)
-      .padding(.bottom, -8)
+      .font(BoldTheme.Fonts.body(16, weight: .bold))
+      .foregroundColor(BoldTheme.Colors.text)
+      .padding(.top, BoldTheme.Space.s3)
+      .padding(.bottom, -4)
   }
 
   private func emptyHistory(_ text: String) -> some View {
@@ -755,9 +700,8 @@ struct MyPicksView: View {
       .font(BoldTheme.Fonts.body(13))
       .foregroundColor(BoldTheme.Colors.textDim)
       .frame(maxWidth: .infinity)
-      .padding(.vertical, 24)
-      .background(BoldTheme.Colors.surface)
-      .clipShape(RoundedRectangle(cornerRadius: 16))
+      .padding(.vertical, BoldTheme.Space.s5)
+      .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
   }
 
   private func progressBar(value: Int, total: Int, color: Color) -> some View {

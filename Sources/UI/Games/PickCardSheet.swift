@@ -3,8 +3,9 @@ import Supabase
 
 /// The pick card ("game card") for CFB and Pro Ball -- native port of the
 /// web's BoldSheetContent in src/pages/IndexBold.tsx. Kickoff, the two teams
-/// with logos level (favorite left, underdog right, VS between), the "you
-/// bank +N" box and a big LOCK IN button. Pro members also get each team's
+/// side by side (favorite left, underdog right), the "If X wins, you get N
+/// points" line and the yellow "Lock in X · +N" button. The sheet is as
+/// tall as its content (de-slop #23). Pro members also get each team's
 /// LAST 3 and where-to-watch chips. The pick itself still goes through
 /// GamesViewModel.pickUnderdog / clearPickForWeek (same server calls).
 struct PickCardSheet: View {
@@ -59,8 +60,12 @@ struct PickCardSheet: View {
   }
 
   private var homeIsDog: Bool { shown.derivedUnderdogTeamId != nil && shown.derivedUnderdogTeamId == shown.homeTeamId }
+  /// Full names -- used for the recent-form lookup's name fallback.
   private var favName: String { homeIsDog ? (shown.awayTeam ?? "Away") : (shown.homeTeam ?? "Home") }
   private var dogName: String { homeIsDog ? (shown.homeTeam ?? "Home") : (shown.awayTeam ?? "Away") }
+  /// What the card shows: the short name when the long one would cut off.
+  private var favLabel: String { homeIsDog ? (shown.awayDisplay ?? "Away") : (shown.homeDisplay ?? "Home") }
+  private var dogLabel: String { homeIsDog ? (shown.homeDisplay ?? "Home") : (shown.awayDisplay ?? "Away") }
   private var favId: UUID? { homeIsDog ? shown.awayTeamId : shown.homeTeamId }
   private var dogId: UUID? { homeIsDog ? shown.homeTeamId : shown.awayTeamId }
   private var spread: String? { shown.underdogSpread.map(jsNumber) }
@@ -68,70 +73,64 @@ struct PickCardSheet: View {
   private var kickoffText: String {
     let f = DateFormatter()
     f.dateFormat = "EEE, MMM d · h:mm a"
-    return f.string(from: shown.startTime).uppercased()
+    return f.string(from: shown.startTime)
+  }
+
+  @State private var contentHeight: CGFloat = 460
+
+  private var shownLocked: Bool {
+    shown.picksLocked == true || shown.startTime <= Date() || (shown.status != nil && shown.status != "scheduled")
   }
 
   var body: some View {
     ScrollView {
-      VStack(alignment: .leading, spacing: 0) {
+      VStack(spacing: BoldTheme.Space.s4) {
         Text(kickoffText)
-          .font(BoldTheme.Fonts.display(14))
-          .tracking(2.6)
-          .foregroundColor(BoldTheme.Colors.goldDeep)
+          .font(BoldTheme.Fonts.body(14, weight: .semibold))
+          .foregroundColor(BoldTheme.Colors.textDim)
+          .frame(maxWidth: .infinity)
 
-        // Logos sit in fixed 64pt boxes so both teams line up at the same
-        // height, with VS level with them.
-        HStack(alignment: .top, spacing: 12) {
-          teamColumn(logo: logoFor(favId), label: "FAVORITE", labelColor: BoldTheme.Colors.textDim,
-                     name: (homeIsDog ? "" : "@ ") + favName, nameColor: BoldTheme.Colors.text) {
+        // The two teams side by side, no "VS" (de-slop #25).
+        HStack(alignment: .top, spacing: BoldTheme.Space.s3) {
+          teamColumn(logo: logoFor(favId), label: "FAVORITE", name: (homeIsDog ? "" : "@\u{00A0}") + favLabel) {
             if let spread {
-              Text(verbatim: "-\(spread)")
-                .font(BoldTheme.Fonts.body(14))
+              Text(verbatim: "−\(spread)")
+                .font(BoldTheme.TypeRole.line(30))
                 .foregroundColor(BoldTheme.Colors.textDim)
             }
           }
-          Text("VS")
-            .font(BoldTheme.Fonts.display(32))
-            .tracking(1.9)
-            .foregroundColor(BoldTheme.Colors.text.opacity(0.4))
-            .frame(height: 64)
-          teamColumn(logo: logoFor(dogId), label: "UNDERDOG", labelColor: BoldTheme.Colors.goldDeep,
-                     name: (homeIsDog ? "@ " : "") + dogName, nameColor: BoldTheme.Colors.goldDeep) {
+          teamColumn(logo: logoFor(dogId), label: "UNDERDOG", name: (homeIsDog ? "@\u{00A0}" : "") + dogLabel) {
             if let spread {
               Text(verbatim: "+\(spread)")
-                .font(BoldTheme.Fonts.display(34))
-                .foregroundColor(BoldTheme.Colors.goldDeep)
+                .font(BoldTheme.TypeRole.line(40))
+                .foregroundColor(BoldTheme.Role.line)
             }
           }
         }
-        .padding(.vertical, 20)
 
         if isPro {
-          HStack(alignment: .top, spacing: 10) {
+          HStack(alignment: .top, spacing: BoldTheme.Space.s2) {
             RecentFormBox(games: form?.fav, loading: loadingForm)
             RecentFormBox(games: form?.dog, loading: loadingForm)
           }
-          .padding(.bottom, 16)
         }
 
         if let spread {
-          (Text("If ") + Text(dogName).bold() + Text(" wins outright, you bank ")
-            + Text("+\(spread)").bold().foregroundColor(BoldTheme.Colors.goldDeep) + Text(" points."))
-            .font(BoldTheme.Fonts.body(13.5))
+          (Text("If ") + Text(dogLabel).bold() + Text(" wins, you get ")
+            + Text(verbatim: "\(spread) \(spread == "1" ? "point" : "points")").bold())
+            .font(BoldTheme.Fonts.body(15))
             .foregroundColor(BoldTheme.Colors.text)
-            .lineSpacing(3)
+            .lineSpacing(2)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12).padding(.vertical, 10)
-            .background(RoundedRectangle(cornerRadius: 8).fill(BoldTheme.Colors.green.opacity(0.06)))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(BoldTheme.Colors.green.opacity(0.15), lineWidth: 1))
-            .padding(.bottom, 14)
+            .padding(.horizontal, 14).padding(.vertical, 12)
+            .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.inner, style: .continuous).fill(BoldTheme.Colors.card))
         }
 
         if shown.sport == "nfl" && !isCurrentPick {
           Text("Pro Ball lines move during the week. Your line locks in when you pick.")
-            .font(BoldTheme.Fonts.body(12))
+            .font(BoldTheme.Fonts.body(13))
             .foregroundColor(BoldTheme.Colors.textDim)
-            .padding(.bottom, 12)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
 
         if watchEnabled {
@@ -144,76 +143,85 @@ struct PickCardSheet: View {
             }
             Spacer()
           }
-          .padding(.bottom, 14)
         }
 
         if isCurrentPick {
-          Text("This is your pick for the week.")
-            .font(BoldTheme.Fonts.body(13, weight: .semibold))
-            .foregroundColor(BoldTheme.Colors.green)
-            .frame(maxWidth: .infinity)
-            .padding(.bottom, 10)
-          Button {
-            Task {
-              working = true
-              await onClear()
-              working = false
-              dismiss()
-            }
-          } label: {
-            Text(working ? "CLEARING…" : "CLEAR PICK")
-              .font(BoldTheme.Fonts.display(20))
-              .tracking(1)
-              .foregroundColor(BoldTheme.Colors.text)
-              .frame(maxWidth: .infinity, minHeight: 54)
-              .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(BoldTheme.Colors.border, lineWidth: 1.5))
-          }
-          .buttonStyle(.plain)
-          .disabled(working)
-        } else {
-          if let movedSpread {
-            movedLineConfirm(movedSpread)
-          } else if lineFlipped {
-            Text("The line flipped since you opened this game. \(dogName) isn't the underdog anymore. Close it and pick again.")
-              .font(BoldTheme.Fonts.body(13))
-              .foregroundColor(BoldTheme.Colors.text)
+          VStack(spacing: BoldTheme.Space.s2) {
+            // Web parity (round 3): say it's the pick, offer Done, not a
+            // second Lock in. Clear stays until kickoff.
+            Text(verbatim: shownLocked ? "\(dogLabel) is your pick. It's locked." : "\(dogLabel) is your pick. Tap another game to switch.")
+              .font(BoldTheme.Fonts.body(14, weight: .semibold))
+              .foregroundColor(BoldTheme.Colors.green)
               .multilineTextAlignment(.center)
-              .frame(maxWidth: .infinity)
-              .padding(.horizontal, 14).padding(.vertical, 12)
-              .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(BoldTheme.Colors.gold, lineWidth: 1))
-          } else {
-          Button {
-            Task { await lockIn() }
-          } label: {
-            Text(checkingLine ? "CHECKING LATEST LINE…" : working ? "LOCKING IN…" : "LOCK IN \(dogName.uppercased())")
-              .font(BoldTheme.Fonts.display(22))
-              .tracking(1)
-              .lineLimit(1)
-              .minimumScaleFactor(0.6)
-              .foregroundColor(BoldTheme.Colors.gold)
-              .frame(maxWidth: .infinity, minHeight: 58)
-              .padding(.horizontal, 12)
-              .background(RoundedRectangle(cornerRadius: 14).fill(BoldTheme.Colors.green))
+            Button("Done") { dismiss() }
+              .buttonStyle(SupPrimaryButtonStyle())
+            // Once the game kicks off the pick is final (the server rejects
+            // a clear), so no button that can only fail.
+            if !shownLocked {
+            Button {
+              Task {
+                working = true
+                await onClear()
+                working = false
+                dismiss()
+              }
+            } label: {
+              Text(working ? "Clearing…" : "Clear pick")
+            }
+            .buttonStyle(SupSecondaryButtonStyle())
+            .disabled(working)
+            }
           }
-          .buttonStyle(.plain)
-          .disabled(working || checkingLine)
-          .accessibilityHint(hasOtherPick ? "Replaces your current pick for this week" : "")
-          }
-          if hasOtherPick {
-            Text("This replaces your current pick for the week.")
-              .font(BoldTheme.Fonts.body(11.5))
-              .foregroundColor(BoldTheme.Colors.textDim)
-              .frame(maxWidth: .infinity)
-              .padding(.top, 8)
+        } else {
+          VStack(spacing: BoldTheme.Space.s2) {
+            if let movedSpread {
+              movedLineConfirm(movedSpread)
+            } else if lineFlipped {
+              Text("The line flipped since you opened this game. \(dogLabel) isn't the underdog anymore. Close it and pick again.")
+                .font(BoldTheme.Fonts.body(14))
+                .foregroundColor(BoldTheme.Colors.text)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 14).padding(.vertical, 12)
+                .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.inner, style: .continuous).fill(BoldTheme.Colors.card))
+            } else {
+              Button {
+                Task { await lockIn() }
+              } label: {
+                if checkingLine {
+                  Text("Checking the latest line…")
+                } else if working {
+                  Text("Locking in…")
+                } else {
+                  (Text("Lock in \(dogLabel)") + Text(spread.map { " · +\($0)" } ?? ""))
+                }
+              }
+              .buttonStyle(SupPrimaryButtonStyle())
+              .disabled(working || checkingLine)
+              .accessibilityHint(hasOtherPick ? "Replaces your current pick for this week" : "")
+            }
+            if hasOtherPick {
+              Text("This replaces your current pick for the week.")
+                .font(BoldTheme.Fonts.body(12.5))
+                .foregroundColor(BoldTheme.Colors.textDim)
+            }
           }
         }
       }
-      .padding(.horizontal, 24)
-      .padding(.top, 24)
-      .padding(.bottom, 28)
+      .padding(.horizontal, BoldTheme.Space.margin)
+      .padding(.top, BoldTheme.Space.s6)
+      .padding(.bottom, BoldTheme.Space.s5)
+      .background(GeometryReader { geo in
+        Color.clear.preference(key: SheetHeightKey.self, value: geo.size.height)
+      })
+    }
+    .scrollBounceBehavior(.basedOnSize)
+    .onPreferenceChange(SheetHeightKey.self) { h in
+      if h > 0 { contentHeight = h }
     }
     .background(BoldTheme.Colors.track.ignoresSafeArea())
-    .presentationDetents(isPro ? [.large] : [.medium, .large])
+    // Sized to the content (de-slop #23); scrolls if it ever outgrows the screen.
+    .presentationDetents([.height(contentHeight)])
     .presentationDragIndicator(.visible)
     .presentationBackground(BoldTheme.Colors.track)
     .sensoryFeedback(.success, trigger: lockedTick)
@@ -221,28 +229,25 @@ struct PickCardSheet: View {
   }
 
   @ViewBuilder
-  private func teamColumn<Extra: View>(logo: URL?, label: String, labelColor: Color, name: String, nameColor: Color,
+  private func teamColumn<Extra: View>(logo: URL?, label: String, name: String,
                                         @ViewBuilder extra: () -> Extra) -> some View {
-    VStack(spacing: 2) {
+    VStack(spacing: 6) {
       RetryingAsyncImage(url: logo) { img in
         img.resizable().scaledToFit()
       } placeholder: {
         Image(systemName: "football").resizable().scaledToFit().padding(10).opacity(0.3).foregroundColor(BoldTheme.Colors.textFaint)
       }
-      .frame(width: 64, height: 64)
+      .frame(width: 56, height: 56)
       Text(label)
-        .font(BoldTheme.Fonts.body(10, weight: .semibold))
-        .tracking(1.2)
-        .foregroundColor(labelColor)
-        .padding(.top, 8)
-      Text(verbatim: name.uppercased())
-        .font(BoldTheme.Fonts.display(22))
-        .foregroundColor(nameColor)
+        .font(BoldTheme.TypeRole.label(10))
+        .tracking(1)
+        .foregroundColor(BoldTheme.Colors.textDim)
+      Text(verbatim: name)
+        .font(BoldTheme.TypeRole.teamName(30))
+        .foregroundColor(BoldTheme.Colors.text)
         .multilineTextAlignment(.center)
-        .lineLimit(2)
-        .minimumScaleFactor(0.7)
+        .fixedSize(horizontal: false, vertical: true)
       extra()
-        .padding(.top, 2)
     }
     .frame(maxWidth: .infinity)
   }
@@ -279,29 +284,24 @@ struct PickCardSheet: View {
 
   /// Web's "The spread moved -- X is now +N. Confirm at the new number?" box.
   private func movedLineConfirm(_ spread: Double) -> some View {
-    VStack(spacing: 10) {
-      (Text("The spread moved. \(dogName) is now ")
-        + Text(verbatim: "+\(jsNumber(spread))").font(BoldTheme.Fonts.display(17)).foregroundColor(BoldTheme.Colors.goldDeep)
+    VStack(spacing: BoldTheme.Space.s3) {
+      (Text("The spread moved. \(dogLabel) is now ")
+        + Text(verbatim: "+\(jsNumber(spread))").bold()
         + Text(". Confirm at the new number?"))
-        .font(BoldTheme.Fonts.body(13))
+        .font(BoldTheme.Fonts.body(14))
         .foregroundColor(BoldTheme.Colors.text)
         .multilineTextAlignment(.center)
       Button {
         Task { await confirmMovedSpread() }
       } label: {
-        Text(working ? "LOCKING IN…" : "CONFIRM AT +\(jsNumber(spread))")
-          .font(BoldTheme.Fonts.display(22))
-          .tracking(1)
-          .foregroundColor(BoldTheme.Colors.green)
-          .frame(maxWidth: .infinity, minHeight: 54)
-          .background(RoundedRectangle(cornerRadius: 12).fill(BoldTheme.Colors.gold))
+        Text(working ? "Locking in…" : "Confirm at +\(jsNumber(spread))")
       }
-      .buttonStyle(.plain)
+      .buttonStyle(SupPrimaryButtonStyle())
       .disabled(working)
     }
     .padding(.horizontal, 14).padding(.vertical, 12)
     .frame(maxWidth: .infinity)
-    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(BoldTheme.Colors.gold, lineWidth: 1))
+    .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.inner, style: .continuous).fill(BoldTheme.Colors.card))
   }
 
   private func loadForm() async {
@@ -313,4 +313,9 @@ struct PickCardSheet: View {
     async let dog = svc.recentForm(sport: shown.sport, teamId: dogId, teamName: dogName, before: shown.startTime)
     form = await (fav, dog)
   }
+}
+
+private struct SheetHeightKey: PreferenceKey {
+  static var defaultValue: CGFloat = 0
+  static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = max(value, nextValue()) }
 }

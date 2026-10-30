@@ -69,11 +69,11 @@ struct UnderdogBoardView: View {
       ScrollView {
         VStack(alignment: .leading, spacing: 14) {
           VStack(alignment: .leading, spacing: 4) {
-            Text("SUP PRO · CFB\(week.map { " · WEEK \(formatWeekLabel($0))" } ?? "")")
-              .font(BoldTheme.Fonts.mono(10.5, weight: .bold)).tracking(1).foregroundColor(BoldTheme.Colors.green)
-            Text("UNDERDOG BOARD").font(BoldTheme.Fonts.display(40)).foregroundColor(BoldTheme.Colors.text)
+            Text("SUP Pro · CFB\(week.map { " · Week \(formatWeekLabel($0))" } ?? "")")
+              .font(BoldTheme.Fonts.body(13, weight: .semibold)).foregroundColor(BoldTheme.Colors.textDim)
+            Text("Underdog Board").font(BoldTheme.Fonts.body(28, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
             Text("Every lined dog this week. Market = the prediction market's chance the dog wins outright. Value = points SUP pays beyond the market's fair line.")
-              .font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
+              .font(BoldTheme.Fonts.body(14)).foregroundColor(BoldTheme.Colors.textDim)
               .fixedSize(horizontal: false, vertical: true)
           }
           if !isPro {
@@ -92,15 +92,16 @@ struct UnderdogBoardView: View {
                   if r.id != sorted.last?.id { Divider().overlay(BoldTheme.Colors.border) }
                 }
               }
-              .padding(.horizontal, 12)
-              .background(RoundedRectangle(cornerRadius: 16).fill(BoldTheme.Colors.glassStrong))
+              .padding(.horizontal, BoldTheme.Space.cardPad)
+              .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
             }
           }
           Text("Not betting advice. Lines and market numbers are for info only; SUP scoring only counts outright wins.")
-            .font(BoldTheme.Fonts.body(11)).foregroundColor(BoldTheme.Colors.textFaint)
+            .font(BoldTheme.Fonts.body(12)).foregroundColor(BoldTheme.Colors.textDim)
             .fixedSize(horizontal: false, vertical: true)
         }
-        .padding(18)
+        .padding(.horizontal, BoldTheme.Space.margin)
+        .padding(.vertical, BoldTheme.Space.s4)
       }
     }
     .navigationTitle("Underdog Board")
@@ -111,19 +112,21 @@ struct UnderdogBoardView: View {
   private func row(_ r: BoardDog) -> some View {
     HStack(alignment: .center, spacing: 10) {
       VStack(alignment: .leading, spacing: 2) {
-        Text(r.dog).font(BoldTheme.Fonts.body(14, weight: .bold)).foregroundColor(BoldTheme.Colors.text).lineLimit(1)
+        Text(r.dog).font(BoldTheme.Fonts.body(15, weight: .semibold)).foregroundColor(BoldTheme.Colors.text)
+          .fixedSize(horizontal: false, vertical: true)
         Text("\(r.homeDog ? "vs" : "@") \(r.opp) · \(kickoff(r.startTime))")
-          .font(BoldTheme.Fonts.body(11.5)).foregroundColor(BoldTheme.Colors.textDim).lineLimit(1)
+          .font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
+          .fixedSize(horizontal: false, vertical: true)
       }
       Spacer(minLength: 6)
-      Text("+\(jsNumber(r.line))").font(BoldTheme.Fonts.display(22)).foregroundColor(BoldTheme.Colors.goldDeep)
+      Text("+\(jsNumber(r.line))").font(BoldTheme.Fonts.display(22)).foregroundColor(BoldTheme.Colors.text)
         .frame(minWidth: 46, alignment: .trailing)
       VStack(alignment: .trailing, spacing: 1) {
         Text(r.market.map { "\(Int(($0 * 100).rounded()))%" } ?? "—")
           .font(BoldTheme.Fonts.mono(12, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
         Text(r.lineValue.map { v in let x = (v * 10).rounded() / 10; return x == 0 ? "0.0" : (x > 0 ? "+" : "") + String(format: "%.1f", x) } ?? "—")
           .font(BoldTheme.Fonts.mono(10.5))
-          .foregroundColor((r.lineValue ?? 0) > 0 ? BoldTheme.Colors.green : BoldTheme.Colors.textFaint)
+          .foregroundColor(BoldTheme.Colors.textDim)
       }
       .frame(minWidth: 48, alignment: .trailing)
     }

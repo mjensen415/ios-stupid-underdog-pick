@@ -85,7 +85,6 @@ struct OnboardingFlowView: View {
   var body: some View {
     ZStack {
       BoldTheme.Colors.bgPage.ignoresSafeArea()
-      BoldTheme.AmbientBlobs()
 
       VStack(spacing: 20) {
         HStack {
@@ -156,8 +155,8 @@ struct OnboardingFlowView: View {
 
   @ViewBuilder private var gamesStep: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Text("STEP \(stepIndex + 1) OF \(activeSteps.count)").font(BoldTheme.Fonts.mono(11, weight: .semibold)).foregroundColor(BoldTheme.Colors.green)
-      Text("What do you want to play?").font(BoldTheme.Fonts.display(24)).foregroundColor(BoldTheme.Colors.text)
+      Text("Step \(stepIndex + 1) of \(activeSteps.count)").font(BoldTheme.Fonts.body(13, weight: .semibold)).foregroundColor(BoldTheme.Colors.textDim)
+      Text("What do you want to play?").font(BoldTheme.Fonts.body(24, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
       Text("Pick one or more — we'll set the rest of this up around it.")
         .font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
 
@@ -171,7 +170,7 @@ struct OnboardingFlowView: View {
             HStack {
               VStack(alignment: .leading, spacing: 2) {
                 Text(key.label).font(BoldTheme.Fonts.body(14, weight: .semibold)).foregroundColor(BoldTheme.Colors.text)
-                Text(key.sublabel).font(BoldTheme.Fonts.mono(11)).foregroundColor(BoldTheme.Colors.textFaint)
+                Text(key.sublabel).font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
               }
               Spacer()
               if active {
@@ -208,8 +207,8 @@ struct OnboardingFlowView: View {
 
   @ViewBuilder private var teamStep: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Text("STEP \(stepIndex + 1) OF \(activeSteps.count)").font(BoldTheme.Fonts.mono(11, weight: .semibold)).foregroundColor(BoldTheme.Colors.green)
-      Text("Got a team you follow?").font(BoldTheme.Fonts.display(24)).foregroundColor(BoldTheme.Colors.text)
+      Text("Step \(stepIndex + 1) of \(activeSteps.count)").font(BoldTheme.Fonts.body(13, weight: .semibold)).foregroundColor(BoldTheme.Colors.textDim)
+      Text("Got a team you follow?").font(BoldTheme.Fonts.body(24, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
       Text("We'll use it to flag when they're a live dog. Totally optional.")
         .font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
 
@@ -299,7 +298,7 @@ struct OnboardingFlowView: View {
                 Text(conf).font(BoldTheme.Fonts.body(14, weight: .semibold)).foregroundColor(BoldTheme.Colors.text)
                 Spacer()
                 Text("\(teamsByConference[conf]?.count ?? 0)")
-                  .font(BoldTheme.Fonts.mono(11)).foregroundColor(BoldTheme.Colors.textFaint)
+                  .font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
                 Image(systemName: "chevron.right").foregroundColor(BoldTheme.Colors.textFaint)
               }
               .padding(.vertical, 10).padding(.horizontal, 4)
@@ -316,8 +315,8 @@ struct OnboardingFlowView: View {
 
   @ViewBuilder private var pickStep: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Text("STEP \(stepIndex + 1) OF \(activeSteps.count)").font(BoldTheme.Fonts.mono(11, weight: .semibold)).foregroundColor(BoldTheme.Colors.green)
-      Text("Make your first pick").font(BoldTheme.Fonts.display(24)).foregroundColor(BoldTheme.Colors.text)
+      Text("Step \(stepIndex + 1) of \(activeSteps.count)").font(BoldTheme.Fonts.body(13, weight: .semibold)).foregroundColor(BoldTheme.Colors.textDim)
+      Text("Make your first pick").font(BoldTheme.Fonts.body(24, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
 
       if existingPick != nil {
         HStack(spacing: 10) {
@@ -334,7 +333,7 @@ struct OnboardingFlowView: View {
         }
         .buttonStyle(GoldButtonStyle())
       } else {
-        Text("Pick one underdog. If they win outright, you bank points equal to the spread toward the season leaderboard.")
+        Text("Pick one underdog. If they win outright, you get points equal to the spread toward the season leaderboard.")
           .font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
 
         Button {
@@ -357,9 +356,9 @@ struct OnboardingFlowView: View {
 
   @ViewBuilder private var groupStep: some View {
     VStack(alignment: .leading, spacing: 12) {
-      Text("STEP \(stepIndex + 1) OF \(activeSteps.count)").font(BoldTheme.Fonts.mono(11, weight: .semibold)).foregroundColor(BoldTheme.Colors.green)
+      Text("Step \(stepIndex + 1) of \(activeSteps.count)").font(BoldTheme.Fonts.body(13, weight: .semibold)).foregroundColor(BoldTheme.Colors.textDim)
       Text(pickemsSelected && !underdogSelected ? "Pickems is better with rivals" : "SUP is better with rivals")
-        .font(BoldTheme.Fonts.display(24)).foregroundColor(BoldTheme.Colors.text)
+        .font(BoldTheme.Fonts.body(24, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
       Text(groupStepBody)
         .font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim)
 
@@ -428,11 +427,10 @@ private extension Array {
 private struct GoldButtonStyle: ButtonStyle {
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
-      .font(BoldTheme.Fonts.body(14, weight: .semibold))
-      .padding(.vertical, 13)
-      .background(BoldTheme.Colors.gold)
+      .font(BoldTheme.Fonts.body(16, weight: .bold))
+      .padding(.vertical, 14)
+      .background(Capsule().fill(BoldTheme.Colors.gold))
       .foregroundColor(BoldTheme.Colors.text)
-      .cornerRadius(8)
       .scaleEffect(configuration.isPressed ? 0.97 : 1)
   }
 }
@@ -440,12 +438,10 @@ private struct GoldButtonStyle: ButtonStyle {
 private struct SecondaryButtonStyle: ButtonStyle {
   func makeBody(configuration: Configuration) -> some View {
     configuration.label
-      .font(BoldTheme.Fonts.body(14, weight: .semibold))
-      .padding(.vertical, 13)
-      .background(Color.white.opacity(0.7))
+      .font(BoldTheme.Fonts.body(16, weight: .bold))
+      .padding(.vertical, 14)
       .foregroundColor(BoldTheme.Colors.text)
-      .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
-      .cornerRadius(8)
+      .overlay(Capsule().strokeBorder(BoldTheme.Colors.text, lineWidth: 1.5))
       .scaleEffect(configuration.isPressed ? 0.97 : 1)
   }
 }
