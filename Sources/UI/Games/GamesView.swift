@@ -64,6 +64,27 @@ final class GamesViewModel: ObservableObject {
     }
   }
 
+  /// Team logos, shared across sports and screen reloads: 874 rows that
+  /// rarely change, so one fetch per app launch is enough.
+  private static var logoMapCache: [UUID: URL]?
+
+  private static func fetchLogoMap(client: SupabaseClient) async throws -> [UUID: URL] {
+    if let hit = logoMapCache { return hit }
+    // Inline team logo fetch to avoid TeamService dependency
+    struct T: Decodable { let id: UUID; let logo_url: String? }
+    let teamRes = try await client
+      .from("teams")
+      .select("id, logo_url")
+      .execute()
+    let teams = try JSONDecoder().decode([T].self, from: teamRes.data)
+    let map = Dictionary(uniqueKeysWithValues: teams.map { t in (t.id, t.logo_url.flatMap { URL(string: $0) }) }).compactMapValues { $0 }
+    logoMapCache = map
+    return map
+  }
+
+  /// Everything after the season/week lookup runs at the same time instead
+  /// of one request after another: the list shows as soon as games and
+  /// logos are in, then the pick and watch links fill in.
   func loadInitial() async {
     isLoading = true; errorText = nil
     defer { isLoading = false }
@@ -72,21 +93,25 @@ final class GamesViewModel: ObservableObject {
       season = ctx.season
       selectedWeek = ctx.week
       currentWeek = ctx.week
-      availableWeeks = try await GamesService(client: client).distinctWeeks(forSeason: season, sport: sport)
-      // Inline team logo fetch to avoid TeamService dependency
-      struct T: Decodable { let id: UUID; let logo_url: String? }
-      let teamRes = try await client
-        .from("teams")
-        .select("id, logo_url")
-        .execute()
-      let teams = try JSONDecoder().decode([T].self, from: teamRes.data)
-      logoMap = Dictionary(uniqueKeysWithValues: teams.map { t in (t.id, t.logo_url.flatMap { URL(string: $0) }) }).compactMapValues { $0 }
-      myGroups = (try? await GroupsService(client: client).fetchMyGroups()) ?? []
+      let client = client, season = season, week = selectedWeek, sport = sport
+      async let weeks = GamesService(client: client).distinctWeeks(forSeason: season, sport: sport)
+      async let fetched = GamesService(client: client).fetch(season: season, week: week, sport: sport)
+      async let logos = Self.fetchLogoMap(client: client)
+      async let groups = (try? await GroupsService(client: client).fetchMyGroups()) ?? []
+
+      // Logos before games: logoMap isn't published, so rows must find it
+      // filled on their first render.
+      logoMap = try await logos
+      games = try await fetched
+      isLoading = false
+      availableWeeks = try await weeks
+      myGroups = await groups
       if let activeGroupId, !underdogGroups.contains(where: { $0.group_id == activeGroupId }) {
         self.activeGroupId = nil
       }
-      try await loadGames()
+      async let watch: Void = loadWatch()
       try await loadExistingPick()
+      await watch
     } catch {
       errorText = error.localizedDescription
     }
@@ -106,6 +131,7 @@ final class GamesViewModel: ObservableObject {
     errorText = nil
     let svc = GamesService(client: client)
     games = try await svc.fetch(season: season, week: selectedWeek, sport: sport)
+    isLoading = false
     await loadWatch()
   }
 
@@ -1016,8 +1042,9 @@ struct GamesView: View {
     .animation(.easeOut(duration: 0.2), value: viewModel.toastMessage)
     .onChange(of: viewModel.selectedWeek) {
       Task {
+        async let pick: Void? = try? viewModel.loadExistingPick()
         try? await viewModel.loadGames()
-        try? await viewModel.loadExistingPick()
+        _ = await pick
       }
     }
     .background(BoldTheme.Colors.bgPage.ignoresSafeArea())
