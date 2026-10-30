@@ -760,13 +760,32 @@ struct GamesView: View {
       // past (last week's tab), land on the most recent day instead of
       // the oldest.
       .task(id: targetDayId) {
+        if consumeRequestedGame(proxy) { return }
         guard let targetDayId, searchQuery.isEmpty else { return }
         proxy.scrollTo(targetDayId, anchor: .top)
       }
+      // Live ticker tap: go to that game's week, then scroll to its row.
+      .onChange(of: appState.requestedGame) { _, _ in _ = consumeRequestedGame(proxy) }
+      .onChange(of: viewModel.games.map(\.id)) { _, _ in _ = consumeRequestedGame(proxy) }
     }
   }
 
   @State private var openSwipeId: UUID?
+
+  /// Handles appState.requestedGame once its sport is showing. Returns
+  /// true when it scrolled.
+  private func consumeRequestedGame(_ proxy: ScrollViewProxy) -> Bool {
+    guard let r = appState.requestedGame, r.sport == viewModel.sport else { return false }
+    if let w = r.week, w != viewModel.selectedWeek {
+      viewModel.selectedWeek = w
+      return false
+    }
+    guard viewModel.games.contains(where: { $0.id == r.id }) else { return false }
+    searchQuery = ""
+    withAnimation { proxy.scrollTo(r.id, anchor: .center) }
+    appState.requestedGame = nil
+    return true
+  }
 
   private func gameRow(_ g: Game, day: DayGroup) -> some View {
     let isLast = g.id == day.games.last?.id
@@ -802,6 +821,7 @@ struct GamesView: View {
     .listRowInsets(EdgeInsets(top: 0, leading: BoldTheme.Space.margin, bottom: 0, trailing: BoldTheme.Space.margin))
     .listRowBackground(Color.clear)
     .listRowSeparator(.hidden)
+    .id(g.id)
   }
 
   /// "FAVORITE · Tuesday, Oct 20 · UNDERDOG": the top strip of each day's
@@ -830,7 +850,9 @@ struct GamesView: View {
     )
     .padding(.horizontal, BoldTheme.Space.margin)
     .frame(maxWidth: .infinity)
-    .background(BoldTheme.Colors.bgPage)
+    // Page fill reaches a little above the strip (under the opaque bar),
+    // so no sliver of a row can show between bar and pinned header.
+    .background(BoldTheme.Colors.bgPage.padding(.top, -6))
     .listRowInsets(EdgeInsets())
     .textCase(nil)
   }
@@ -908,14 +930,16 @@ struct GamesView: View {
         searchField
           .transition(.opacity.combined(with: .move(edge: .top)))
       }
+      LiveTickerStrip()
       pinnedPickBar
     }
     .animation(.easeOut(duration: 0.2), value: viewModel.selectedGameId)
     .padding(.horizontal, BoldTheme.Space.margin)
     .padding(.top, BoldTheme.Space.s2)
     .padding(.bottom, 10)
-    .background(.ultraThinMaterial)
-    .background(BoldTheme.Colors.bgPage.opacity(0.82))
+    // Opaque (round 3): with sticky day headers right under it, a frosted
+    // bar let rows bleed through the band between bar and header.
+    .background(BoldTheme.Colors.bgPage.ignoresSafeArea(edges: .top))
     .overlay(alignment: .bottom) {
       Rectangle().fill(BoldTheme.Colors.border).frame(height: 1)
     }

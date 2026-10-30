@@ -350,6 +350,9 @@ struct HomeView: View {
         ScrollView {
           VStack(alignment: .leading, spacing: 0) {
             topRow
+            // Live games across the sports you can see (round 3); hidden
+            // when nothing is live.
+            LiveTickerStrip(topPadding: BoldTheme.Space.s3)
             if viewModel.hasLoaded {
               contestsSection
               if proStore.showEntry(flags: featureFlags) {
