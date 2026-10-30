@@ -35,11 +35,14 @@ struct LeaderboardServiceFlat {
     return try JSONDecoder().decode([WeeklyRow].self, from: res.data)
   }
 
-  func totals(season: Int) async throws -> [TotalsRow] {
+  func totals(season: Int, sport: String = "cfb") async throws -> [TotalsRow] {
     let res = try await client
       .from("leaderboard_totals")
       .select("id, user_id, season, wins, losses, pending, total_points")
       .eq("season", value: season)
+      .eq("sport", value: sport)
+      // Global row only: there's also one row per group the user is in.
+      .is("group_id", value: nil)
       .order("total_points", ascending: false)
       .execute()
     return try JSONDecoder().decode([TotalsRow].self, from: res.data)
@@ -110,9 +113,9 @@ func fetchDisplayNames(client: SupabaseClient, userIds: [UUID]) async -> [UUID: 
 
 /// All-time career totals for one user, aggregated across every season --
 /// backed by v_leaderboard_totals_named, the same pre-aggregated view the
-/// web app already uses for its own "your stats" widget. Distinct from
-/// leaderboard_totals, which has one row per (user_id, season) and has no
-/// single combined-across-seasons row of its own.
+/// web app already uses for its own "your stats" widget. leaderboard_totals
+/// has one row per (user, season, sport, group_id) -- global = group_id
+/// null -- and no combined-across-seasons row of its own.
 struct CareerTotals: Decodable {
   let wins: Int?
   let losses: Int?
@@ -125,9 +128,10 @@ struct CareerTotals: Decodable {
 }
 
 /// Row shape returned by the get_season_leaderboard RPC -- live-computed
-/// from picks/games via pick_points_v -> leaderboard_season_v, unaffected
-/// by the leaderboard_totals season-grouping bug. Used for the Season
-/// Leaderboard screen instead of reading leaderboard_totals directly.
+/// from picks/games via pick_points_v -> leaderboard_season_v. Used for the
+/// Season Leaderboard screen. (The old "season-grouping bug" was reads of
+/// leaderboard_totals not filtering group_id IS NULL; those reads filter it
+/// now.)
 struct SeasonLeaderboardRow: Decodable, Identifiable {
   var id: UUID { userId }
   let season: Int
@@ -230,9 +234,8 @@ struct LeaderboardService {
     return try decoder.decode([PickHistoryRow].self, from: res.data)
   }
 
-  /// All-time career record -- summed client-side across every season row,
-  /// since leaderboard_totals has one row per (user_id, season), not a
-  /// single combined-across-seasons row per user.
+  /// All-time career record -- summed client-side across the user's global
+  /// season rows (group_id IS NULL; see fetchMySeasonTotals).
   func fetchMyCareerTotals(userId: UUID) async throws -> CareerTotals? {
     let seasons = try await fetchMySeasonTotals(userId: userId)
     guard !seasons.isEmpty else { return nil }
@@ -250,6 +253,10 @@ struct LeaderboardService {
       .select("id, user_id, season, wins, losses, pending, total_points")
       .eq("user_id", value: userId)
       .eq("sport", value: sport)
+      // leaderboard_totals has one row per (user, season, sport, group_id);
+      // the global season total is the group_id IS NULL row. Without this
+      // each season repeated once per group the user is in.
+      .is("group_id", value: nil)
       .order("season", ascending: false)
       .execute()
     return try JSONDecoder().decode([TotalsLeaderboardRow].self, from: res.data)
@@ -308,6 +315,7 @@ struct LeaderboardService {
       .from("leaderboard_totals")
       .select("id, user_id, season, wins, losses, pending, total_points")
       .eq("sport", value: sport)
+      .is("group_id", value: nil) // global rows only (see fetchMySeasonTotals)
 
     if let season { builder = builder.eq("season", value: season) }
 

@@ -20,6 +20,9 @@ struct LeaderboardRepository {
     var builder = client
       .from("leaderboard_totals")
       .select("id, user_id, wins, losses, pending, total_points, season")
+      .eq("sport", value: "cfb")
+      // Global rows only -- there's one more per group (group_id set).
+      .is("group_id", value: nil)
 
     if currentSeasonOnly,
        let context = try? await ContextService(client: client).getCurrentContext() {
