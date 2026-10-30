@@ -2,10 +2,12 @@ import SwiftUI
 
 /// One CFB / Pro Ball game, layout A (matches the web's BoldRow on
 /// winner-circle-dev): favorite on the left, underdog on the right, and a
-/// centered middle column stacked as the big gold "+3", the kickoff time,
+/// centered middle column stacked as the big ink "+3", the kickoff time,
 /// then a where-to-watch capsule (Pro). Once there's a score the middle
 /// column becomes the scoreboard. Locked, live and finished games dim; the
-/// picked game's row turns solid green.
+/// picked game's row turns solid green. No per-row PICK button (de-slop
+/// #12): the whole row is the target -- tap for the pick card, swipe left
+/// for the yellow Pick action.
 struct GameRowView: View {
   let game: Game
   let logoFor: (UUID?) -> URL?
@@ -14,11 +16,6 @@ struct GameRowView: View {
   // consecutive rows for one day fuse into a single card.
   var isFirstInDay: Bool = false
   var isLastInDay: Bool = false
-  /// Tapping the row would open the pick card right now (GamesViewModel.canPick
-  /// and not already this game) -- drives the PICK / CHANGE capsule.
-  var actionable: Bool = false
-  /// The user already has a pick this week (PICK reads CHANGE elsewhere).
-  var hasPickThisWeek: Bool = false
   /// Pro where-to-watch link for the middle column; nil hides it.
   var watch: WatchLink? = nil
 
@@ -35,8 +32,9 @@ struct GameRowView: View {
     isFinal || game.picksLocked == true || (game.status != nil && game.status != "scheduled") || game.startTime <= Date()
   }
 
-  private var favName: String { isHomeFavorite ? (game.homeTeam ?? "Home") : (game.awayTeam ?? "Away") }
-  private var dogName: String { isHomeFavorite ? (game.awayTeam ?? "Away") : (game.homeTeam ?? "Home") }
+  // Short names only where the long one would cut off (de-slop #13).
+  private var favName: String { isHomeFavorite ? (game.homeDisplay ?? "Home") : (game.awayDisplay ?? "Away") }
+  private var dogName: String { isHomeFavorite ? (game.awayDisplay ?? "Away") : (game.homeDisplay ?? "Home") }
   private var favId: UUID? { isHomeFavorite ? game.homeTeamId : game.awayTeamId }
   private var dogId: UUID? { isHomeFavorite ? game.awayTeamId : game.homeTeamId }
   private var favScore: Int? { isHomeFavorite ? game.homePoints : game.awayPoints }
@@ -59,7 +57,8 @@ struct GameRowView: View {
 
   // Picked row floods green, so text flips light there.
   private var ink: Color { isSelected ? SUPColors.textOnGreen : BoldTheme.Colors.text }
-  private var goldText: Color { isSelected ? BoldTheme.Colors.gold : BoldTheme.Colors.goldDeep }
+  /// The +line is bold ink (de-slop #5); light on the green picked row.
+  private var goldText: Color { isSelected ? SUPColors.textOnGreen : BoldTheme.Role.line }
 
   private var rowOpacity: Double {
     if isSelected { return 1 }
@@ -74,11 +73,11 @@ struct GameRowView: View {
         logo(favId)
         VStack(alignment: .leading, spacing: 1) {
           Text("FAV")
-            .font(BoldTheme.Fonts.body(9.5, weight: .semibold))
-            .tracking(1.1)
-            .foregroundColor(ink.opacity(0.55))
-          Text(verbatim: (isHomeFavorite ? "@ " : "") + favName.uppercased())
-            .font(BoldTheme.Fonts.body(12, weight: .semibold))
+            .font(BoldTheme.TypeRole.label(9.5))
+            .tracking(1)
+            .foregroundColor(ink.opacity(0.62))
+          Text(verbatim: (isHomeFavorite ? "@\u{00A0}" : "") + favName)
+            .font(BoldTheme.Fonts.body(14, weight: .semibold))
             .foregroundColor(ink)
             .lineLimit(2)
             .minimumScaleFactor(0.85)
@@ -97,11 +96,11 @@ struct GameRowView: View {
         Spacer(minLength: 0)
         VStack(alignment: .trailing, spacing: 1) {
           Text("DOG")
-            .font(BoldTheme.Fonts.body(9.5, weight: .semibold))
-            .tracking(1.1)
-            .foregroundColor(goldText.opacity(0.85))
-          Text(verbatim: (isHomeFavorite ? "" : "@ ") + dogName.uppercased())
-            .font(BoldTheme.Fonts.body(12, weight: .semibold))
+            .font(BoldTheme.TypeRole.label(9.5))
+            .tracking(1)
+            .foregroundColor(ink.opacity(0.62))
+          Text(verbatim: (isHomeFavorite ? "" : "@\u{00A0}") + dogName)
+            .font(BoldTheme.Fonts.body(14, weight: .semibold))
             .foregroundColor(ink)
             .lineLimit(2)
             .multilineTextAlignment(.trailing)
@@ -112,16 +111,14 @@ struct GameRowView: View {
       }
       .frame(maxWidth: .infinity)
       .padding(showScore && dogAhead && !isSelected ? 5 : 0)
-      .background(RoundedRectangle(cornerRadius: 10).fill(showScore && dogAhead && !isSelected ? BoldTheme.Colors.gold.opacity(0.18) : .clear))
+      .background(RoundedRectangle(cornerRadius: 10).fill(showScore && dogAhead && !isSelected ? BoldTheme.Role.wonTint : .clear))
     }
     .opacity(rowOpacity)
     .padding(.vertical, 14)
-    .padding(.horizontal, 6)
-    .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
-    .listRowSeparatorTint(BoldTheme.Colors.border)
-    .listRowSeparator(isLastInDay ? .hidden : .visible, edges: .bottom)
-    .listRowSeparator(.hidden, edges: .top)
-    .listRowBackground(cardRowBackground)
+    // 12pt inside the day card; the row carries its own card background so
+    // the swipe-to-pick slide moves the whole row (GamesView.SwipeToPickRow).
+    .padding(.horizontal, 12)
+    .background(cardRowBackground)
     .accessibilityElement(children: .contain)
   }
 
@@ -134,68 +131,63 @@ struct GameRowView: View {
           Text("\(dogScore ?? 0)").foregroundColor(dogAhead ? goldText : ink.opacity(0.4))
         }
         .font(BoldTheme.Fonts.display(28))
-        Text(dogWonOutright ? "UPSET \(spreadText ?? "")".trimmingCharacters(in: .whitespaces) : (spreadText ?? "—"))
-          .font(BoldTheme.Fonts.mono(10, weight: dogWonOutright ? .bold : .regular))
+        Text(dogWonOutright ? "Upset \(spreadText ?? "")".trimmingCharacters(in: .whitespaces) : (spreadText ?? "—"))
+          .font(BoldTheme.Fonts.body(12, weight: dogWonOutright ? .bold : .medium))
           .foregroundColor(dogWonOutright ? goldText : BoldTheme.Colors.textFaint)
         if isLive { LiveDot(color: isSelected ? SUPColors.textOnGreen : Color(hex: 0xC6402A)) }
       } else {
         Text(spreadText ?? "—")
-          .font(BoldTheme.Fonts.display(26))
+          .font(BoldTheme.TypeRole.line(30))
           .foregroundColor(hasLine ? goldText : BoldTheme.Colors.textFaint)
         Text(timeText)
-          .font(BoldTheme.Fonts.mono(10.5, weight: .semibold))
-          .foregroundColor(ink.opacity(0.7))
+          .font(BoldTheme.Fonts.body(12, weight: .medium))
+          .foregroundColor(ink.opacity(0.62))
       }
       if let watch, !isFinal {
         WatchPill(link: watch, live: isLive || (isLocked && !isFinal))
           .padding(.top, 2)
       }
     }
-    .frame(minWidth: 64)
+    .frame(minWidth: 74)
   }
 
-  /// PICK / CHANGE while pickable; ✓ PICK / WON / NO WIN on the picked row;
-  /// "line not posted" when there's no line yet.
+  /// "Your pick" / "Won +3" / "No win" on the picked row; "Line not
+  /// posted" when there's no line yet. No PICK button (de-slop #12).
   @ViewBuilder private var actionChip: some View {
     if isSelected {
-      if isFinal {
-        Text(dogWonOutright ? "✓ WON \(spreadText ?? "")" : "NO WIN")
-          .font(BoldTheme.Fonts.body(9.5, weight: .bold))
-          .tracking(1)
-          .foregroundColor(dogWonOutright ? BoldTheme.Colors.gold : SUPColors.textOnGreen.opacity(0.6))
-          .padding(.top, 3)
-      } else {
-        Text("✓ PICK")
-          .font(BoldTheme.Fonts.body(9.5, weight: .bold))
-          .tracking(1)
-          .foregroundColor(BoldTheme.Colors.gold)
-          .padding(.top, 3)
-      }
-    } else if !hasLine && !isLocked {
-      Text("LINE NOT POSTED")
-        .font(BoldTheme.Fonts.body(8.5, weight: .semibold))
-        .foregroundColor(BoldTheme.Colors.textFaint)
+      Text(isFinal ? (dogWonOutright ? "✓ Won \(spreadText ?? "")" : "No win") : "✓ Your pick")
+        .font(BoldTheme.Fonts.body(11, weight: .bold))
+        .foregroundColor(SUPColors.textOnGreen.opacity(isFinal && !dogWonOutright ? 0.6 : 1))
         .padding(.top, 3)
-    } else if actionable {
-      Text(hasPickThisWeek ? "CHANGE" : "PICK")
-        .font(BoldTheme.Fonts.body(9.5, weight: .bold))
-        .tracking(1)
-        .foregroundColor(BoldTheme.Colors.goldDeep)
-        .padding(.horizontal, 9).padding(.vertical, 3)
-        .overlay(Capsule().strokeBorder(BoldTheme.Colors.goldDeep, lineWidth: 1))
+    } else if !hasLine && !isLocked {
+      Text("Line not posted")
+        .font(BoldTheme.Fonts.body(10.5, weight: .semibold))
+        .foregroundColor(BoldTheme.Colors.textFaint)
         .padding(.top, 3)
     }
   }
 
+  /// Part of the day's flat card: the day header row sits above, so only
+  /// the last game rounds its bottom corners. Hairline between games.
   private var cardRowBackground: some View {
-    UnevenRoundedRectangle(
-      topLeadingRadius: isFirstInDay ? 16 : 0,
-      bottomLeadingRadius: isLastInDay ? 16 : 0,
-      bottomTrailingRadius: isLastInDay ? 16 : 0,
-      topTrailingRadius: isFirstInDay ? 16 : 0
+    let r = BoldTheme.Radius.card
+    return UnevenRoundedRectangle(
+      topLeadingRadius: isFirstInDay ? r : 0,
+      bottomLeadingRadius: isLastInDay ? r : 0,
+      bottomTrailingRadius: isLastInDay ? r : 0,
+      topTrailingRadius: isFirstInDay ? r : 0,
+      style: .continuous
     )
-    .fill(isSelected ? BoldTheme.Colors.green : BoldTheme.Colors.glassStrong)
-    .padding(.horizontal, 12)
+    .fill(isSelected ? BoldTheme.Colors.green : BoldTheme.Colors.card)
+    .overlay(alignment: .top) {
+      if !isFirstInDay { Rectangle().fill(BoldTheme.Colors.border).frame(height: 1) }
+    }
+  }
+
+  /// The row's outline, for clipping the swipe action to the card.
+  static func cardShape(isLastInDay: Bool) -> UnevenRoundedRectangle {
+    let r = isLastInDay ? BoldTheme.Radius.card : 0
+    return UnevenRoundedRectangle(bottomLeadingRadius: r, bottomTrailingRadius: r, style: .continuous)
   }
 
   @ViewBuilder private func logo(_ id: UUID?) -> some View {

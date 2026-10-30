@@ -85,7 +85,7 @@ final class ProSnapshotTests: XCTestCase {
       ForEach(games) { g in
         let link = ids[g.id].flatMap { eid in nets[eid].flatMap { WatchLinks.primary(sport: .cfb, eventId: eid, networks: $0) } }
         GameRowView(game: g, logoFor: { $0.flatMap { logoMap[$0] } }, isSelected: false, isFirstInDay: g.id == games.first?.id,
-                    isLastInDay: g.id == games.last?.id, actionable: g.startTime > Date(), watch: link)
+                    isLastInDay: g.id == games.last?.id, watch: link)
       }
     }
     .listStyle(.plain)
