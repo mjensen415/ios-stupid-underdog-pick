@@ -102,7 +102,7 @@ struct PickHistoryView: View {
             }
             .padding(.vertical, 4)
           }
-          .listRowBackground(BoldTheme.Colors.card)
+          .listRowBackground(Color.clear)
           .listRowSeparator(.hidden)
 
           ForEach(
@@ -115,8 +115,14 @@ struct PickHistoryView: View {
                   GameRowView(
                     game: game,
                     logoFor: { id in id.flatMap { logoMap[$0] } },
-                    isSelected: true
+                    isSelected: true,
+                    isFirstInDay: true,
+                    isLastInDay: true
                   )
+                  .clipShape(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous))
+                  .listRowInsets(EdgeInsets(top: 0, leading: BoldTheme.Space.margin, bottom: BoldTheme.Space.cardGap, trailing: BoldTheme.Space.margin))
+                  .listRowBackground(Color.clear)
+                  .listRowSeparator(.hidden)
                 }
               }
             } header: {
@@ -156,16 +162,12 @@ struct PickHistoryView: View {
       }
 
       // v_games_named, not the raw games table -- see Game.CodingKeys for why.
-      let res = try await client
-        .from("v_games_named")
-        .select("""
-          id, season, week, status, home_name, away_name, home_team_id, away_team_id, favorite_team_id, start_time, betting_line, latest_spread, picks_locked, home_points, away_points, sport
-        """)
-        .in("id", values: gameIds)
-        .execute()
+      let data = try await withShortNameColumns(GamesService.baseColumns) { cols in
+        try await client.from("v_games_named").select(cols).in("id", values: gameIds).execute().data
+      }
       let dec = JSONDecoder()
       dec.dateDecodingStrategy = .iso8601withFallback
-      let games = try dec.decode([Game].self, from: res.data)
+      let games = try dec.decode([Game].self, from: data)
 
       struct T: Decodable { let id: UUID; let logo_url: String? }
       let teamRes = try await client.from("teams").select("id, logo_url").execute()

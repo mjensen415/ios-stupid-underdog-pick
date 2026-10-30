@@ -77,7 +77,7 @@ struct GameRowView: View {
           Text(verbatim: (isHomeFavorite ? "@\u{00A0}" : "") + favName)
             .font(BoldTheme.Fonts.body(14, weight: .semibold))
             .foregroundColor(ink)
-            .lineLimit(2)
+            .lineLimit(3)
             .minimumScaleFactor(0.85)
         }
         Spacer(minLength: 0)
@@ -96,7 +96,7 @@ struct GameRowView: View {
           Text(verbatim: (isHomeFavorite ? "" : "@\u{00A0}") + dogName)
             .font(BoldTheme.Fonts.body(14, weight: .semibold))
             .foregroundColor(ink)
-            .lineLimit(2)
+            .lineLimit(3)
             .multilineTextAlignment(.trailing)
             .minimumScaleFactor(0.85)
           actionChip

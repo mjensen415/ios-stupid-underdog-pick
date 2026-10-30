@@ -16,8 +16,9 @@ struct UnderdogWeekEntry: Identifiable {
   var id: UUID { pick.id }
 
   var pickedIsHome: Bool { pick.picked_team_id == game.homeTeamId }
-  var pickedName: String { (pickedIsHome ? game.homeTeam : game.awayTeam) ?? "Your pick" }
-  var opponentName: String { (pickedIsHome ? game.awayTeam : game.homeTeam) ?? "Opponent" }
+  /// Short names where the long ones would cut off (de-slop #13).
+  var pickedName: String { (pickedIsHome ? game.homeDisplay : game.awayDisplay) ?? "Your pick" }
+  var opponentName: String { (pickedIsHome ? game.awayDisplay : game.homeDisplay) ?? "Opponent" }
   var spread: Double? { pick.winPoints(on: game) }
   var isLocked: Bool { pick.locked_spread != nil }
   var lineNote: String? { pick.lineNote(on: game) }
@@ -129,12 +130,11 @@ final class MyPicksViewModel: ObservableObject {
     var gamesById: [UUID: Game] = [:]
     let ids = Array(Set(picks.map(\.game_id)))
     if !ids.isEmpty {
-      let gRes = try await client
-        .from("v_games_named")
-        .select("id, season, week, status, home_name, away_name, home_team_id, away_team_id, favorite_team_id, start_time, betting_line, latest_spread, picks_locked, home_points, away_points, sport")
-        .in("id", values: ids)
-        .execute()
-      let games = try dateDecoder.decode([Game].self, from: gRes.data)
+      // Short team names when the view has them (falls back to full).
+      let gData = try await withShortNameColumns(GamesService.baseColumns) { cols in
+        try await client.from("v_games_named").select(cols).in("id", values: ids).execute().data
+      }
+      let games = try dateDecoder.decode([Game].self, from: gData)
       gamesById = Dictionary(uniqueKeysWithValues: games.map { ($0.id, $0) })
     }
     underdog = picks.compactMap { p in gamesById[p.game_id].map { UnderdogWeekEntry(pick: p, game: $0) } }

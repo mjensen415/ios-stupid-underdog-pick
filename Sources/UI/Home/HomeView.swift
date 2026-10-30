@@ -149,16 +149,13 @@ final class HomeViewModel: ObservableObject {
     guard let pick else { return nil }
     let dec = JSONDecoder()
     dec.dateDecodingStrategy = .iso8601withFallback
-    guard let res = try? await client
-      .from("v_games_named")
-      .select("id, season, week, status, home_name, away_name, home_team_id, away_team_id, favorite_team_id, start_time, betting_line, latest_spread, picks_locked, home_points, away_points, sport, home_logo_url, away_logo_url")
-      .eq("id", value: pick.game_id)
-      .limit(1)
-      .execute(),
-      let game = try? dec.decode([Game].self, from: res.data).first
+    guard let data = try? await withShortNameColumns(GamesService.baseColumns + ", home_logo_url, away_logo_url", { cols in
+        try await client.from("v_games_named").select(cols).eq("id", value: pick.game_id).limit(1).execute().data
+      }),
+      let game = try? dec.decode([Game].self, from: data).first
     else { return nil }
     struct Logos: Decodable { let home_logo_url: String?; let away_logo_url: String? }
-    let logos = try? JSONDecoder().decode([Logos].self, from: res.data).first
+    let logos = try? JSONDecoder().decode([Logos].self, from: data).first
     let logo = pick.picked_team_id == game.homeTeamId ? logos?.home_logo_url : logos?.away_logo_url
     return HomePickDetail(pick: pick, game: game, logoURL: logo.flatMap(URL.init(string:)))
   }

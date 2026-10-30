@@ -88,3 +88,15 @@ func isMissingColumn(_ error: Error) -> Bool {
   if let e = error as? PostgrestError { return e.code == "42703" }
   return String(describing: error).contains("42703")
 }
+
+/// Runs a v_games_named query with the short-name columns appended when the
+/// view has them, else without (same fallback as GamesService.fetch). `run`
+/// gets the column list to select.
+func withShortNameColumns(_ base: String, _ run: (String) async throws -> Data) async throws -> Data {
+  if GamesService.shortNamesAvailable {
+    do { return try await run(base + ", home_short, away_short") } catch where isMissingColumn(error) {
+      GamesService.shortNamesAvailable = false
+    }
+  }
+  return try await run(base)
+}
