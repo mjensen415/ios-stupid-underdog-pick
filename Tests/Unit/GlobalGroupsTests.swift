@@ -12,7 +12,7 @@ final class GlobalGroupsTests: XCTestCase {
   }
 
   func testCopy() {
-    XCTAssertEqual(GlobalGroups.tagline, "Global: everyone who plays. No group needed.")
+    XCTAssertEqual(GlobalGroups.tagline, "Everyone who plays is in it. No group needed.")
     XCTAssertEqual(GlobalGroups.joinCTA, "Join the global group, it's free")
     XCTAssertEqual(GlobalGroups.picksPerWeek, 5)
   }

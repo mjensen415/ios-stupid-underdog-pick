@@ -13,7 +13,7 @@ import Foundation
 //   (hp_join_global), never deleted on leave, site-admin-only edits.
 
 enum GlobalGroups {
-  static let tagline = "Global: everyone who plays. No group needed."
+  static let tagline = "Everyone who plays is in it. No group needed."
   static let joinCTA = "Join the global group, it's free"
   static let picksPerWeek = 5
   static let title = "Global · everyone"

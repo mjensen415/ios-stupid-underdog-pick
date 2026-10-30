@@ -28,17 +28,15 @@ struct GlobalGroupCard: View {
         VStack(alignment: .leading, spacing: 3) {
           HStack(spacing: 8) {
             Text(GlobalGroups.title)
-              .font(BoldTheme.Fonts.display(20))
+              .font(BoldTheme.Fonts.body(16, weight: .bold))
               .foregroundColor(BoldTheme.Colors.text)
-            Text(GlobalGroups.label(game).uppercased())
-              .font(BoldTheme.Fonts.mono(9.5, weight: .bold))
-              .tracking(0.8)
-              .foregroundColor(BoldTheme.Colors.green)
-              .lineLimit(1)
-              .minimumScaleFactor(0.8)
+            Text(GlobalGroups.label(game))
+              .font(BoldTheme.Fonts.body(13, weight: .semibold))
+              .foregroundColor(BoldTheme.Colors.textDim)
+              .fixedSize(horizontal: false, vertical: true)
           }
           Text(GlobalGroups.tagline)
-            .font(BoldTheme.Fonts.body(12.5))
+            .font(BoldTheme.Fonts.body(13))
             .foregroundColor(BoldTheme.Colors.textDim)
             .fixedSize(horizontal: false, vertical: true)
         }
@@ -47,11 +45,9 @@ struct GlobalGroupCard: View {
           .font(.system(size: 13, weight: .bold))
           .foregroundColor(BoldTheme.Colors.textFaint)
       }
-      .padding(16)
+      .padding(BoldTheme.Space.cardPad)
       .frame(maxWidth: .infinity, alignment: .leading)
-      .background(BoldTheme.Colors.glassStrong)
-      .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(BoldTheme.Colors.green.opacity(0.35), lineWidth: 1.5))
-      .clipShape(RoundedRectangle(cornerRadius: 14))
+      .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
     }
     .buttonStyle(.plain)
     .accessibilityLabel("Global \(GlobalGroups.label(game)) leaderboard")
@@ -126,10 +122,9 @@ struct GlobalBoardView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       VStack(alignment: .leading, spacing: 4) {
-        Text(GlobalGroups.label(game).uppercased())
-          .font(BoldTheme.Fonts.mono(10, weight: .semibold))
-          .tracking(1)
-          .foregroundColor(BoldTheme.Colors.green)
+        Text(GlobalGroups.label(game))
+          .font(BoldTheme.Fonts.body(16, weight: .bold))
+          .foregroundColor(BoldTheme.Colors.text)
         Text(GlobalGroups.tagline)
           .font(BoldTheme.Fonts.body(13))
           .foregroundColor(BoldTheme.Colors.textDim)

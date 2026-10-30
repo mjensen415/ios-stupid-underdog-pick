@@ -21,42 +21,39 @@ struct JoinGroupView: View {
     NavigationStack {
       ZStack {
         BoldTheme.Colors.bgPage.ignoresSafeArea()
-        BoldTheme.AmbientBlobs().ignoresSafeArea()
 
-        VStack(alignment: .leading, spacing: 20) {
+        VStack(alignment: .leading, spacing: BoldTheme.Space.s4) {
           PillToggle(
-            options: [(label: "Invite Code", value: JoinMode.code), (label: "Group ID", value: JoinMode.groupId)],
+            options: [(label: "Invite code", value: JoinMode.code), (label: "Group ID", value: JoinMode.groupId)],
             selection: $mode
           )
 
-          BoldTheme.GlassCard(strong: true, radius: 16, padding: 16) {
+          BoldTheme.FlatCard {
             if mode == .code {
               VStack(alignment: .leading, spacing: 8) {
-                Text("INVITE CODE").font(BoldTheme.Fonts.mono(11)).foregroundColor(BoldTheme.Colors.textFaint)
+                Text("Invite code").font(BoldTheme.Fonts.body(14, weight: .semibold)).foregroundColor(BoldTheme.Colors.textDim)
                 TextField("e.g. Ab3xQ9zK", text: $inviteCode)
                   .font(BoldTheme.Fonts.mono(15))
                   .textInputAutocapitalization(.never)
                   .autocorrectionDisabled()
                   .padding(12)
-                  .background(BoldTheme.Colors.surface)
-                  .cornerRadius(10)
+                  .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.inner, style: .continuous).fill(BoldTheme.Colors.track))
               }
             } else {
               VStack(alignment: .leading, spacing: 8) {
-                Text("GROUP ID").font(BoldTheme.Fonts.mono(11)).foregroundColor(BoldTheme.Colors.textFaint)
+                Text("Group ID").font(BoldTheme.Fonts.body(14, weight: .semibold)).foregroundColor(BoldTheme.Colors.textDim)
                 TextField("Paste a group ID", text: $groupIdText)
                   .font(BoldTheme.Fonts.mono(15))
                   .textInputAutocapitalization(.never)
                   .autocorrectionDisabled()
                   .padding(12)
-                  .background(BoldTheme.Colors.surface)
-                  .cornerRadius(10)
+                  .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.inner, style: .continuous).fill(BoldTheme.Colors.track))
               }
             }
           }
 
           if let errorText {
-            Text(errorText).foregroundColor(.red).font(BoldTheme.Fonts.body(13))
+            Text(errorText).foregroundColor(BoldTheme.Role.lost).font(BoldTheme.Fonts.body(14))
           }
           if let successMessage {
             // GREEN, not gold -- the submit button below is this screen's
@@ -73,19 +70,15 @@ struct JoinGroupView: View {
             if isSubmitting {
               ProgressView().frame(maxWidth: .infinity)
             } else {
-              Text(mode == .code ? "Join with Code" : "Send Request").frame(maxWidth: .infinity)
+              Text(mode == .code ? "Join with code" : "Send request").frame(maxWidth: .infinity)
             }
           }
-          .font(BoldTheme.Fonts.display(20))
-          .padding(.vertical, 14)
-          .background(BoldTheme.Colors.gold)
-          .foregroundColor(BoldTheme.Colors.text)
-          .cornerRadius(14)
+          .buttonStyle(SupPrimaryButtonStyle())
           .disabled(isSubmitting || (mode == .code ? inviteCode.isEmpty : groupIdText.isEmpty))
         }
-        .padding(20)
+        .padding(BoldTheme.Space.margin)
       }
-      .navigationTitle("Join Group")
+      .navigationTitle("Join a group")
       .toolbar {
         ToolbarItem(placement: .cancellationAction) {
           Button("Cancel") { dismiss() }.disabled(isSubmitting)

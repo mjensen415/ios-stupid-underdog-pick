@@ -31,8 +31,8 @@ struct SeasonLeaderboardView: View {
                     .font(BoldTheme.Fonts.body(13, weight: .semibold))
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
-                    .background(active ? BoldTheme.Colors.gold : BoldTheme.Colors.text.opacity(0.07))
-                    .foregroundColor(active ? BoldTheme.Colors.text : BoldTheme.Colors.textDim)
+                    .background(active ? BoldTheme.Colors.text : BoldTheme.Colors.track)
+                    .foregroundColor(active ? BoldTheme.Colors.card : BoldTheme.Colors.textDim)
                     .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
@@ -72,11 +72,11 @@ struct SeasonLeaderboardView: View {
       if let errorMessage {
         Text(errorMessage)
           .font(BoldTheme.Fonts.body(13))
-          .foregroundColor(.red)
+          .foregroundColor(BoldTheme.Role.lost)
           .padding(.top)
       }
     }
-    .overlay { if isLoading && rows.isEmpty { ProgressView().tint(BoldTheme.Colors.gold) } }
+    .overlay { if isLoading && rows.isEmpty { ProgressView().tint(BoldTheme.Colors.text) } }
     .refreshable { await loadSeason() }
     .task(id: sportGroupKey) { await loadInitial() }
   }

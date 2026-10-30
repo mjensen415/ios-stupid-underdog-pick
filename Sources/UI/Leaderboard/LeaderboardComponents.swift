@@ -31,23 +31,23 @@ struct LeaderboardDisplayRow: Identifiable {
 struct LeaderboardHeaderRow: View {
   var body: some View {
     HStack {
-      Text("RK")
-        .frame(width: 28, alignment: .leading)
-      Text("ENTRY")
+      Text("Rank")
+        .frame(width: 44, alignment: .leading)
+      Text("Player")
       Spacer()
-      Text("PTS")
+      Text("Points")
     }
-    .font(BoldTheme.Fonts.mono(11))
-    .tracking(0.9)
-    .foregroundColor(BoldTheme.Colors.textFaint)
-    .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 12, trailing: 20))
+    .font(BoldTheme.Fonts.body(12, weight: .semibold))
+    .foregroundColor(BoldTheme.Colors.textDim)
+    .listRowInsets(EdgeInsets(top: 12, leading: 32, bottom: 8, trailing: 32))
     .listRowSeparatorTint(BoldTheme.Colors.border)
     // Always the top row of the ranked list -- rounds only the top corners
     // so it fuses with the LeaderboardRows below into one card, matching
     // the day-group card treatment on the games screen.
     .listRowBackground(
-      UnevenRoundedRectangle(topLeadingRadius: 16, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: 16)
-        .fill(BoldTheme.Colors.glassStrong)
+      UnevenRoundedRectangle(topLeadingRadius: BoldTheme.Radius.card, bottomLeadingRadius: 0, bottomTrailingRadius: 0, topTrailingRadius: BoldTheme.Radius.card, style: .continuous)
+        .fill(BoldTheme.Colors.card)
+        .padding(.horizontal, BoldTheme.Space.margin)
     )
   }
 }
@@ -67,8 +67,8 @@ struct LeaderboardRow: View {
     NavigationLink(destination: PublicProfileView(userId: userId)) {
       HStack(alignment: .center, spacing: 16) {
         Text(verbatim: "\(rank)")
-          .font(BoldTheme.Fonts.body(14))
-          .foregroundColor(BoldTheme.Colors.textFaint)
+          .font(BoldTheme.TypeRole.tableNumber(14))
+          .foregroundColor(BoldTheme.Colors.text)
           .frame(width: 28, alignment: .leading)
 
         VStack(alignment: .leading, spacing: 2) {
@@ -76,11 +76,11 @@ struct LeaderboardRow: View {
             .font(BoldTheme.Fonts.body(15, weight: .semibold))
             .foregroundColor(BoldTheme.Colors.text)
           Text(record)
-            .font(BoldTheme.Fonts.mono(11))
-            .foregroundColor(BoldTheme.Colors.textFaint)
+            .font(BoldTheme.TypeRole.tableNumber(12, weight: .regular))
+            .foregroundColor(BoldTheme.Colors.textDim)
           if let pickLabel {
             Text(pickLabel)
-              .font(BoldTheme.Fonts.body(11))
+              .font(BoldTheme.Fonts.body(13))
               .foregroundColor(BoldTheme.Colors.textDim)
           }
         }
@@ -88,19 +88,19 @@ struct LeaderboardRow: View {
         Spacer()
 
         Text(points)
-          .font(BoldTheme.Fonts.display(22))
-          // Gold reserved for rank #1 down a ranked list -- everything else
-          // is GREEN, matching web's Leaderboard.tsx (`index === 0 ? GOLD :
-          // GREEN`). Avoids gold-for-every-row diluting the highlight.
-          .foregroundColor(rank == 1 ? BoldTheme.Colors.goldDeep : BoldTheme.Colors.green)
+          .font(BoldTheme.TypeRole.tableNumber(15))
+          // Ink table number (de-slop colour roles: no gold/green decoration).
+          .foregroundColor(BoldTheme.Colors.text)
       }
     }
     .padding(.vertical, 12)
-    .listRowInsets(EdgeInsets(top: 0, leading: 20, bottom: 0, trailing: 20))
-    .listRowSeparatorTint(BoldTheme.Colors.border)
+    .listRowInsets(EdgeInsets(top: 0, leading: 32, bottom: 0, trailing: 32))
+    .listRowSeparator(.hidden)
     .listRowBackground(
-      UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: isLast ? 16 : 0, bottomTrailingRadius: isLast ? 16 : 0, topTrailingRadius: 0)
-        .fill(BoldTheme.Colors.glassStrong)
+      UnevenRoundedRectangle(topLeadingRadius: 0, bottomLeadingRadius: isLast ? BoldTheme.Radius.card : 0, bottomTrailingRadius: isLast ? BoldTheme.Radius.card : 0, topTrailingRadius: 0, style: .continuous)
+        .fill(BoldTheme.Colors.card)
+        .overlay(alignment: .top) { Rectangle().fill(BoldTheme.Colors.border).frame(height: 1).padding(.horizontal, 16) }
+        .padding(.horizontal, BoldTheme.Space.margin)
     )
   }
 }

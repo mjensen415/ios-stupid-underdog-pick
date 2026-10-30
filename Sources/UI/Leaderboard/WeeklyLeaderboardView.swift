@@ -117,13 +117,13 @@ struct WeeklyLeaderboardView: View {
         Text("Client not available").foregroundColor(BoldTheme.Colors.textDim)
       } else if let e = viewModel.errorText {
         VStack(spacing: 8) {
-          Text("Error loading leaderboard").font(BoldTheme.Fonts.display(24)).foregroundColor(BoldTheme.Colors.text)
+          Text("Couldn't load the leaderboard").font(BoldTheme.Fonts.body(20, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
           Text(e).foregroundColor(BoldTheme.Colors.textDim).multilineTextAlignment(.center)
           Button("Retry") { Task { await viewModel.loadInitial(sport: sport, groupSlug: groupSlug) } }
-            .foregroundColor(BoldTheme.Colors.goldDeep)
+            .foregroundColor(BoldTheme.Colors.text)
         }.padding()
       } else if viewModel.isLoading && viewModel.rows.isEmpty {
-        ProgressView("Loading leaderboard…").tint(BoldTheme.Colors.gold).foregroundColor(BoldTheme.Colors.textDim)
+        ProgressView("Loading leaderboard…").tint(BoldTheme.Colors.text).foregroundColor(BoldTheme.Colors.textDim)
       } else {
         // Week pills stay visible even with zero rows for the selected
         // week, so an empty week is still a way to reach a non-empty one.

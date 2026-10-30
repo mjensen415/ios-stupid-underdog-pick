@@ -83,10 +83,9 @@ struct GroupsListView: View {
     NavigationStack {
       ZStack {
         BoldTheme.Colors.bgPage.ignoresSafeArea()
-        BoldTheme.AmbientBlobs().ignoresSafeArea()
 
         ScrollView {
-          VStack(alignment: .leading, spacing: 18) {
+          VStack(alignment: .leading, spacing: BoldTheme.Space.cardGap) {
             header
             GameSwitcher()
             // Everyone is already in the Global group: picks without a
@@ -98,18 +97,18 @@ struct GroupsListView: View {
             } else if let e = viewModel.errorText {
               errorState(e)
             } else if viewModel.isLoading && viewModel.myGroups.isEmpty {
-              ProgressView().tint(BoldTheme.Colors.goldDeep)
+              ProgressView().tint(BoldTheme.Colors.text)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 60)
             } else {
               if let top = topGroup { heroCard(top) }
               if !filteredMyGroups.isEmpty { stats }
               if filteredMyGroups.isEmpty {
-                sectionLabel("YOUR \(contextDisplayName.uppercased()) GROUPS")
+                sectionLabel("Your \(contextDisplayName) groups")
                 emptyMyGroups
               } else if !otherGroups.isEmpty {
                 // The top group already has the hero card above.
-                sectionLabel(topGroup == nil ? "YOUR \(contextDisplayName.uppercased()) GROUPS" : "YOUR OTHER GROUPS")
+                sectionLabel(topGroup == nil ? "Your \(contextDisplayName) groups" : "Your other groups")
                 cardList(otherGroups) { group in
                   NavigationLink(destination: GroupDetailView(slug: group.slug)) {
                     GroupRowView(group: group, pickems: isPickems)
@@ -119,7 +118,7 @@ struct GroupsListView: View {
               }
 
               if !filteredDiscoverGroups.isEmpty {
-                sectionLabel("DISCOVER")
+                sectionLabel("Public groups")
                 cardList(filteredDiscoverGroups) { group in
                   NavigationLink(destination: GroupDetailView(slug: group.slug)) {
                     DiscoverRowView(group: group)
@@ -129,9 +128,9 @@ struct GroupsListView: View {
               }
             }
           }
-          .padding(.horizontal, 18)
-          .padding(.top, 8)
-          .padding(.bottom, 32)
+          .padding(.horizontal, BoldTheme.Space.margin)
+          .padding(.top, BoldTheme.Space.s2)
+          .padding(.bottom, BoldTheme.Space.s6)
         }
         .refreshable { await viewModel.load() }
       }
@@ -154,39 +153,22 @@ struct GroupsListView: View {
   }
 
   private var header: some View {
-    HStack(alignment: .center) {
-      Text("GROUPS")
-        .font(BoldTheme.Fonts.display(26))
-        .tracking(0.6)
+    HStack(alignment: .center, spacing: BoldTheme.Space.s2) {
+      Text("Groups")
+        .font(BoldTheme.Fonts.body(28, weight: .bold))
         .foregroundColor(BoldTheme.Colors.text)
       Spacer()
-      Button { showJoin = true } label: {
-        Text("Join")
-          .font(BoldTheme.Fonts.body(13, weight: .semibold))
-          .foregroundColor(BoldTheme.Colors.text)
-          .padding(.horizontal, 14).padding(.vertical, 7)
-          .background(BoldTheme.Colors.glassStrong)
-          .overlay(Capsule().strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
-          .clipShape(Capsule())
-      }
+      Button("Join") { showJoin = true }
+        .buttonStyle(SmallPill(primary: false))
+      // The screen's one primary action.
       Button { showCreate = true } label: {
-        HStack(spacing: 4) {
-          Image(systemName: "plus").font(.system(size: 11, weight: .bold))
-          Text("Create")
-        }
-        .font(BoldTheme.Fonts.body(13, weight: .semibold))
-        .foregroundColor(BoldTheme.Colors.text)
-        .padding(.horizontal, 14).padding(.vertical, 7)
-        .background(isPickems ? BoldTheme.Colors.pickemsAccent.opacity(0.22) : BoldTheme.Colors.gold)
-        .clipShape(Capsule())
+        Label("Create", systemImage: "plus")
       }
+      .buttonStyle(SmallPill(primary: true))
     }
   }
 
   private var isPickems: Bool { appState.currentGame == .pickems }
-  /// Highlight color: gold for Underdog, the Pickems accent on Pickems --
-  /// same split My Picks uses for its stat tiles.
-  private var accent: Color { isPickems ? BoldTheme.Colors.pickemsAccent : BoldTheme.Colors.goldDeep }
 
   /// Your best-standing group (then most points) -- the hero, like My
   /// Picks' "this week" card.
@@ -212,85 +194,71 @@ struct GroupsListView: View {
     let mine = g.my_points ?? 0
     let leader = max(g.leader_points ?? 0, mine)
     let unit = isPickems ? "correct" : "pts"
-    let (chipText, chipFg, chipBg): (String, Color, Color) = rank == 1
-      ? ("Leading", BoldTheme.Colors.text, isPickems ? BoldTheme.Colors.pickemsAccent.opacity(0.22) : BoldTheme.Colors.gold)
-      : ("#\(rank) of \(of)", BoldTheme.Colors.green, BoldTheme.Colors.green.opacity(0.13))
-    return VStack(alignment: .leading, spacing: 14) {
+    return VStack(alignment: .leading, spacing: BoldTheme.Space.s3) {
       HStack {
-        Text("YOUR TOP GROUP")
-          .font(BoldTheme.Fonts.mono(11, weight: .semibold))
-          .tracking(0.8)
+        Text("Your top group")
+          .font(BoldTheme.Fonts.body(13, weight: .semibold))
           .foregroundColor(BoldTheme.Colors.textDim)
         Spacer()
-        Text(chipText)
-          .font(BoldTheme.Fonts.body(12, weight: .bold))
-          .foregroundColor(chipFg)
-          .padding(.horizontal, 10).padding(.vertical, 4)
-          .background(chipBg)
-          .clipShape(Capsule())
+        SupPill(text: rank == 1 ? "Leading" : "#\(rank) of \(of)", kind: rank == 1 ? .green : .gray)
       }
 
-      HStack(spacing: 14) {
-        AvatarInitials(name: g.name, size: 52)
-        VStack(alignment: .leading, spacing: 3) {
+      HStack(spacing: BoldTheme.Space.s3) {
+        AvatarInitials(name: g.name, size: 48)
+        VStack(alignment: .leading, spacing: 2) {
           Text(g.name)
             .font(BoldTheme.Fonts.body(20, weight: .bold))
             .foregroundColor(BoldTheme.Colors.text)
-            .lineLimit(1)
-            .minimumScaleFactor(0.75)
+            .fixedSize(horizontal: false, vertical: true)
           Text(verbatim: "\(g.member_count) member\(g.member_count == 1 ? "" : "s")")
             .font(BoldTheme.Fonts.body(13))
             .foregroundColor(BoldTheme.Colors.textDim)
         }
         Spacer(minLength: 0)
+        Text(verbatim: "#\(rank)")
+          .font(BoldTheme.Fonts.display(40))
+          .foregroundColor(BoldTheme.Colors.text)
       }
 
       VStack(alignment: .leading, spacing: 6) {
         GeometryReader { geo in
           ZStack(alignment: .leading) {
             Capsule().fill(BoldTheme.Colors.track)
-            Capsule().fill(isPickems ? BoldTheme.Colors.pickemsAccent : BoldTheme.Colors.gold)
+            Capsule().fill(BoldTheme.Colors.text)
               .frame(width: leader > 0 ? geo.size.width * CGFloat(mine / leader) : 0)
           }
         }
         .frame(height: 6)
         HStack {
-          Text(verbatim: "You \(fmt(mine)) \(unit)")
+          Text(verbatim: "You: \(fmt(mine)) \(unit)")
             .foregroundColor(BoldTheme.Colors.text)
           Spacer()
-          Text(verbatim: rank == 1 ? "Top of the table" : "\(fmt(leader - mine)) back of the leader")
+          Text(verbatim: rank == 1 ? "Top of the table" : "\(fmt(leader - mine)) behind the leader")
             .foregroundColor(BoldTheme.Colors.textDim)
         }
-        .font(BoldTheme.Fonts.mono(11, weight: .semibold))
+        .font(BoldTheme.Fonts.body(13, weight: .semibold))
       }
 
       NavigationLink(destination: GroupDetailView(slug: g.slug)) {
-        Text("View leaderboard →")
-          .font(BoldTheme.Fonts.body(14, weight: .bold))
-          .foregroundColor(BoldTheme.Colors.text)
-          .frame(maxWidth: .infinity)
-          .frame(height: 44)
-          .background(isPickems ? BoldTheme.Colors.pickemsAccent.opacity(0.22) : BoldTheme.Colors.gold)
-          .clipShape(RoundedRectangle(cornerRadius: 12))
+        Text("View leaderboard")
       }
-      .buttonStyle(.plain)
+      .buttonStyle(SupSecondaryButtonStyle())
     }
-    .padding(18)
-    .background(BoldTheme.Colors.glassStrong)
-    .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(BoldTheme.Colors.glassBorder, lineWidth: 1))
-    .clipShape(RoundedRectangle(cornerRadius: 20))
-    .shadow(color: Color.black.opacity(0.08), radius: 16, y: 8)
+    .padding(BoldTheme.Space.cardPad)
+    .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
   }
 
   private var stats: some View {
     let ranks = filteredMyGroups.compactMap(\.rank)
     let best = ranks.min().map { "#\($0)" } ?? "–"
     let leading = ranks.filter { $0 == 1 }.count
-    return HStack(spacing: 10) {
-      statTile("GROUPS", "\(filteredMyGroups.count)")
-      statTile("BEST RANK", best, highlight: ranks.min() == 1)
-      statTile("LEADING", "\(leading)", highlight: leading > 0)
+    return HStack(alignment: .top, spacing: BoldTheme.Space.s2) {
+      statTile("\(filteredMyGroups.count)", "groups")
+      statTile(best, "best rank")
+      statTile("\(leading)", "leading")
     }
+    .padding(BoldTheme.Space.cardPad)
+    .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
   }
 
   private var emptyMyGroups: some View {
@@ -305,31 +273,17 @@ struct GroupsListView: View {
         .font(BoldTheme.Fonts.body(13))
         .foregroundColor(BoldTheme.Colors.textDim)
         .multilineTextAlignment(.center)
-      HStack(spacing: 10) {
-        Button { showCreate = true } label: {
-          Text("Create a group")
-            .font(BoldTheme.Fonts.body(14, weight: .bold))
-            .foregroundColor(BoldTheme.Colors.text)
-            .frame(maxWidth: .infinity).padding(.vertical, 12)
-            .background(isPickems ? BoldTheme.Colors.pickemsAccent.opacity(0.22) : BoldTheme.Colors.gold)
-            .clipShape(RoundedRectangle(cornerRadius: 12))
-        }
-        Button { showJoin = true } label: {
-          Text("Join with code")
-            .font(BoldTheme.Fonts.body(14, weight: .semibold))
-            .foregroundColor(BoldTheme.Colors.text)
-            .frame(maxWidth: .infinity).padding(.vertical, 12)
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
-        }
+      VStack(spacing: BoldTheme.Space.s2) {
+        Button("Create a group") { showCreate = true }
+          .buttonStyle(SupPrimaryButtonStyle())
+        Button("Join with a code") { showJoin = true }
+          .buttonStyle(SupSecondaryButtonStyle())
       }
-      .padding(.top, 4)
+      .padding(.top, BoldTheme.Space.s1)
     }
-    .padding(20)
+    .padding(BoldTheme.Space.cardPad)
     .frame(maxWidth: .infinity)
-    .background(BoldTheme.Colors.glassStrong)
-    .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(BoldTheme.Colors.glassBorder, lineWidth: 1))
-    .clipShape(RoundedRectangle(cornerRadius: 18))
-    .shadow(color: Color.black.opacity(0.06), radius: 12, y: 6)
+    .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
   }
 
   private func cardList<T: Identifiable, Row: View>(_ items: [T], @ViewBuilder row: @escaping (T) -> Row) -> some View {
@@ -337,52 +291,40 @@ struct GroupsListView: View {
       ForEach(Array(items.enumerated()), id: \.element.id) { i, item in
         row(item)
         if i < items.count - 1 {
-          Rectangle().fill(BoldTheme.Colors.border).frame(height: 1).padding(.leading, 66)
+          Rectangle().fill(BoldTheme.Colors.border).frame(height: 1)
         }
       }
     }
-    .background(BoldTheme.Colors.glassStrong)
-    .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(BoldTheme.Colors.glassBorder, lineWidth: 1))
-    .clipShape(RoundedRectangle(cornerRadius: 18))
-    .shadow(color: Color.black.opacity(0.06), radius: 12, y: 6)
+    .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.card))
   }
 
-  private func statTile(_ label: String, _ value: String, highlight: Bool = false) -> some View {
-    VStack(alignment: .leading, spacing: 4) {
-      Text(label)
-        .font(BoldTheme.Fonts.mono(10, weight: .semibold))
-        .tracking(0.8)
-        .foregroundColor(BoldTheme.Colors.textFaint)
-      Text(value)
-        .font(BoldTheme.Fonts.display(24))
-        .foregroundColor(highlight ? accent : BoldTheme.Colors.text)
+  private func statTile(_ value: String, _ label: String) -> some View {
+    VStack(alignment: .leading, spacing: 2) {
+      Text(verbatim: value)
+        .font(BoldTheme.Fonts.display(30))
+        .foregroundColor(BoldTheme.Colors.text)
         .lineLimit(1)
-        .minimumScaleFactor(0.7)
+      Text(verbatim: label)
+        .font(BoldTheme.Fonts.body(13))
+        .foregroundColor(BoldTheme.Colors.textDim)
     }
     .frame(maxWidth: .infinity, alignment: .leading)
-    .padding(.horizontal, 14)
-    .padding(.vertical, 12)
-    .background(BoldTheme.Colors.glassStrong)
-    .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(BoldTheme.Colors.glassBorder, lineWidth: 1))
-    .clipShape(RoundedRectangle(cornerRadius: 14))
   }
 
   private func sectionLabel(_ text: String) -> some View {
     Text(text)
-      .font(BoldTheme.Fonts.mono(11, weight: .semibold))
-      .tracking(0.9)
-      .foregroundColor(BoldTheme.Colors.textFaint)
-      .padding(.top, 4)
-      .padding(.bottom, -8)
+      .font(BoldTheme.Fonts.body(16, weight: .bold))
+      .foregroundColor(BoldTheme.Colors.text)
+      .padding(.top, BoldTheme.Space.s3)
+      .padding(.bottom, -4)
   }
 
   private func errorState(_ message: String) -> some View {
     VStack(spacing: 8) {
-      Text("Couldn't load groups").font(BoldTheme.Fonts.display(22)).foregroundColor(BoldTheme.Colors.text)
+      Text("Couldn't load groups").font(BoldTheme.Fonts.body(20, weight: .bold)).foregroundColor(BoldTheme.Colors.text)
       Text(message).font(BoldTheme.Fonts.body(13)).foregroundColor(BoldTheme.Colors.textDim).multilineTextAlignment(.center)
-      Button("Retry") { Task { await viewModel.load() } }
-        .font(BoldTheme.Fonts.body(14, weight: .semibold))
-        .foregroundColor(BoldTheme.Colors.goldDeep)
+      Button("Try again") { Task { await viewModel.load() } }
+        .buttonStyle(SupSecondaryButtonStyle(fullWidth: false))
     }
     .frame(maxWidth: .infinity)
     .padding(.top, 40)
@@ -416,35 +358,28 @@ private struct GroupRowView: View {
         Text(group.name)
           .font(BoldTheme.Fonts.body(15, weight: .semibold))
           .foregroundColor(BoldTheme.Colors.text)
-          .lineLimit(1)
+          .fixedSize(horizontal: false, vertical: true)
         Text(subline)
-          .font(BoldTheme.Fonts.body(12))
+          .font(BoldTheme.Fonts.body(13))
           .foregroundColor(BoldTheme.Colors.textDim)
-          .lineLimit(1)
       }
       Spacer(minLength: 6)
       if let rank = group.rank {
-        // Same badge language as My Picks' history rows: gold capsule for
-        // the win (leading), track capsule otherwise.
-        VStack(alignment: .trailing, spacing: 3) {
-          Text(verbatim: rank == 1 ? "1ST" : "#\(rank)")
-            .font(BoldTheme.Fonts.mono(12, weight: .semibold))
-            .tracking(0.5)
-            .foregroundColor(rank == 1 ? BoldTheme.Colors.text : BoldTheme.Colors.textDim)
-            .padding(.horizontal, 10).padding(.vertical, 5)
-            .background(rank == 1 ? (pickems ? BoldTheme.Colors.pickemsAccent.opacity(0.22) : BoldTheme.Colors.gold) : BoldTheme.Colors.track)
-            .clipShape(Capsule())
+        VStack(alignment: .trailing, spacing: 0) {
+          Text(verbatim: "#\(rank)")
+            .font(BoldTheme.Fonts.display(24))
+            .foregroundColor(BoldTheme.Colors.text)
           Text(verbatim: "of \(group.player_count ?? group.member_count)")
-            .font(BoldTheme.Fonts.mono(11))
-            .foregroundColor(BoldTheme.Colors.textFaint)
+            .font(BoldTheme.Fonts.body(12))
+            .foregroundColor(BoldTheme.Colors.textDim)
         }
       }
       Image(systemName: "chevron.right")
         .font(.system(size: 12, weight: .semibold))
         .foregroundColor(BoldTheme.Colors.textFaint)
     }
-    .padding(.horizontal, 14)
-    .padding(.vertical, 12)
+    .padding(.horizontal, BoldTheme.Space.cardPad)
+    .padding(.vertical, BoldTheme.Space.s3)
     .contentShape(Rectangle())
   }
 }
@@ -459,20 +394,16 @@ private struct DiscoverRowView: View {
         Text(group.name)
           .font(BoldTheme.Fonts.body(15, weight: .semibold))
           .foregroundColor(BoldTheme.Colors.text)
-          .lineLimit(1)
-        Text(verbatim: "\(group.member_count) member\(group.member_count == 1 ? "" : "s") · Public")
-          .font(BoldTheme.Fonts.body(12))
+          .fixedSize(horizontal: false, vertical: true)
+        Text(verbatim: "\(group.member_count) member\(group.member_count == 1 ? "" : "s") · public")
+          .font(BoldTheme.Fonts.body(13))
           .foregroundColor(BoldTheme.Colors.textDim)
       }
       Spacer(minLength: 6)
-      Text("View")
-        .font(BoldTheme.Fonts.body(12, weight: .semibold))
-        .foregroundColor(BoldTheme.Colors.green)
-        .padding(.horizontal, 12).padding(.vertical, 5)
-        .overlay(Capsule().strokeBorder(BoldTheme.Colors.green.opacity(0.5), lineWidth: 1))
+      SupPill(text: "View", kind: .outline)
     }
-    .padding(.horizontal, 14)
-    .padding(.vertical, 12)
+    .padding(.horizontal, BoldTheme.Space.cardPad)
+    .padding(.vertical, BoldTheme.Space.s3)
     .contentShape(Rectangle())
   }
 }

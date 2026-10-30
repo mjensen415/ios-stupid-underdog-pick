@@ -76,8 +76,8 @@ struct LeaderboardView: View {
         PillToggle(
           options: [
             (label: "CFB", value: CurrentGame.cfb),
-            (label: "PRO BALL", value: .nfl),
-            (label: "PICKEMS", value: .pickems),
+            (label: "Pro Ball", value: .nfl),
+            (label: "Pickems", value: .pickems),
           ],
           selection: $appState.currentGame
         )
@@ -146,6 +146,6 @@ struct LeaderboardView: View {
         }
       }
     }
-    .tint(BoldTheme.Colors.gold)
+    .tint(BoldTheme.Colors.text)
   }
 }
