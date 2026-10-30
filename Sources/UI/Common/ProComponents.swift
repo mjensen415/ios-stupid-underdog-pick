@@ -78,9 +78,8 @@ struct WatchChips: View {
         if let primary {
           WatchPill(link: primary, live: true)
         } else {
-          Text("WATCH")
-            .font(BoldTheme.Fonts.mono(9.5, weight: .bold))
-            .tracking(0.9)
+          Text("Watch")
+            .font(BoldTheme.Fonts.body(13))
             .foregroundColor(BoldTheme.Colors.textDim)
         }
         ForEach(rest, id: \.label) { l in
@@ -106,14 +105,13 @@ struct WatchProTeaser: View {
     HStack(spacing: 5) {
       Image(systemName: "lock.fill").font(.system(size: 9, weight: .bold))
       Text("Where to watch")
-      Text("· PRO").foregroundColor(BoldTheme.Colors.goldDeep)
+      Text("· Pro").foregroundColor(BoldTheme.Colors.textDim)
     }
     .font(BoldTheme.Fonts.body(11.5, weight: .bold))
     .foregroundColor(BoldTheme.Colors.text)
     .padding(.horizontal, 10).padding(.vertical, 4)
-    .background(GoldHatchBackground(radius: 999))
-    .overlay(Capsule().strokeBorder(BoldTheme.Colors.goldDeep.opacity(0.3), lineWidth: 1))
-    .clipShape(Capsule())
+    // Neutral, so it doesn't compete with the yellow Lock in button.
+    .background(Capsule().fill(BoldTheme.Colors.card))
     .accessibilityLabel("Where to watch is a Pro tool")
   }
 }
@@ -123,76 +121,74 @@ struct FormResultChip: View {
   let game: FormGame
   var body: some View {
     Text(game.won ? "W" : game.tie ? "T" : "L")
-      .font(BoldTheme.Fonts.mono(10.5, weight: .bold))
+      .font(BoldTheme.Fonts.body(10, weight: .bold))
       .foregroundColor(game.won ? BoldTheme.Colors.green : SUPColors.liveRed)
-      .frame(minWidth: 17, minHeight: 17)
-      .background(RoundedRectangle(cornerRadius: 4).fill(game.won ? SUPColors.winGreenBg : SUPColors.lossRedBg))
+      .frame(width: 18, height: 18)
+      .background(RoundedRectangle(cornerRadius: 5).fill(game.won ? SUPColors.winGreenBg : SUPColors.lossRedBg))
   }
 }
 
-/// "LAST 3" box for one team (pick card, Pro): date, W/L, score, @/vs
-/// opponent, and the team's own line with a gold DOG WIN tag.
+/// "Last 3" box for one team (pick card, Pro): W/L, score and the team's own
+/// line, then "@ Opponent · 10/8" on its own line, and a "Dog win +N" badge
+/// on its own line too -- nothing in here truncates (de-slop #26).
 struct RecentFormBox: View {
   let games: [FormGame]?
   var loading: Bool = false
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 6) {
+    VStack(alignment: .leading, spacing: 8) {
       HStack {
-        Text("LAST \(games.map { $0.isEmpty ? 3 : $0.count } ?? 3)")
+        Text(verbatim: "Last \(games.map { $0.isEmpty ? 3 : $0.count } ?? 3)")
+          .font(BoldTheme.Fonts.body(12, weight: .semibold))
         Spacer()
-        if let games, !games.isEmpty { Text(RecentForm.record(games)) }
+        if let games, !games.isEmpty {
+          Text(RecentForm.record(games)).font(BoldTheme.TypeRole.tableNumber(12))
+        }
       }
-      .font(BoldTheme.Fonts.mono(9.5, weight: .bold))
-      .tracking(0.7)
       .foregroundColor(BoldTheme.Colors.textDim)
 
       if loading {
-        Text("Loading…").font(BoldTheme.Fonts.body(11.5)).foregroundColor(BoldTheme.Colors.textDim)
+        Text("Loading…").font(BoldTheme.Fonts.body(12)).foregroundColor(BoldTheme.Colors.textDim)
       } else if games?.isEmpty ?? true {
-        Text("No finished games yet.").font(BoldTheme.Fonts.body(11.5)).foregroundColor(BoldTheme.Colors.textDim)
+        Text("No finished games yet.").font(BoldTheme.Fonts.body(12)).foregroundColor(BoldTheme.Colors.textDim)
       } else if let games {
         ForEach(Array(games.enumerated()), id: \.offset) { _, g in
-          VStack(alignment: .leading, spacing: 2) {
-            HStack(spacing: 5) {
-              Text(RecentForm.fmtDate(g.date))
-                .font(BoldTheme.Fonts.mono(9.5))
-                .foregroundColor(BoldTheme.Colors.textDim)
-                .frame(minWidth: 30, alignment: .leading)
-              FormResultChip(game: g)
-              Text("\(g.ourPts)-\(g.theirPts)")
-                .font(BoldTheme.Fonts.body(11.5, weight: .semibold))
-                .foregroundColor(BoldTheme.Colors.text)
-                .lineLimit(1)
-                .fixedSize()
-              Spacer(minLength: 0)
-              if g.dogWin {
-                Text("DOG WIN \(RecentForm.fmtLine(g.line))")
-                  .font(BoldTheme.Fonts.mono(8.5, weight: .bold))
+          HStack(alignment: .firstTextBaseline, spacing: 6) {
+            FormResultChip(game: g)
+            VStack(alignment: .leading, spacing: 2) {
+              HStack(spacing: 4) {
+                Text(verbatim: "\(g.ourPts)–\(g.theirPts)")
+                  .font(BoldTheme.TypeRole.tableNumber(12))
                   .foregroundColor(BoldTheme.Colors.text)
-                  .padding(.horizontal, 4).padding(.vertical, 1)
-                  .background(GoldHatchBackground())
+                Spacer(minLength: 2)
+                if g.line != nil {
+                  Text(RecentForm.fmtLine(g.line))
+                    .font(BoldTheme.TypeRole.tableNumber(12, weight: .regular))
+                    .foregroundColor(BoldTheme.Colors.textDim)
+                }
+              }
+              .lineLimit(1)
+              Text(verbatim: "\(g.away ? "@" : "vs") \(g.opponent) · \(RecentForm.fmtDate(g.date))")
+                .font(BoldTheme.Fonts.body(12))
+                .foregroundColor(BoldTheme.Colors.textDim)
+                .fixedSize(horizontal: false, vertical: true)
+              if g.dogWin {
+                Text(verbatim: "Dog win \(RecentForm.fmtLine(g.line))")
+                  .font(BoldTheme.Fonts.body(10.5, weight: .bold))
+                  .foregroundColor(SUPColors.textOnGreen)
                   .lineLimit(1)
-                  .minimumScaleFactor(0.8)
-              } else if g.line != nil {
-                Text(RecentForm.fmtLine(g.line))
-                  .font(BoldTheme.Fonts.mono(9.5))
-                  .foregroundColor(BoldTheme.Colors.textDim)
+                  .fixedSize()
+                  .padding(.horizontal, 7).padding(.vertical, 2)
+                  .background(Capsule().fill(BoldTheme.Colors.green))
               }
             }
-            Text("\(g.away ? "@" : "vs") \(g.opponent)")
-              .font(BoldTheme.Fonts.body(11))
-              .foregroundColor(BoldTheme.Colors.textDim)
-              .lineLimit(1)
-              .truncationMode(.tail)
-              .padding(.leading, 35)
           }
         }
       }
     }
-    .padding(.horizontal, 9).padding(.vertical, 8)
+    .padding(10)
     .frame(maxWidth: .infinity, alignment: .topLeading)
-    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
+    .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.inner, style: .continuous).fill(BoldTheme.Colors.card))
   }
 }
 
