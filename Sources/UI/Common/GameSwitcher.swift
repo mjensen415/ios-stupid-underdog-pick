@@ -1,6 +1,6 @@
 import SwiftUI
 
-// One CFB | PRO BALL | PICKEMS switcher used on Games/Pickems, My Picks and
+// One CFB | Pro Ball | Pickems switcher used on Games/Pickems, My Picks and
 // Groups, plus HOOPS | PUCKS while those flags are on (admins always). Bound
 // to appState.currentGame, so switching on any screen carries over to the
 // others. Hoops/Pucks are separate products with their own groups: picking
@@ -13,7 +13,7 @@ struct GameSwitcher: View {
   /// Set on the Hoops/Pucks page so its tab shows as selected.
   var activeHp: HpSport? = nil
 
-  private let options: [(CurrentGame, String)] = [(.cfb, "CFB"), (.nfl, "PRO BALL"), (.pickems, "PICKEMS")]
+  private let options: [(CurrentGame, String)] = [(.cfb, "CFB"), (.nfl, "Pro Ball"), (.pickems, "Pickems")]
 
   private var hpOptions: [HpSport] {
     HpSport.allCases.filter { featureFlags.isVisible($0.flag) }
@@ -24,8 +24,7 @@ struct GameSwitcher: View {
     HStack(spacing: 4) {
       ForEach(options, id: \.0) { game, label in
         let active = activeHp == nil && appState.currentGame == game
-        segment(label: label, active: active, compact: compact,
-                fill: game == .pickems ? BoldTheme.Colors.pickemsAccent.opacity(0.18) : BoldTheme.Colors.gold) {
+        segment(label: label, active: active, compact: compact) {
           withAnimation(.easeInOut(duration: 0.2)) {
             appState.hpSport = nil
             appState.currentGame = game
@@ -33,32 +32,31 @@ struct GameSwitcher: View {
         }
       }
       ForEach(hpOptions) { sport in
-        segment(label: sport.name.uppercased(), active: activeHp == sport, compact: compact, fill: BoldTheme.Colors.gold) {
+        segment(label: sport.name, active: activeHp == sport, compact: compact) {
           appState.goToHoopsPucks(sport)
         }
       }
     }
+    // Segmented control, not a yellow button: yellow is for the screen's
+    // one primary action (de-slop #5). Selected = white pill, ink text.
     .padding(4)
-    .background(BoldTheme.Colors.glassStrong)
-    .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(BoldTheme.Colors.border, lineWidth: 1))
-    .clipShape(RoundedRectangle(cornerRadius: 14))
+    .background(Capsule().fill(BoldTheme.Colors.track))
   }
 
-  private func segment(label: String, active: Bool, compact: Bool, fill: Color, action: @escaping () -> Void) -> some View {
+  private func segment(label: String, active: Bool, compact: Bool, action: @escaping () -> Void) -> some View {
     Button {
       guard !active else { return }
       UISelectionFeedbackGenerator().selectionChanged()
       action()
     } label: {
       Text(label)
-        .font(BoldTheme.Fonts.body(compact ? 11.5 : 13, weight: .bold))
-        .tracking(compact ? 0.2 : 0.4)
+        .font(BoldTheme.Fonts.body(compact ? 13 : 14, weight: active ? .bold : .semibold))
         .lineLimit(1)
         .minimumScaleFactor(0.75)
         .foregroundColor(active ? BoldTheme.Colors.text : BoldTheme.Colors.textDim)
         .frame(maxWidth: .infinity)
-        .frame(height: 36)
-        .background(RoundedRectangle(cornerRadius: 11).fill(active ? fill : .clear))
+        .frame(height: 34)
+        .background(Capsule().fill(active ? BoldTheme.Colors.card : .clear))
         .contentShape(Rectangle())
     }
     .buttonStyle(.plain)

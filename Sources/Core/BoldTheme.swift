@@ -256,6 +256,22 @@ struct SupInkButtonStyle: ButtonStyle {
   }
 }
 
+/// Compact header-size version of the primary / secondary pill (screen
+/// headers: "Join", "+ Create").
+struct SmallPill: ButtonStyle {
+  var primary: Bool
+  func makeBody(configuration: Configuration) -> some View {
+    configuration.label
+      .font(BoldTheme.Fonts.body(14, weight: .bold))
+      .foregroundColor(BoldTheme.Colors.text)
+      .padding(.horizontal, 14).padding(.vertical, 8)
+      .background(Capsule().fill(primary ? BoldTheme.Colors.gold : .clear))
+      .overlay(primary ? nil : Capsule().strokeBorder(BoldTheme.Colors.text, lineWidth: 1.5))
+      .opacity(configuration.isPressed ? 0.7 : 1)
+      .contentShape(Capsule())
+  }
+}
+
 /// Small status pill (Missed, Picked, Pick...).
 struct SupPill: View {
   enum Kind { case gray, green, outline, action }
