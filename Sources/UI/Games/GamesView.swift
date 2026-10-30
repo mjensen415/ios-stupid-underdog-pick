@@ -351,101 +351,82 @@ struct GamesView: View {
     return viewModel.games.first { $0.id == id }
   }
 
+  /// "Your pick" bar, pinned under the filter bar (round 2): which game,
+  /// at a glance, without scrolling to find the green row. Tap opens its
+  /// pick card. Only for the live week; past weeks get pastWeekNote.
   @ViewBuilder
-  private var pickedBanner: some View {
-    if let g = pickedGame {
+  private var pinnedPickBar: some View {
+    if let g = pickedGame, viewModel.selectedWeek >= viewModel.currentWeek {
       // The team actually picked (a Pro Ball line can move after the pick,
       // even flipping who the underdog is), scored on its locked line.
       let savedPick = viewModel.myPick?.game_id == g.id ? viewModel.myPick : nil
       let pickedTeamId = savedPick?.picked_team_id ?? g.derivedUnderdogTeamId
-      let underdogIsHome = pickedTeamId != nil && pickedTeamId == g.homeTeamId
-      let underdogName = underdogIsHome ? (g.homeDisplay ?? "Home") : (g.awayDisplay ?? "Away")
-      let favoriteName = underdogIsHome ? (g.awayDisplay ?? "Away") : (g.homeDisplay ?? "Home")
-      let bankSpread: Double? = savedPick.map { $0.winPoints(on: g) } ?? g.underdogSpread
-      let lineNote = savedPick?.lineNote(on: g)
-      HStack(spacing: 14) {
-        Circle()
-          .fill(BoldTheme.Colors.gold)
-          .frame(width: 40, height: 40)
-          .overlay(
-            RetryingAsyncImage(url: viewModel.logoURL(for: pickedTeamId)) { img in
-              img.resizable().scaledToFit().padding(5)
-            } placeholder: {
-              Image(systemName: "checkmark")
-                .font(.system(size: 16, weight: .bold))
-                .foregroundColor(BoldTheme.Colors.text)
-            }
-          )
-          .clipShape(Circle())
-        VStack(alignment: .leading, spacing: 2) {
-          Text(verbatim: "Week \(formatWeekLabel(viewModel.selectedWeek)) pick")
-            .font(BoldTheme.Fonts.body(12, weight: .semibold))
-            .foregroundColor(textOnGreen.opacity(0.7))
-          HStack(spacing: 6) {
-            Text(underdogName.uppercased())
-              .font(BoldTheme.Fonts.display(20))
-              .foregroundColor(textOnGreen)
-            if let sp = bankSpread {
-              Text(verbatim: "+\(jsNumber(sp))")
-                .font(BoldTheme.TypeRole.line(20))
-                .foregroundColor(textOnGreen)
-            }
-          }
-          Text(verbatim: "vs \(favoriteName)")
-            .font(BoldTheme.Fonts.body(12))
-            .foregroundColor(textOnGreen.opacity(0.75))
-          // Once the game's decided, say what happened instead of what could.
-          if let pickedTeamId, g.status == "final" {
-            let won = g.outcome(forPickedTeamId: pickedTeamId) == .win
-            Text(verbatim: won
-                 ? (bankSpread.map { "Won outright. You got \(jsNumber($0)) points." } ?? "Won outright.")
-                 : "Lost — no points this week.")
-              .font(BoldTheme.Fonts.body(11, weight: won ? .semibold : .regular))
-              .foregroundColor(won ? textOnGreen : textOnGreen.opacity(0.65))
-              .padding(.top, 2)
-          } else if g.status == "in_progress" {
-            Text("Live now.")
-              .font(BoldTheme.Fonts.body(11, weight: .semibold))
-              .foregroundColor(textOnGreen.opacity(0.8))
-              .padding(.top, 2)
-          } else if let sp = bankSpread {
-            Text(verbatim: "If they win outright, you get \(jsNumber(sp)) points.")
-              .font(BoldTheme.Fonts.body(11))
-              .foregroundColor(textOnGreen.opacity(0.65))
-              .padding(.top, 2)
-          }
-          if let lineNote {
-            Text(lineNote)
-              .font(BoldTheme.Fonts.body(11, weight: .semibold))
-              .foregroundColor(textOnGreen)
-          }
+      let pickedIsHome = pickedTeamId != nil && pickedTeamId == g.homeTeamId
+      let dogName = (pickedIsHome ? g.homeDisplay : g.awayDisplay) ?? "Your pick"
+      let favoriteName = (pickedIsHome ? g.awayDisplay : g.homeDisplay) ?? ""
+      let points: Double? = savedPick.map { $0.winPoints(on: g) } ?? g.underdogSpread
+      HStack(spacing: 10) {
+        RetryingAsyncImage(url: viewModel.logoURL(for: pickedTeamId)) { img in
+          img.resizable().scaledToFit()
+        } placeholder: {
+          Image(systemName: "checkmark").font(.system(size: 13, weight: .bold)).foregroundColor(textOnGreen)
         }
-        Spacer()
-        if let shareImage, let sp = bankSpread {
-          // No singular `item: Image` initializer exists on ShareLink --
-          // only items:/preview: (Image conforms to Transferable, so a
-          // one-element array is the correct way to share a single image).
+        .frame(width: 26, height: 26)
+        (Text("Your pick: ").foregroundColor(textOnGreen.opacity(0.75))
+          + Text(verbatim: dogName + (points.map { " +\(jsNumber($0))" } ?? "")).bold()
+          + Text(verbatim: " · " + pickStatus(g, pickedTeamId: pickedTeamId, points: points)).foregroundColor(textOnGreen.opacity(0.85)))
+          .font(BoldTheme.Fonts.body(14))
+          .foregroundColor(textOnGreen)
+          .lineLimit(1)
+          .minimumScaleFactor(0.8)
+        Spacer(minLength: 4)
+        if let shareImage, let sp = points {
+          // No singular `item: Image` initializer exists on ShareLink.
           ShareLink(
             items: [shareImage],
-            preview: { img in SharePreview(Text(verbatim: "\(underdogName) +\(jsNumber(sp))"), image: img) }
+            preview: { img in SharePreview(Text(verbatim: "\(dogName) +\(jsNumber(sp))"), image: img) }
           ) {
             Image(systemName: "square.and.arrow.up")
-              .font(.system(size: 16, weight: .semibold))
+              .font(.system(size: 15, weight: .semibold))
               .foregroundColor(textOnGreen)
+              .frame(width: 30, height: 30)
           }
+          .accessibilityLabel("Share your pick")
         }
       }
-      .padding(BoldTheme.Space.cardPad)
-      .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.card, style: .continuous).fill(BoldTheme.Colors.green))
-      .padding(.horizontal, BoldTheme.Space.margin)
-      .padding(.bottom, BoldTheme.Space.cardGap)
-      .task(id: g.id) {
-        guard let sp = bankSpread else { shareImage = nil; return }
-        if let uiImage = renderShareCardImage(dogName: underdogName, spread: sp, favoriteName: favoriteName) {
+      .padding(.horizontal, BoldTheme.Space.s3)
+      .frame(minHeight: 44)
+      .background(RoundedRectangle(cornerRadius: BoldTheme.Radius.inner, style: .continuous).fill(BoldTheme.Colors.green))
+      .contentShape(Rectangle())
+      .onTapGesture { tappedGame = g }
+      .accessibilityElement(children: .combine)
+      .accessibilityAddTraits(.isButton)
+      .task(id: "\(g.id)-\(points ?? 0)") {
+        guard let sp = points else { shareImage = nil; return }
+        if let uiImage = renderShareCardImage(dogName: dogName, spread: sp, favoriteName: favoriteName) {
           shareImage = Image(uiImage: uiImage)
         }
       }
     }
+  }
+
+  /// "Fri 4:30 PM", "Live 14–7", "won, +3 pts", "lost".
+  private func pickStatus(_ g: Game, pickedTeamId: UUID?, points: Double?) -> String {
+    let pickedHome = pickedTeamId == g.homeTeamId
+    if g.status == "final", let pickedTeamId {
+      return g.outcome(forPickedTeamId: pickedTeamId) == .win
+        ? "won" + (points.map { ", +\(jsNumber($0)) pts" } ?? "")
+        : "lost"
+    }
+    if g.status == "in_progress" {
+      if let h = g.homePoints, let a = g.awayPoints {
+        return "Live \(pickedHome ? h : a)–\(pickedHome ? a : h)"
+      }
+      return "Live"
+    }
+    let f = DateFormatter()
+    f.dateFormat = "EEE h:mm a"
+    return f.string(from: g.startTime)
   }
 
   /// Looking back at an earlier week: a one-line reminder of what you
@@ -717,31 +698,40 @@ struct GamesView: View {
           groupModeBanner
           if viewModel.selectedWeek < viewModel.currentWeek {
             pastWeekNote
-          } else {
-            pickedBanner
           }
           stateMessage
         }
         .plainListRow()
 
         if showSlate {
+          // Each day's header is a pinned section header (round 2): it
+          // sticks under the filter bar and the next day's pushes it off.
           ForEach(dayGroups) { day in
-            dayHeader(day.dateLabel)
-              .id(day.id)
-            ForEach(day.games) { g in
-              gameRow(g, day: day)
+            Section {
+              ForEach(day.games) { g in
+                gameRow(g, day: day)
+              }
+              Color.clear.frame(height: BoldTheme.Space.cardGap).plainListRow()
+            } header: {
+              dayHeader(day.dateLabel)
             }
-            Color.clear.frame(height: BoldTheme.Space.cardGap).plainListRow()
+            .id(day.id)
           }
         }
       }
       .listStyle(.plain)
+      // No extra gap above each pinned day header; the 12pt spacer row
+      // at the end of each day is the card gap.
+      .listSectionSpacing(0)
+      .environment(\.defaultMinListHeaderHeight, 0)
       .environment(\.defaultMinListRowHeight, 0)
       .scrollContentBackground(.hidden)
       .background(BoldTheme.Colors.bgPage)
       .scrollDismissesKeyboard(.immediately)
-      .safeAreaInset(edge: .top, spacing: 0) { topBar }
+      // Directly on the List: iOS 26's top scroll-edge fade otherwise
+      // washes out the pinned day header.
       .hardTopScrollEdge()
+      .safeAreaInset(edge: .top, spacing: 0) { topBar }
       .refreshable {
         try? await viewModel.loadGames()
         try? await viewModel.loadExistingPick()
@@ -814,8 +804,10 @@ struct GamesView: View {
     .listRowSeparator(.hidden)
   }
 
-  /// "FAVORITE · Tuesday, Oct 20 · UNDERDOG", inside the top of each day's
-  /// card (de-slop #15), so the column labels come back with every day.
+  /// "FAVORITE · Tuesday, Oct 20 · UNDERDOG": the top strip of each day's
+  /// card (de-slop #15) and a pinned section header. A full-width page-
+  /// colour fill sits behind the card strip so rows never show through
+  /// while it's pinned.
   private func dayHeader(_ dateLabel: String) -> some View {
     HStack {
       Text("FAVORITE").frame(maxWidth: .infinity, alignment: .leading)
@@ -831,13 +823,16 @@ struct GamesView: View {
     .tracking(1)
     .foregroundColor(BoldTheme.Colors.textDim)
     .padding(.vertical, BoldTheme.Space.s3)
-    .listRowInsets(EdgeInsets(top: 0, leading: BoldTheme.Space.margin + BoldTheme.Space.cardPad, bottom: 0, trailing: BoldTheme.Space.margin + BoldTheme.Space.cardPad))
-    .listRowSeparator(.hidden)
-    .listRowBackground(
+    .padding(.horizontal, BoldTheme.Space.cardPad)
+    .background(
       UnevenRoundedRectangle(topLeadingRadius: BoldTheme.Radius.card, topTrailingRadius: BoldTheme.Radius.card, style: .continuous)
         .fill(BoldTheme.Colors.card)
-        .padding(.horizontal, BoldTheme.Space.margin)
     )
+    .padding(.horizontal, BoldTheme.Space.margin)
+    .frame(maxWidth: .infinity)
+    .background(BoldTheme.Colors.bgPage)
+    .listRowInsets(EdgeInsets())
+    .textCase(nil)
   }
 
   // ── Slim pinned bar: "CFB ▾" (sport menu) · "Week 8 ▾" · search ──────
@@ -913,7 +908,9 @@ struct GamesView: View {
         searchField
           .transition(.opacity.combined(with: .move(edge: .top)))
       }
+      pinnedPickBar
     }
+    .animation(.easeOut(duration: 0.2), value: viewModel.selectedGameId)
     .padding(.horizontal, BoldTheme.Space.margin)
     .padding(.top, BoldTheme.Space.s2)
     .padding(.bottom, 10)

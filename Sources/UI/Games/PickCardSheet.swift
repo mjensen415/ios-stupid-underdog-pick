@@ -78,6 +78,10 @@ struct PickCardSheet: View {
 
   @State private var contentHeight: CGFloat = 460
 
+  private var shownLocked: Bool {
+    shown.picksLocked == true || shown.startTime <= Date() || (shown.status != nil && shown.status != "scheduled")
+  }
+
   var body: some View {
     ScrollView {
       VStack(spacing: BoldTheme.Space.s4) {
@@ -143,9 +147,12 @@ struct PickCardSheet: View {
 
         if isCurrentPick {
           VStack(spacing: BoldTheme.Space.s2) {
-            Text("This is your pick for the week.")
+            Text(shownLocked ? "This is your pick for the week. It's locked." : "This is your pick for the week.")
               .font(BoldTheme.Fonts.body(14, weight: .semibold))
               .foregroundColor(BoldTheme.Colors.green)
+            // Once the game kicks off the pick is final (the server rejects
+            // a clear), so no button that can only fail.
+            if !shownLocked {
             Button {
               Task {
                 working = true
@@ -158,6 +165,7 @@ struct PickCardSheet: View {
             }
             .buttonStyle(SupSecondaryButtonStyle())
             .disabled(working)
+            }
           }
         } else {
           VStack(spacing: BoldTheme.Space.s2) {
