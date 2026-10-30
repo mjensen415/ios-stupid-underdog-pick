@@ -58,7 +58,16 @@ enum BoldTheme {
       }
     }
 
+    /// Numbers (points, W-L, scores, ranks): Barlow with fixed-width digits
+    /// so columns line up -- not JetBrains Mono, which read oddly next to
+    /// Barlow names (owner, Oct 30). Every existing `mono(...)` call site
+    /// now gets this.
     static func mono(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+      body(size, weight: weight == .regular ? .medium : .semibold).monospacedDigit()
+    }
+
+    /// JetBrains Mono, for code-like text only (invite tokens, links).
+    static func code(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
       weight == .medium || weight == .semibold || weight == .bold
         ? .custom(FontName.monoMed, size: size)
         : .custom(FontName.monoReg, size: size)
@@ -175,7 +184,8 @@ extension BoldTheme {
   }
 
   /// Type roles. Bebas Neue for team names and lines only; Barlow for
-  /// everything else; JetBrains Mono for numbers in tables only.
+  /// everything else, with monospaced digits for numbers in tables;
+  /// JetBrains Mono only for code-like text (invite tokens).
   enum TypeRole {
     static func teamName(_ size: CGFloat = 30) -> Font { Fonts.display(size) }
     static func line(_ size: CGFloat = 30) -> Font { Fonts.display(size) }

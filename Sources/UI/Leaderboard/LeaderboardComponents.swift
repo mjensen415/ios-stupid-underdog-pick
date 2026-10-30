@@ -40,7 +40,7 @@ struct LeaderboardHeaderRow: View {
     .font(BoldTheme.Fonts.body(12, weight: .semibold))
     .foregroundColor(BoldTheme.Colors.textDim)
     .listRowInsets(EdgeInsets(top: 12, leading: 32, bottom: 8, trailing: 32))
-    .listRowSeparatorTint(BoldTheme.Colors.border)
+    .listRowSeparator(.hidden)
     // Always the top row of the ranked list -- rounds only the top corners
     // so it fuses with the LeaderboardRows below into one card, matching
     // the day-group card treatment on the games screen.

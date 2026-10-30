@@ -635,7 +635,7 @@ private struct InviteManagementSection: View {
 
         if let link = justCreatedLink {
           HStack {
-            Text(link).font(BoldTheme.Fonts.mono(12)).foregroundColor(BoldTheme.Colors.text).lineLimit(1)
+            Text(link).font(BoldTheme.Fonts.code(12)).foregroundColor(BoldTheme.Colors.text).lineLimit(1)
             Spacer()
             Button {
               UIPasteboard.general.string = link
@@ -666,7 +666,7 @@ private struct InviteManagementSection: View {
           ForEach(viewModel.invites) { invite in
             BoldTheme.GlassCard(radius: BoldTheme.Radius.inner, padding: 10) {
               HStack {
-                Text(invite.invite_token).font(BoldTheme.Fonts.mono(12)).foregroundColor(BoldTheme.Colors.text)
+                Text(invite.invite_token).font(BoldTheme.Fonts.code(12)).foregroundColor(BoldTheme.Colors.text)
                 Spacer()
                 Text(status(for: invite)).font(BoldTheme.Fonts.body(11)).foregroundColor(BoldTheme.Colors.textDim)
                 Button {

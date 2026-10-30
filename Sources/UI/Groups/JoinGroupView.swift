@@ -33,7 +33,7 @@ struct JoinGroupView: View {
               VStack(alignment: .leading, spacing: 8) {
                 Text("Invite code").font(BoldTheme.Fonts.body(14, weight: .semibold)).foregroundColor(BoldTheme.Colors.textDim)
                 TextField("e.g. Ab3xQ9zK", text: $inviteCode)
-                  .font(BoldTheme.Fonts.mono(15))
+                  .font(BoldTheme.Fonts.code(15))
                   .textInputAutocapitalization(.never)
                   .autocorrectionDisabled()
                   .padding(12)
@@ -43,7 +43,7 @@ struct JoinGroupView: View {
               VStack(alignment: .leading, spacing: 8) {
                 Text("Group ID").font(BoldTheme.Fonts.body(14, weight: .semibold)).foregroundColor(BoldTheme.Colors.textDim)
                 TextField("Paste a group ID", text: $groupIdText)
-                  .font(BoldTheme.Fonts.mono(15))
+                  .font(BoldTheme.Fonts.code(15))
                   .textInputAutocapitalization(.never)
                   .autocorrectionDisabled()
                   .padding(12)

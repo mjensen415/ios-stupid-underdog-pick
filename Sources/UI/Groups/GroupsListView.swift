@@ -135,6 +135,12 @@ struct GroupsListView: View {
         .refreshable { await viewModel.load() }
       }
       .navigationBarHidden(true)
+      // No nav bar here: page-coloured strip behind the status bar so
+      // content doesn't scroll up under the clock.
+      .safeAreaInset(edge: .top, spacing: 0) {
+        Color.clear.frame(height: 0)
+          .background(BoldTheme.Colors.bgPage.opacity(0.94), ignoresSafeAreaEdges: .top)
+      }
       .sheet(isPresented: $showCreate) {
         CreateGroupView(defaultGameType: appState.currentGame == .pickems ? .pickems : .underdog) {
           await viewModel.load()
