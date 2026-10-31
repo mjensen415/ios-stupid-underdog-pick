@@ -190,7 +190,10 @@ struct LiveTickerBar: View {
         ScrollView(.horizontal, showsIndicators: false) { row.padding(.trailing, 12) }
       } else {
         GeometryReader { geo in
-          TimelineView(.animation) { tl in
+          // 30 ticks a second, not every display frame (120 on ProMotion),
+          // and the rows are an equatable subview so a tick only moves them
+          // instead of rebuilding every item.
+          TimelineView(.periodic(from: start, by: 1.0 / 30)) { tl in
             // ~30pt/s: slow and readable.
             let w = max(contentWidth, 1)
             let x = -CGFloat(tl.date.timeIntervalSince(start) * 30).truncatingRemainder(dividingBy: w)
@@ -216,11 +219,28 @@ struct LiveTickerBar: View {
   }
 
   private var row: some View {
+    TickerRow(items: items, animate: !reduceMotion, onTap: onTap)
+      .equatable()
+      .background(GeometryReader { g in Color.clear.onAppear { contentWidth = g.size.width }
+        .onChange(of: g.size.width) { _, w in contentWidth = w } })
+  }
+}
+
+/// One pass of the ticker items. Equatable on its data so the marquee's
+/// ticks don't re-evaluate it.
+private struct TickerRow: View, Equatable {
+  let items: [LiveTickerItem]
+  let animate: Bool
+  let onTap: (LiveTickerItem) -> Void
+
+  static func == (a: TickerRow, b: TickerRow) -> Bool { a.items == b.items && a.animate == b.animate }
+
+  var body: some View {
     HStack(spacing: 0) {
       ForEach(items) { it in
         Button { onTap(it) } label: {
           HStack(spacing: 6) {
-            if it.dogLeads { PulseDot(animate: !reduceMotion, size: 6) }
+            if it.dogLeads { PulseDot(animate: animate, size: 6) }
             Text(verbatim: it.text)
               .font(BoldTheme.Fonts.body(13, weight: it.dogLeads ? .bold : .medium))
               .foregroundColor(it.dogLeads ? BoldTheme.Colors.text : BoldTheme.Colors.textDim)
@@ -234,8 +254,6 @@ struct LiveTickerBar: View {
         Text("·").foregroundColor(BoldTheme.Colors.textFaint).padding(.leading, 14)
       }
     }
-    .background(GeometryReader { g in Color.clear.onAppear { contentWidth = g.size.width }
-      .onChange(of: g.size.width) { _, w in contentWidth = w } })
   }
 }
 
