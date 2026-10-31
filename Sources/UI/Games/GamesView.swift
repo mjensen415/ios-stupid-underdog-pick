@@ -796,7 +796,6 @@ struct GamesView: View {
     }
   }
 
-  @State private var openSwipeId: UUID?
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   /// Handles appState.requestedGame once its sport is showing. Returns
@@ -818,32 +817,35 @@ struct GamesView: View {
     let isLast = g.id == day.games.last?.id
     let isPick = viewModel.selectedGameId == g.id
     let pickable = viewModel.canPick(g)
-    // Picked row: a gray "Clear pick" until it locks. Others: the yellow
-    // "Pick {Dog} +N" (gray and inert when the game can't be picked).
-    let action: SwipeToPickRow<GameRowView>.Action? = isPick
-      ? (pickable ? .init(label: "Clear pick", fill: Color(hex: 0x8E8E93), ink: .white, enabled: true) {
-          Task { await viewModel.clearPickForWeek() }
-        } : nil)
-      : .init(label: viewModel.swipeActionLabel(for: g),
-              fill: pickable ? BoldTheme.Colors.gold : BoldTheme.Colors.track,
-              ink: pickable ? BoldTheme.Colors.text : BoldTheme.Colors.textDim,
-              enabled: pickable) {
-          Task { await viewModel.pickUnderdog(for: g) }
-        }
-    return SwipeToPickRow(id: g.id, openId: $openSwipeId, isLast: isLast, action: action, onTap: {
-      // Tap is the other way in: opens the pick card.
+    return GameRowView(
+      game: g,
+      logoFor: { id in viewModel.logoURL(for: id) },
+      isSelected: isPick,
+      isFirstInDay: false,
+      isLastInDay: isLast,
+      // Pro only: the first linked network as a middle-column capsule.
+      watch: isPro && watchEnabled ? viewModel.watchLinks(for: g).first(where: { $0.url != nil }) : nil
+    )
+    .contentShape(Rectangle())
+    // Tap is the other way in: opens the pick card.
+    .onTapGesture {
       guard viewModel.canPick(g) else { return }
       tappedGame = g
-    }) {
-      GameRowView(
-        game: g,
-        logoFor: { id in viewModel.logoURL(for: id) },
-        isSelected: isPick,
-        isFirstInDay: false,
-        isLastInDay: isLast,
-        // Pro only: the first linked network as a middle-column capsule.
-        watch: isPro && watchEnabled ? viewModel.watchLinks(for: g).first(where: { $0.url != nil }) : nil
-      )
+    }
+    .clipShape(GameRowView.cardShape(isLastInDay: isLast))
+    // The system list swipe, not a custom drag on every row: 1.3.5's
+    // per-row DragGesture made scrolling lag on real phones.
+    // Picked row: "Clear pick" until it locks. Others: "Pick {Dog} +N".
+    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+      if isPick {
+        if pickable {
+          Button("Clear pick") { Task { await viewModel.clearPickForWeek() } }
+            .tint(Color(hex: 0x8E8E93))
+        }
+      } else if pickable {
+        Button(viewModel.swipeActionLabel(for: g)) { Task { await viewModel.pickUnderdog(for: g) } }
+          .tint(BoldTheme.Colors.green)
+      }
     }
     .listRowInsets(EdgeInsets(top: 0, leading: BoldTheme.Space.margin, bottom: 0, trailing: BoldTheme.Space.margin))
     .listRowBackground(Color.clear)
@@ -1098,124 +1100,5 @@ private extension View {
       .listRowInsets(EdgeInsets())
       .listRowBackground(Color.clear)
       .listRowSeparator(.hidden)
-  }
-}
-
-/// Swipe left on a game to reveal a full-height action panel (the yellow
-/// "Pick {Dog} +N" from the mockup), tap it or swipe all the way to fire.
-/// Custom rather than .swipeActions: on iOS 26 those render as small glass
-/// capsules that can't carry the yellow action or a long label.
-struct SwipeToPickRow<Content: View>: View {
-  struct Action {
-    let label: String
-    let fill: Color
-    let ink: Color
-    let enabled: Bool
-    let run: () -> Void
-    init(label: String, fill: Color, ink: Color, enabled: Bool, run: @escaping () -> Void) {
-      self.label = label; self.fill = fill; self.ink = ink; self.enabled = enabled; self.run = run
-    }
-  }
-
-  let id: UUID
-  @Binding var openId: UUID?
-  let isLast: Bool
-  let action: Action?
-  let onTap: () -> Void
-  @ViewBuilder var content: Content
-
-  /// Live drag; @GestureState resets on its own when the touch ends or is
-  /// cancelled (e.g. the list takes over to scroll), so a row can't get
-  /// stuck half open.
-  /// Axis locks once the finger has moved ~10pt: horizontal only when the
-  /// sideways move clearly beats the vertical one. Vertical/diagonal flicks
-  /// never open, commit or switch a pick.
-  private struct DragState { var axis: Axis?; var x: CGFloat = 0 }
-  @GestureState private var gesture = DragState()
-  private var drag: CGFloat { gesture.x }
-  private let width: CGFloat = 132
-
-  private var isOpen: Bool { openId == id }
-  private var offset: CGFloat {
-    let base: CGFloat = isOpen ? -width : 0
-    return min(0, base + drag)
-  }
-
-  private static func lockAxis(_ t: CGSize) -> Axis {
-    abs(t.width) > abs(t.height) * 2 ? .horizontal : .vertical
-  }
-
-  var body: some View {
-    ZStack(alignment: .trailing) {
-      if let action, offset < 0 {
-        Button {
-          guard action.enabled else { return }
-          close()
-          action.run()
-        } label: {
-          Text(action.label)
-            .font(BoldTheme.Fonts.body(14, weight: .bold))
-            .foregroundColor(action.ink)
-            .multilineTextAlignment(.center)
-            .lineLimit(3)
-            .minimumScaleFactor(0.8)
-            // Wrap inside the panel instead of running past its edge.
-            .frame(width: width - 20)
-            .fixedSize(horizontal: false, vertical: true)
-            .frame(width: width)
-            .frame(maxHeight: .infinity)
-            // The panel grows with the drag; the label keeps its own width
-            // so it's never squeezed, and is fully shown once open.
-            .frame(width: max(-offset, width), alignment: .center)
-            .frame(width: -offset, alignment: .leading)
-            .background(action.fill)
-            .clipped()
-        }
-        .buttonStyle(.plain)
-        .accessibilityHidden(true)
-      }
-      // Tap target before the offset, so it slides with the row and
-      // leaves the revealed action panel tappable.
-      content
-        .contentShape(Rectangle())
-        .onTapGesture {
-          if isOpen { close() } else { onTap() }
-        }
-        .offset(x: offset)
-    }
-    .clipShape(GameRowView.cardShape(isLastInDay: isLast))
-    .simultaneousGesture(
-      DragGesture(minimumDistance: 10)
-        .updating($gesture) { v, state, _ in
-          if state.axis == nil { state.axis = Self.lockAxis(v.translation) }
-          guard action != nil, state.axis == .horizontal else { return }
-          state.x = v.translation.width
-        }
-        .onEnded { v in
-          // Decide on the real translation, not the predicted flick end.
-          guard let action, Self.lockAxis(v.translation) == .horizontal else { return }
-          let end = (isOpen ? -width : 0) + v.translation.width
-          withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
-            if action.enabled && end < -width * 1.9 {
-              // A deliberate full swipe fires the action, then the row
-              // snaps shut and shows its normal picked state.
-              openId = nil
-              action.run()
-            } else if end < -width / 2 {
-              openId = id
-            } else if isOpen {
-              openId = nil
-            }
-          }
-        }
-    )
-    .animation(.spring(response: 0.3, dampingFraction: 0.85), value: openId)
-    .accessibilityAction(named: Text(action?.label ?? "")) {
-      if let action, action.enabled { action.run() }
-    }
-  }
-
-  private func close() {
-    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) { openId = nil }
   }
 }
