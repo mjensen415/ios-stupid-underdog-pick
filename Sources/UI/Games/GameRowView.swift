@@ -123,7 +123,7 @@ struct GameRowView: View {
       if liveNow && !isSelected { Rectangle().fill(SUPColors.liveRed).frame(width: 3).padding(.leading, -12) }
     }
     // 12pt inside the day card; the row carries its own card background so
-    // the swipe-to-pick slide moves the whole row (GamesView.SwipeToPickRow).
+    // the swipe-to-pick slide moves the whole row (List swipeActions in GamesView).
     .padding(.horizontal, 12)
     .background(cardRowBackground)
     .accessibilityElement(children: .contain)

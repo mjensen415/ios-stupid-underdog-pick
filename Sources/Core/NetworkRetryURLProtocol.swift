@@ -21,6 +21,13 @@ final class NetworkRetryURLProtocol: URLProtocol {
   private var activeTask: URLSessionDataTask?
   private var attempt = 1
 
+  /// One plain, unregistered session for every request this protocol
+  /// carries -- avoids this protocol intercepting its own retry attempts.
+  /// Shared so requests reuse open connections: a new session per request
+  /// meant a fresh TCP + TLS handshake for every API call and every logo
+  /// (slow on cellular at launch), and the sessions were never released.
+  private static let session = URLSession(configuration: .ephemeral)
+
   // Only claim requests once -- canInit is also asked about the internal
   // request this protocol issues on its own private session, but that
   // session has no protocolClasses registered, so it never re-enters here.
@@ -42,10 +49,7 @@ final class NetworkRetryURLProtocol: URLProtocol {
   }
 
   private func perform() {
-    // A plain, unregistered session -- avoids this protocol intercepting
-    // its own retry attempts.
-    let session = URLSession(configuration: .ephemeral)
-    activeTask = session.dataTask(with: request) { [weak self] data, response, error in
+    activeTask = Self.session.dataTask(with: request) { [weak self] data, response, error in
       guard let self else { return }
       if let error = error as NSError?,
          error.domain == NSURLErrorDomain,
